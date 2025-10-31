@@ -93,6 +93,7 @@ flutter:
     - images/
     - images/dark_logo.png
     - images/heart.png
+    - images/newspaper.png
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

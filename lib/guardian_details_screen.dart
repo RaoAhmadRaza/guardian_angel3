@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'colors.dart';
 import 'providers/theme_provider.dart';
+import 'caregiver_main_screen.dart';
+import 'services/session_service.dart';
 
 class GuardianDetailsScreen extends StatefulWidget {
   const GuardianDetailsScreen({super.key});
@@ -344,7 +346,7 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
                                 ],
                               ),
                               child: TextButton(
-                                onPressed: () {
+                                onPressed: () async {
                                   if (_formKey.currentState!.validate()) {
                                     // Handle form submission
                                     debugPrint(
@@ -357,7 +359,38 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
                                         'Relation: ${relationController.text}');
                                     debugPrint(
                                         'Patient Name: ${patientNameController.text}');
-                                    // TODO: Save data and navigate to next screen
+
+                                    // Start caregiver session
+                                    await SessionService.instance
+                                        .startSession(userType: 'caregiver');
+
+                                    // Navigate to Caregiver Main Screen
+                                    Navigator.pushReplacement(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            CaregiverMainScreen(
+                                          caregiverName:
+                                              nameController.text.isNotEmpty
+                                                  ? nameController.text
+                                                  : null,
+                                          patientName: patientNameController
+                                                  .text.isNotEmpty
+                                              ? patientNameController.text
+                                              : null,
+                                          relationship:
+                                              relationController.text.isNotEmpty
+                                                  ? relationController.text
+                                                  : null,
+                                          phone: phoneController.text.isNotEmpty
+                                              ? phoneController.text
+                                              : null,
+                                          email: emailController.text.isNotEmpty
+                                              ? emailController.text
+                                              : null,
+                                        ),
+                                      ),
+                                    );
                                   }
                                 },
                                 style: TextButton.styleFrom(

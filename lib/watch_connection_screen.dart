@@ -1380,7 +1380,7 @@ class _WatchConnectionScreenState extends State<WatchConnectionScreen>
         onPressed = () async {
           HapticFeedback.lightImpact();
           // Start user session when they complete watch connection
-          await SessionService.instance.startSession();
+          await SessionService.instance.startSession(userType: 'patient');
 
           // Debug prints to check what data is being passed to NextScreen
           print(
@@ -1388,7 +1388,7 @@ class _WatchConnectionScreenState extends State<WatchConnectionScreen>
           print(
               'WatchConnectionScreen - passing to NextScreen patientName: ${widget.patientName}');
 
-          Navigator.push(
+          Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(
               builder: (context) => NextScreen(
@@ -1396,6 +1396,7 @@ class _WatchConnectionScreenState extends State<WatchConnectionScreen>
                 patientName: widget.patientName,
               ),
             ),
+            (route) => false, // Remove all previous routes
           );
         };
         break;

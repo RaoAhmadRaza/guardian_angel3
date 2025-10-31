@@ -1,0 +1,24 @@
+name: intro_onboarding_slider
+description: A simple, reusable onboarding slider for Flutter apps with pages, indicators, and navigation controls.
+version: 0.1.6
+homepage: https://github.com/RaoAhmadRaza/guardian_angel3
+repository: https://github.com/RaoAhmadRaza/guardian_angel3/tree/main/packages/intro_onboarding_slider
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  google_fonts: ^6.1.0
+  flutter_animate: ^4.2.0
+  lottie: ^3.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

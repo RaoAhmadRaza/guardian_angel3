@@ -11,6 +11,7 @@ import 'services/onboarding_service.dart';
 import 'services/session_service.dart';
 import 'screens/onboarding_screen.dart';
 import 'next_screen.dart';
+import 'caregiver_main_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,6 +65,7 @@ class _AppInitializerState extends State<AppInitializer> {
   bool _isLoading = true;
   bool _shouldShowOnboarding = true;
   bool _hasValidSession = false;
+  String? _userType;
   String _debugInfo = '';
   bool _showResetButton = kDebugMode;
 
@@ -87,15 +89,20 @@ class _AppInitializerState extends State<AppInitializer> {
 
       // If user has valid session, go directly to main screen
       if (hasValidSession) {
+        // Get user type to determine which screen to show
+        final userType = await SessionService.instance.getUserType();
+
         if (mounted) {
           setState(() {
             _hasValidSession = true;
+            _userType = userType;
             _shouldShowOnboarding = false;
             _isLoading = false;
-            _debugInfo = 'Valid session found';
+            _debugInfo = 'Valid session found for $userType';
           });
         }
-        print('🎯 AppInitializer: Will show MAIN screen (valid session)');
+        print(
+            '🎯 AppInitializer: Will show MAIN screen (valid session for $userType)');
         return;
       }
 
@@ -203,7 +210,9 @@ class _AppInitializerState extends State<AppInitializer> {
     return _shouldShowOnboarding
         ? const OnboardingScreen()
         : _hasValidSession
-            ? const NextScreen()
+            ? (_userType == 'caregiver'
+                ? const CaregiverMainScreen()
+                : const NextScreen())
             : const WelcomePage();
   }
 }

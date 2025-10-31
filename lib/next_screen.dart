@@ -3,11 +3,16 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
+import 'dart:ui';
 import 'package:animated_notch_bottom_bar/animated_notch_bottom_bar/animated_notch_bottom_bar.dart';
 import 'theme/app_theme.dart' as theme;
+
 import 'providers/theme_provider.dart';
 import 'services/session_service.dart';
-import 'services/patient_service.dart';
+import 'chat_screen_new.dart';
+import 'controllers/home_automation_controller.dart';
+import 'room_details_screen.dart';
+import 'all_rooms_screen.dart';
 import 'diagnostic_screen.dart';
 import 'main.dart';
 
@@ -44,6 +49,9 @@ class _NextScreenState extends State<NextScreen> {
     super.initState();
     _checkSessionPeriodically();
     _startHealthDataAnimation();
+
+    // Initialize home automation controller
+    HomeAutomationController.instance.initialize();
   }
 
   @override
@@ -182,7 +190,7 @@ class _NextScreenState extends State<NextScreen> {
                 CupertinoIcons.lightbulb_fill,
                 color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
               ),
-              itemLabel: 'Insights',
+              itemLabel: 'Automation',
             ),
             BottomBarItem(
               inActiveItem: Icon(
@@ -248,10 +256,30 @@ class _NextScreenState extends State<NextScreen> {
                   // Health metrics row
                   _buildHealthMetricsRow(isDarkMode),
 
+                  const SizedBox(height: 24),
+
+                  // Safety Status section
+                  _buildSafetyStatusContainer(isDarkMode),
+
+                  const SizedBox(height: 20),
+
+                  // Home Automation section (direct automation grid without outer container)
+                  _buildAutomationGrid(isDarkMode),
+
                   const SizedBox(height: 20),
 
                   // Doctor contact card
                   _buildDoctorContactCard(isDarkMode),
+
+                  const SizedBox(height: 20),
+
+                  // Newspaper reading container
+                  _buildNewspaperContainer(isDarkMode),
+
+                  const SizedBox(height: 20),
+
+                  // Medication reminder container
+                  _buildMedicationReminderContainer(isDarkMode),
 
                   const SizedBox(height: 80), // Extra space for bottom nav
                 ],
@@ -282,8 +310,9 @@ class _NextScreenState extends State<NextScreen> {
           width: 50,
           height: 50,
           decoration: BoxDecoration(
-            color:
-                isDarkMode ? const Color(0xFF475569) : const Color(0xFFF5F5F7),
+            color: isDarkMode
+                ? Colors.white.withOpacity(0.1)
+                : const Color(0xFFF5F5F7),
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
@@ -460,7 +489,8 @@ class _NextScreenState extends State<NextScreen> {
                         );
                       },
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
                         child: Text(
                           'Diagnostic',
                           style: TextStyle(
@@ -679,6 +709,98 @@ class _NextScreenState extends State<NextScreen> {
     );
   }
 
+  /// Safety Status container
+  Widget _buildSafetyStatusContainer(bool isDarkMode) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: isDarkMode
+                ? Colors.black.withOpacity(0.3)
+                : const Color(0xFF475569).withOpacity(0.15),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title
+          Text(
+            'Safety Status',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // All Clear status card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.05)
+                  : const Color(0xFFF5F5F7),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDarkMode
+                    ? Colors.white.withOpacity(0.2)
+                    : const Color(0xFFE0E0E2),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                // Safety icon
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.1)
+                        : Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.check_circle_outline,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.7)
+                        : const Color(0xFF475569),
+                    size: 24,
+                  ),
+                ),
+
+                const SizedBox(width: 16),
+
+                // Status text
+                Expanded(
+                  child: Text(
+                    'All Clear',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      color:
+                          isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Doctor contact card
   Widget _buildDoctorContactCard(bool isDarkMode) {
     return Container(
@@ -705,7 +827,7 @@ class _NextScreenState extends State<NextScreen> {
             height: 50,
             decoration: BoxDecoration(
               color: isDarkMode
-                  ? const Color(0xFF475569)
+                  ? Colors.white.withOpacity(0.1)
                   : const Color(0xFFF5F5F7),
               shape: BoxShape.circle,
             ),
@@ -798,19 +920,588 @@ class _NextScreenState extends State<NextScreen> {
 
   /// Build Chat Page
   Widget _buildChatPage(bool isDarkMode) {
+    return ChatScreenNew();
+  }
+
+  /// Build Home Automation Dashboard
+  Widget _buildBulbPage(bool isDarkMode) {
     return SafeArea(
       child: Column(
         children: [
           _buildTopBar(isDarkMode),
           Expanded(
-            child: Center(
-              child: Text(
-                'Chat with Guardian Angel\nAI Assistant',
-                textAlign: TextAlign.center,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
+
+                  // Header Section
+                  _buildAutomationHeader(isDarkMode),
+
+                  const SizedBox(height: 24),
+
+                  // Quick Status Overview
+                  _buildQuickStatusOverview(isDarkMode),
+
+                  const SizedBox(height: 28),
+
+                  // Room Section
+                  _buildRoomSection(isDarkMode),
+
+                  const SizedBox(height: 28),
+
+                  // Device Section
+                  _buildDeviceSection(isDarkMode),
+
+                  const SizedBox(height: 28),
+
+                  // Energy Usage Section
+                  _buildEnergyUsageSection(isDarkMode),
+
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build automation header with user greeting
+  Widget _buildAutomationHeader(bool isDarkMode) {
+    return Row(
+      children: [
+        Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+            borderRadius: BorderRadius.circular(25),
+            boxShadow: [
+              BoxShadow(
+                color: isDarkMode
+                    ? Colors.black.withOpacity(0.3)
+                    : const Color(0xFF475569).withOpacity(0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(25),
+            child: Image.asset(
+              'images/male.jpg',
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Icon(
+                  CupertinoIcons.person_fill,
+                  color: isDarkMode ? Colors.white : const Color(0xFF475569),
+                  size: 24,
+                );
+              },
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Alex',
                 style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
                   color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+              Text(
+                'Good Morning!',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  color: isDarkMode
+                      ? Colors.white.withOpacity(0.7)
+                      : const Color(0xFF475569),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? Colors.white.withOpacity(0.1)
+                : const Color(0xFFF5F5F7),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            CupertinoIcons.bell,
+            color: isDarkMode ? Colors.white : const Color(0xFF475569),
+            size: 20,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Build quick status overview cards
+  Widget _buildQuickStatusOverview(bool isDarkMode) {
+    final statusItems = [
+      {
+        'icon': CupertinoIcons.thermometer,
+        'label': 'Temperature',
+        'value': '72°F',
+        'color': const Color(0xFF3B82F6),
+      },
+      {
+        'icon': CupertinoIcons.lightbulb,
+        'label': 'Light',
+        'value': '4 On',
+        'color': const Color(0xFFEAB308),
+      },
+      {
+        'icon': CupertinoIcons.bolt,
+        'label': 'Energy',
+        'value': 'Low',
+        'color': const Color(0xFF10B981),
+      },
+      {
+        'icon': CupertinoIcons.shield,
+        'label': 'Security',
+        'value': 'Alarmed',
+        'color': const Color(0xFF8B5CF6),
+      },
+    ];
+
+    return Row(
+      children: statusItems.map((item) {
+        return Expanded(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: isDarkMode
+                      ? Colors.black.withOpacity(0.3)
+                      : const Color(0xFF475569).withOpacity(0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: (item['color'] as Color).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    item['icon'] as IconData,
+                    color: item['color'] as Color,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  item['label'] as String,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.7)
+                        : const Color(0xFF475569),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  item['value'] as String,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  /// Build room section
+  Widget _buildRoomSection(bool isDarkMode) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Room',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+              ),
+            ),
+            GestureDetector(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                Navigator.push(
+                  context,
+                  PageRouteBuilder(
+                    pageBuilder: (context, animation, secondaryAnimation) =>
+                        AllRoomsScreen(isDarkMode: isDarkMode),
+                    transitionsBuilder:
+                        (context, animation, secondaryAnimation, child) {
+                      const begin = Offset(1.0, 0.0);
+                      const end = Offset.zero;
+                      const curve = Curves.easeInOutCubic;
+
+                      var tween = Tween(begin: begin, end: end).chain(
+                        CurveTween(curve: curve),
+                      );
+
+                      return SlideTransition(
+                        position: animation.drive(tween),
+                        child: child,
+                      );
+                    },
+                    transitionDuration: const Duration(milliseconds: 300),
+                  ),
+                );
+                print('Navigate to all rooms');
+              },
+              child: Text(
+                'See all',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF3B82F6),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            _buildRoomCard(
+              isDarkMode: isDarkMode,
+              icon: CupertinoIcons.house,
+              label: 'Living Room',
+              devices: '5 Devices',
+              color: const Color(0xFF3B82F6),
+            ),
+            const SizedBox(width: 12),
+            _buildRoomCard(
+              isDarkMode: isDarkMode,
+              icon: CupertinoIcons.scissors,
+              label: 'Kitchen',
+              devices: '3 Devices',
+              color: const Color(0xFFEAB308),
+            ),
+            const SizedBox(width: 12),
+            _buildRoomCard(
+              isDarkMode: isDarkMode,
+              icon: CupertinoIcons.bed_double,
+              label: 'Bed Room',
+              devices: '3 Devices',
+              color: const Color(0xFF8B5CF6),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Build individual room card
+  Widget _buildRoomCard({
+    required bool isDarkMode,
+    required IconData icon,
+    required String label,
+    required String devices,
+    required Color color,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          // Navigate to room detail screen
+          Navigator.push(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  RoomDetailsScreen(
+                roomName: label,
+                roomIcon: icon,
+                roomColor: color,
+                isDarkMode: isDarkMode,
+              ),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                const begin = Offset(1.0, 0.0);
+                const end = Offset.zero;
+                const curve = Curves.easeInOutCubic;
+
+                var tween = Tween(begin: begin, end: end).chain(
+                  CurveTween(curve: curve),
+                );
+
+                return SlideTransition(
+                  position: animation.drive(tween),
+                  child: child,
+                );
+              },
+              transitionDuration: const Duration(milliseconds: 300),
+            ),
+          );
+          print('Navigate to room: $label');
+        },
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: isDarkMode
+                    ? Colors.black.withOpacity(0.3)
+                    : const Color(0xFF475569).withOpacity(0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                devices,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: isDarkMode
+                      ? Colors.white.withOpacity(0.7)
+                      : const Color(0xFF475569),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build device section
+  Widget _buildDeviceSection(bool isDarkMode) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Device',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+              ),
+            ),
+            Text(
+              'Manage',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF3B82F6),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildDeviceItem(
+          isDarkMode: isDarkMode,
+          icon: CupertinoIcons.lightbulb,
+          name: 'Living Room Light',
+          status: 'On • 50% Brightness',
+          isOn: true,
+          color: const Color(0xFFEAB308),
+        ),
+        const SizedBox(height: 12),
+        _buildDeviceItem(
+          isDarkMode: isDarkMode,
+          icon: CupertinoIcons.thermometer,
+          name: 'Thermostat',
+          status: 'Cooling • Auto Mode',
+          isOn: true,
+          color: const Color(0xFF3B82F6),
+          showTemperature: true,
+          temperature: '72°F',
+        ),
+        const SizedBox(height: 12),
+        _buildDeviceItem(
+          isDarkMode: isDarkMode,
+          icon: CupertinoIcons.wind,
+          name: 'Fan',
+          status: 'On • 60% Speed',
+          isOn: true,
+          color: const Color(0xFF10B981),
+        ),
+      ],
+    );
+  }
+
+  /// Build individual device item
+  Widget _buildDeviceItem({
+    required bool isDarkMode,
+    required IconData icon,
+    required String name,
+    required String status,
+    required bool isOn,
+    required Color color,
+    bool showTemperature = false,
+    String? temperature,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: isDarkMode
+                ? Colors.black.withOpacity(0.3)
+                : const Color(0xFF475569).withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  status,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.7)
+                        : const Color(0xFF475569),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (showTemperature && temperature != null) ...[
+            Text(
+              temperature,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(width: 16),
+          ],
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              // TODO: Toggle device
+              print('Toggle device: $name');
+            },
+            child: Container(
+              width: 50,
+              height: 30,
+              decoration: BoxDecoration(
+                color: isOn
+                    ? const Color(0xFF3B82F6)
+                    : isDarkMode
+                        ? Colors.white.withOpacity(0.2)
+                        : const Color(0xFFE2E8F0),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 200),
+                alignment: isOn ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  width: 26,
+                  height: 26,
+                  margin: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(13),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -820,21 +1511,116 @@ class _NextScreenState extends State<NextScreen> {
     );
   }
 
-  /// Build Insights/Bulb Page
-  Widget _buildBulbPage(bool isDarkMode) {
-    return SafeArea(
+  /// Build energy usage section
+  Widget _buildEnergyUsageSection(bool isDarkMode) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: isDarkMode
+                ? Colors.black.withOpacity(0.3)
+                : const Color(0xFF475569).withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildTopBar(isDarkMode),
-          Expanded(
-            child: Center(
-              child: Text(
-                'Health Insights\n& Analytics',
-                textAlign: TextAlign.center,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Energy Usage',
                 style: TextStyle(
                   fontSize: 18,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w700,
                   color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+              Text(
+                'Details',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF3B82F6),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Today's Usage",
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: isDarkMode
+                          ? Colors.white.withOpacity(0.7)
+                          : const Color(0xFF475569),
+                    ),
+                  ),
+                  Text(
+                    'Apr 22, 2025',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      color: isDarkMode
+                          ? Colors.white.withOpacity(0.5)
+                          : const Color(0xFF475569).withOpacity(0.7),
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '12.4 kWh',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color:
+                          isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                  Text(
+                    '-5% vs yesterday',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF10B981),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            height: 4,
+            decoration: BoxDecoration(
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.1)
+                  : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(2),
+            ),
+            child: FractionallySizedBox(
+              widthFactor: 0.6,
+              alignment: Alignment.centerLeft,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981),
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
@@ -847,18 +1633,358 @@ class _NextScreenState extends State<NextScreen> {
   /// Build Settings Page
   Widget _buildSettingsPage(bool isDarkMode) {
     return SafeArea(
-      child: Column(
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSettingsHeader(isDarkMode),
+              const SizedBox(height: 24),
+              _buildUserProfileCard(isDarkMode),
+              const SizedBox(height: 32),
+              _buildOtherSettingsSection(isDarkMode),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsHeader(bool isDarkMode) {
+    return Row(
+      children: [
+        GestureDetector(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            // Back navigation if needed
+          },
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.1)
+                  : const Color(0xFF2A2A2A).withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.arrow_back_ios_new,
+              color: isDarkMode ? Colors.white : const Color(0xFF2A2A2A),
+              size: 18,
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Text(
+          'Settings',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUserProfileCard(bool isDarkMode) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: isDarkMode
+                ? Colors.black.withOpacity(0.2)
+                : const Color(0xFF475569).withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
         children: [
-          _buildTopBar(isDarkMode),
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: const Color(0xFF3B82F6).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.person,
+              color: Color(0xFF3B82F6),
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 16),
           Expanded(
-            child: Center(
-              child: Text(
-                'Settings & Preferences',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                  color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Alfred Daniel',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Product UI Designer',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.6)
+                        : const Color(0xFF475569),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            Icons.chevron_right,
+            color: isDarkMode
+                ? Colors.white.withOpacity(0.4)
+                : const Color(0xFF475569).withOpacity(0.4),
+            size: 20,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOtherSettingsSection(bool isDarkMode) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Other settings',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: isDarkMode
+                ? Colors.white.withOpacity(0.8)
+                : const Color(0xFF475569),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: isDarkMode
+                    ? Colors.black.withOpacity(0.2)
+                    : const Color(0xFF475569).withOpacity(0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              _buildSettingsItem(
+                icon: Icons.person_outline,
+                title: 'Profile details',
+                isDarkMode: isDarkMode,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  print('Navigate to profile details');
+                },
+              ),
+              _buildSettingsDivider(isDarkMode),
+              _buildSettingsItem(
+                icon: Icons.lock_outline,
+                title: 'Password',
+                isDarkMode: isDarkMode,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  print('Navigate to password settings');
+                },
+              ),
+              _buildSettingsDivider(isDarkMode),
+              _buildSettingsItem(
+                icon: Icons.notifications_outlined,
+                title: 'Notifications',
+                isDarkMode: isDarkMode,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  print('Navigate to notification settings');
+                },
+              ),
+              _buildSettingsDivider(isDarkMode),
+              _buildDarkModeToggleItem(isDarkMode),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        Container(
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: isDarkMode
+                    ? Colors.black.withOpacity(0.2)
+                    : const Color(0xFF475569).withOpacity(0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              _buildSettingsItem(
+                icon: Icons.info_outline,
+                title: 'About application',
+                isDarkMode: isDarkMode,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  print('Navigate to about application');
+                },
+              ),
+              _buildSettingsDivider(isDarkMode),
+              _buildSettingsItem(
+                icon: Icons.help_outline,
+                title: 'Help/FAQ',
+                isDarkMode: isDarkMode,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  print('Navigate to help/FAQ');
+                },
+              ),
+              _buildSettingsDivider(isDarkMode),
+              _buildSettingsItem(
+                icon: Icons.logout,
+                title: 'Deactivate my account',
+                isDarkMode: isDarkMode,
+                isDestructive: true,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  _showDeactivateAccountDialog(isDarkMode);
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 32),
+        if (kDebugMode) _buildDebugSection(isDarkMode),
+      ],
+    );
+  }
+
+  Widget _buildSettingsItem({
+    required IconData icon,
+    required String title,
+    required bool isDarkMode,
+    required VoidCallback onTap,
+    bool isDestructive = false,
+    Widget? trailing,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: isDestructive
+                    ? Colors.red
+                    : (isDarkMode ? Colors.white : const Color(0xFF2A2A2A)),
+                size: 20,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: isDestructive
+                        ? Colors.red
+                        : (isDarkMode ? Colors.white : const Color(0xFF0F172A)),
+                  ),
+                ),
+              ),
+              trailing ??
+                  Icon(
+                    Icons.chevron_right,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.4)
+                        : const Color(0xFF475569).withOpacity(0.4),
+                    size: 20,
+                  ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDarkModeToggleItem(bool isDarkMode) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Icon(
+            Icons.dark_mode_outlined,
+            color: isDarkMode ? Colors.white : const Color(0xFF2A2A2A),
+            size: 20,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              'Dark mode',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () async {
+              HapticFeedback.lightImpact();
+              await ThemeProvider.instance.toggleTheme();
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: 52,
+              height: 28,
+              decoration: BoxDecoration(
+                color: isDarkMode
+                    ? const Color(0xFF3B82F6)
+                    : const Color(0xFF475569).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 300),
+                alignment:
+                    isDarkMode ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  margin: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -867,6 +1993,156 @@ class _NextScreenState extends State<NextScreen> {
       ),
     );
   }
+
+  Widget _buildSettingsDivider(bool isDarkMode) {
+    return Container(
+      height: 1,
+      margin: const EdgeInsets.only(left: 52),
+      color: isDarkMode
+          ? Colors.white.withOpacity(0.1)
+          : const Color(0xFF475569).withOpacity(0.1),
+    );
+  }
+
+  Widget _buildDebugSection(bool isDarkMode) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.red.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.bug_report,
+                color: Colors.red,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Debug Mode',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.red,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () async {
+                HapticFeedback.lightImpact();
+                await SessionService.instance.resetSession();
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const MyApp()),
+                  (route) => false,
+                );
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.red.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.refresh,
+                      color: Colors.red,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Reset Session',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeactivateAccountDialog(bool isDarkMode) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Text(
+            'Deactivate Account',
+            style: TextStyle(
+              color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to deactivate your account? This action cannot be undone.',
+            style: TextStyle(
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.8)
+                  : const Color(0xFF475569),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: isDarkMode
+                      ? Colors.white.withOpacity(0.8)
+                      : const Color(0xFF475569),
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Handle account deactivation
+                print('Account deactivation requested');
+              },
+              child: const Text(
+                'Deactivate',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
 
   Widget _buildTopBar(bool isDarkMode) {
     return Padding(
@@ -987,4 +2263,676 @@ class _NextScreenState extends State<NextScreen> {
       ),
     );
   }
+
+  /// Build automation cards in vertical column layout with subtle animations
+  Widget _buildAutomationGrid(bool isDarkMode) {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOut,
+      tween: Tween<double>(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 8 * (1 - value)), // Slide up effect: translateY(8px) -> translateY(0)
+          child: Opacity(
+            opacity: value, // Fade in effect: opacity: 0 -> opacity: 1
+            child: Container(
+              padding: const EdgeInsets.all(24), // Generous internal padding
+              decoration: BoxDecoration(
+                // Enhanced glassmorphism effect
+                color: isDarkMode 
+                    ? Colors.white.withOpacity(0.03)
+                    : Colors.white.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(28), // Increased to 28px for organic Apple-style look
+                border: Border.all(
+                  color: isDarkMode
+                      ? Colors.white.withOpacity(0.08)
+                      : Colors.white.withOpacity(0.3),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: isDarkMode
+                        ? Colors.black.withOpacity(0.2)
+                        : Colors.black.withOpacity(0.05), // Soft iOS floating card shadow
+                    blurRadius: 24, // Enhanced blur for glassmorphism
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Enhanced title with better hierarchy
+          Text(
+            'Home Automation',
+            style: TextStyle(
+              fontSize: 24, // Larger for better hierarchy
+              fontWeight: FontWeight.w700, // Semibold for stronger presence
+              letterSpacing: -0.4, // Tighter letter spacing as requested
+              height: 1.2, // Tighter line height for impact
+              color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 24), // Slightly more space after title
+
+          // Smart Lighting Card
+          _buildAutomationCard(
+            title: 'Smart Light 💡',
+            subtitle: '12 devices',
+            icon: Icons.lightbulb_outline,
+            value: '8 Active',
+            color: isDarkMode
+                ? Colors.white.withOpacity(0.7)
+                : const Color(0xFF475569),
+            isDarkMode: isDarkMode,
+            height: 100, // Reduced height for column layout
+          ),
+
+          const SizedBox(height: 16),
+
+          // Security Card
+          _buildAutomationCard(
+            title: 'Security 🛡️',
+            subtitle: 'System Status',
+            icon: Icons.security,
+            value: 'ON (Armed)',
+            color: isDarkMode
+                ? Colors.white.withOpacity(0.7)
+                : const Color(0xFF475569),
+            isDarkMode: isDarkMode,
+            height: 100,
+          ),
+
+          const SizedBox(height: 20), // Increased spacing for divider
+
+          // Subtle functional group divider
+          _buildGroupDivider(isDarkMode),
+
+          const SizedBox(height: 20), // Consistent spacing after divider
+
+          // Thermostat Card
+          _buildAutomationCard(
+            title: 'Thermostat',
+            subtitle: 'Climate Control',
+            icon: Icons.thermostat,
+            value: 'AUTO 24°C',
+            color: isDarkMode
+                ? Colors.white.withOpacity(0.7)
+                : const Color(0xFF475569),
+            isDarkMode: isDarkMode,
+            height: 100,
+          ),
+
+          const SizedBox(height: 16),
+
+          // Entertainment Card
+          _buildAutomationCard(
+            title: 'Entertainment',
+            subtitle: 'Living Room',
+            icon: Icons.tv,
+            value: 'Playing Music',
+            color: isDarkMode
+                ? Colors.white.withOpacity(0.7)
+                : const Color(0xFF475569),
+            isDarkMode: isDarkMode,
+            height: 100,
+          ),
+        ],
+              ), // Close Column
+            ), // Close Container  
+          ), // Close Opacity
+        ); // Close Transform.translate
+      }, // Close builder function
+    ); // Close TweenAnimationBuilder
+  }
+
+  /// Build subtle group divider with minimal opacity
+  Widget _buildGroupDivider(bool isDarkMode) {
+    return Container(
+      height: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 8), // Slight inset for elegance
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.transparent,
+            (isDarkMode ? Colors.white : const Color(0xFF475569)).withOpacity(0.1), // 1px divider with 0.1 opacity
+            Colors.transparent,
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build individual automation card with enhanced glassmorphism
+  Widget _buildAutomationCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required String value,
+    required Color color,
+    required bool isDarkMode,
+    required double height,
+  }) {
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: isDarkMode
+            ? Colors.white.withOpacity(0.05)
+            : Colors.white.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.1)
+              : Colors.white.withOpacity(0.3),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDarkMode
+                ? Colors.black.withOpacity(0.2)
+                : Colors.black.withOpacity(0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.all(14), // Slightly reduced padding
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top row: Icon + Title aligned horizontally
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Smaller icon with consistent top-left alignment
+                    Container(
+                      padding: const EdgeInsets.all(4), // Reduced padding for compact layout
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        icon,
+                        color: color.withOpacity(0.8), // Added opacity: 0.8
+                        size: 18, // Reduced to 18px as requested
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // Title aligned with icon
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                          letterSpacing: -0.2,
+                          height: 1.2, // Improved line height for alignment
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const Spacer(), // Use spacer to fill available space
+
+                // Bottom section: Data and subtext with optimized spacing
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Main data value
+                    Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 16, // Optimized size to fit container
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                        letterSpacing: -0.3,
+                        height: 1.1, // Tight line height for data
+                      ),
+                    ),
+                    const SizedBox(height: 2), // Reduced spacing for compact layout
+                    // Subtitle/description
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11, // Compact size for better fit
+                        fontWeight: FontWeight.w400,
+                        color: (isDarkMode ? Colors.white : const Color(0xFF475569))
+                            .withOpacity(0.7),
+                        height: 1.2, // More compact line height
+                        letterSpacing: -0.1, // Subtle kerning adjustment
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Premium newspaper reading container
+  Widget _buildNewspaperContainer(bool isDarkMode) {
+    return Container(
+      width: double.infinity,
+      height: 160,
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: isDarkMode
+                ? Colors.black.withOpacity(0.3)
+                : const Color(0xFF475569).withOpacity(0.15),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Stack(
+          children: [
+            // Premium background pattern
+            Positioned.fill(
+              child: CustomPaint(
+                painter: NewspaperPatternPainter(isDarkMode),
+              ),
+            ),
+
+            // Main content
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                children: [
+                  // Left content
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Premium badge
+
+                        const SizedBox(height: 12),
+
+                        // Main title
+                        Text(
+                          'Read Newspaper',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: isDarkMode
+                                ? Colors.white
+                                : const Color(0xFF0F172A),
+                            height: 1.1,
+                          ),
+                        ),
+
+                        const SizedBox(height: 6),
+
+                        // Subtitle
+                        Text(
+                          'Stay informed with daily news',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: isDarkMode
+                                ? Colors.white.withOpacity(0.7)
+                                : const Color(0xFF475569),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(width: 20),
+
+                  // Right side - Newspaper icon with monochromatic styling
+                  Expanded(
+                    flex: 2,
+                    child: Image.asset(
+                      'images/newspaper.png',
+                      width: 200,
+                      height: 200,
+                      fit: BoxFit.cover,
+                      colorBlendMode: BlendMode.modulate,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Medication reminder container with time slots
+  Widget _buildMedicationReminderContainer(bool isDarkMode) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: isDarkMode
+                ? Colors.black.withOpacity(0.3)
+                : const Color(0xFF475569).withOpacity(0.15),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title
+          Text(
+            'Medication Reminder',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Morning medications (8:30 AM)
+          _buildMedicationTimeSlot(
+            time: '8:30 AM',
+            medications: [
+              {
+                'name': 'Sergel',
+                'dose': '20 mg, Take 1',
+                'color': isDarkMode
+                    ? Colors.white.withOpacity(0.1)
+                    : const Color(0xFFF5F5F7),
+                'type': 'capsule'
+              },
+              {
+                'name': 'Dribbble',
+                'dose': '150 mg, Take 1',
+                'color': isDarkMode
+                    ? Colors.white.withOpacity(0.05)
+                    : const Color(0xFFE0E0E2),
+                'type': 'pill'
+              },
+            ],
+            isDarkMode: isDarkMode,
+          ),
+
+          const SizedBox(height: 20),
+
+          // Evening medications (8:30 PM)
+          _buildMedicationTimeSlot(
+            time: '8:30 PM',
+            medications: [
+              {
+                'name': 'Napa',
+                'dose': '150 mg, Take 1',
+                'color': isDarkMode
+                    ? Colors.white.withOpacity(0.1)
+                    : const Color(0xFFF5F5F7),
+                'type': 'pill'
+              },
+              {
+                'name': 'Napa',
+                'dose': '150 mg, Take 1',
+                'color': isDarkMode
+                    ? Colors.white.withOpacity(0.05)
+                    : const Color(0xFFE0E0E2),
+                'type': 'capsule'
+              },
+            ],
+            isDarkMode: isDarkMode,
+          ),
+
+          const SizedBox(height: 24),
+
+          // See More button
+          Center(
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDarkMode
+                    ? Colors.white.withOpacity(0.1)
+                    : const Color(0xFFF5F5F7),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isDarkMode
+                      ? Colors.white.withOpacity(0.2)
+                      : const Color(0xFFE0E0E2),
+                  width: 1,
+                ),
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () {
+                    // Handle see more action
+                    print('See more medications tapped');
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 12),
+                    child: Text(
+                      'See More',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: isDarkMode
+                            ? Colors.white.withOpacity(0.8)
+                            : const Color(0xFF475569),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build individual medication time slot
+  Widget _buildMedicationTimeSlot({
+    required String time,
+    required List<Map<String, dynamic>> medications,
+    required bool isDarkMode,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Time label
+        Text(
+          time,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: isDarkMode
+                ? Colors.white.withOpacity(0.7)
+                : const Color(0xFF475569),
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Medication cards
+        Row(
+          children: medications
+              .map(
+                (med) => Expanded(
+                  child: Container(
+                    margin: EdgeInsets.only(
+                      right: medications.indexOf(med) < medications.length - 1
+                          ? 12
+                          : 0,
+                    ),
+                    child: _buildMedicationCard(
+                      name: med['name'],
+                      dose: med['dose'],
+                      color: med['color'],
+                      type: med['type'],
+                      isDarkMode: isDarkMode,
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+
+  /// Build individual medication card
+  Widget _buildMedicationCard({
+    required String name,
+    required String dose,
+    required Color color,
+    required String type,
+    required bool isDarkMode,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.2)
+              : const Color(0xFFE0E0E2),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Medication icon
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Center(
+              child: _buildMedicationIcon(type, isDarkMode),
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          // Medication info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  dose,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.7)
+                        : const Color(0xFF475569),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build medication icon based on type
+  Widget _buildMedicationIcon(String type, bool isDarkMode) {
+    if (type == 'capsule') {
+      // Capsule icon
+      return Container(
+        width: 20,
+        height: 12,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.7)
+              : const Color(0xFF475569),
+        ),
+      );
+    } else {
+      // Pill icon
+      return Container(
+        width: 16,
+        height: 16,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.7)
+              : const Color(0xFF475569),
+        ),
+      );
+    }
+  }
+}
+
+/// Custom painter for newspaper background pattern
+class NewspaperPatternPainter extends CustomPainter {
+  final bool isDarkMode;
+
+  NewspaperPatternPainter(this.isDarkMode);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = isDarkMode
+          ? Colors.white.withOpacity(0.02)
+          : Colors.black.withOpacity(0.03)
+      ..strokeWidth = 1;
+
+    // Draw subtle grid pattern
+    for (double x = 0; x < size.width; x += 20) {
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        paint,
+      );
+    }
+
+    for (double y = 0; y < size.height; y += 20) {
+      canvas.drawLine(
+        Offset(0, y),
+        Offset(size.width, y),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
