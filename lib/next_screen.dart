@@ -35,8 +35,9 @@ class _NextScreenState extends State<NextScreen> {
   final _pageController = PageController(initialPage: 0);
 
   /// Controller to handle bottom nav bar and also handles initial page
-  final NotchBottomBarController _controller =
-      NotchBottomBarController(index: 0);
+  late NotchBottomBarController _controller;
+  int _currentIndex = 0;
+  Brightness? _lastBrightness;
 
   // Live health data variables
   int _heartPressureSystolic = 120;
@@ -52,12 +53,17 @@ class _NextScreenState extends State<NextScreen> {
 
     // Initialize home automation controller
     HomeAutomationController.instance.initialize();
+
+    // Initialize bottom bar controller
+    _controller = NotchBottomBarController(index: _currentIndex);
   }
 
   @override
   void dispose() {
     _pageController.dispose();
     _healthDataTimer?.cancel();
+    // Dispose bottom bar controller to prevent callbacks after widget is disposed
+    _controller.dispose();
     super.dispose();
   }
 
@@ -101,7 +107,19 @@ class _NextScreenState extends State<NextScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final brightness = Theme.of(context).brightness;
+    final isDarkMode = brightness == Brightness.dark;
+
+    // If theme brightness changed (e.g., light <-> dark), recreate controller to avoid
+    // stale listeners inside AnimatedNotchBottomBar referencing disposed animations.
+    if (_lastBrightness != brightness) {
+      _lastBrightness = brightness;
+      // Replace controller with a fresh one while preserving index
+      final old = _controller;
+      _controller = NotchBottomBarController(index: _currentIndex);
+      // Dispose the old one to drop any listeners
+      old.dispose();
+    }
 
     /// widget list for bottom bar pages
     final List<Widget> bottomBarPages = [
@@ -130,39 +148,54 @@ class _NextScreenState extends State<NextScreen> {
       extendBody: true,
       bottomNavigationBar: Container(
         margin: const EdgeInsets.only(bottom: 30), // Move nav bar 30px higher
+        decoration: isDarkMode
+            ? BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: const Color(0xFF3C3C3E), // Subtle border for better definition
+                  width: 0.5,
+                ),
+              )
+            : null,
         child: AnimatedNotchBottomBar(
           /// Provide NotchBottomBarController
           notchBottomBarController: _controller,
-          color: isDarkMode ? const Color(0xFF2A2A2A) : const Color(0xFFFDFDFD),
+          color: isDarkMode 
+              ? const Color(0xFF2C2C2E) // Distinct darker gray for better contrast against dark background
+              : const Color(0xFFFDFDFD),
           showLabel: true,
           textOverflow: TextOverflow.visible,
           maxLine: 1,
-          shadowElevation: isDarkMode ? 2 : 5,
+          shadowElevation: isDarkMode ? 8 : 5, // Add shadow elevation for better separation in dark mode
           kBottomRadius: 28.0,
           notchColor:
-              isDarkMode ? const Color(0xFF3A3A3A) : const Color(0xFF475569),
+              isDarkMode 
+                  ? const Color(0xFF3C3C3E) // Lighter notch color for better visibility
+                  : const Color(0xFF475569),
           removeMargins: false,
           bottomBarWidth: 500,
-          showShadow: isDarkMode ? false : true,
-          durationInMilliSeconds: 300,
+          showShadow: isDarkMode ? true : true, // Enable shadow in dark mode for better separation
+          // Snappier indicator movement for better perceived responsiveness
+          durationInMilliSeconds: 220,
           itemLabelStyle: TextStyle(
             fontSize: 10,
+            fontWeight: FontWeight.w500, // Slightly bolder text for better readability
             color: isDarkMode
-                ? Colors.white.withOpacity(0.7)
+                ? const Color(0xFF8E8E93) // More subtle iOS-style gray for labels
                 : const Color(0xFF475569),
           ),
-          elevation: 8,
+          elevation: isDarkMode ? 12 : 8, // Increase elevation in dark mode for better separation from background
           bottomBarItems: [
             BottomBarItem(
               inActiveItem: Icon(
                 CupertinoIcons.house,
                 color: isDarkMode
-                    ? Colors.white.withOpacity(0.5)
+                    ? const Color(0xFF8E8E93) // More subtle iOS-style gray for inactive icons
                     : const Color(0xFF475569).withOpacity(0.6),
               ),
               activeItem: Icon(
                 CupertinoIcons.house_fill,
-                color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                color: isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A), // Pure white for better contrast when active
               ),
               itemLabel: 'Home',
             ),
@@ -170,12 +203,12 @@ class _NextScreenState extends State<NextScreen> {
               inActiveItem: Icon(
                 CupertinoIcons.chat_bubble,
                 color: isDarkMode
-                    ? Colors.white.withOpacity(0.5)
+                    ? const Color(0xFF8E8E93) // More subtle iOS-style gray for inactive icons
                     : const Color(0xFF475569).withOpacity(0.6),
               ),
               activeItem: Icon(
                 CupertinoIcons.chat_bubble_fill,
-                color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                color: isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A), // Pure white for better contrast when active
               ),
               itemLabel: 'Chat',
             ),
@@ -183,12 +216,12 @@ class _NextScreenState extends State<NextScreen> {
               inActiveItem: Icon(
                 CupertinoIcons.lightbulb,
                 color: isDarkMode
-                    ? Colors.white.withOpacity(0.5)
+                    ? const Color(0xFF8E8E93) // More subtle iOS-style gray for inactive icons
                     : const Color(0xFF475569).withOpacity(0.6),
               ),
               activeItem: Icon(
                 CupertinoIcons.lightbulb_fill,
-                color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                color: isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A), // Pure white for better contrast when active
               ),
               itemLabel: 'Automation',
             ),
@@ -196,18 +229,26 @@ class _NextScreenState extends State<NextScreen> {
               inActiveItem: Icon(
                 CupertinoIcons.gear,
                 color: isDarkMode
-                    ? Colors.white.withOpacity(0.5)
+                    ? const Color(0xFF8E8E93) // More subtle iOS-style gray for inactive icons
                     : const Color(0xFF475569).withOpacity(0.6),
               ),
               activeItem: Icon(
                 CupertinoIcons.gear_solid,
-                color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                color: isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A), // Pure white for better contrast when active
               ),
               itemLabel: 'Settings',
             ),
           ],
           onTap: (index) {
-            _pageController.jumpToPage(index);
+            // Move the notch indicator immediately
+            _controller.jumpTo(index);
+            _currentIndex = index;
+            // Animate page to stay in sync with the indicator motion
+            _pageController.animateToPage(
+              index,
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+            );
           },
           kIconSize: 24.0,
         ),
@@ -387,15 +428,23 @@ class _NextScreenState extends State<NextScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+        color: isDarkMode 
+            ? const Color(0xFF1C1C1E) // Standardized dark theme main container
+            : Colors.white,
         borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.1)
+              : Colors.white.withOpacity(0.3),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: isDarkMode
-                ? Colors.black.withOpacity(0.3)
+                ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
                 : const Color(0xFF475569).withOpacity(0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            blurRadius: 16, // Standardized blur radius
+            offset: const Offset(0, 6), // Standardized offset
           ),
         ],
       ),
@@ -464,16 +513,25 @@ class _NextScreenState extends State<NextScreen> {
                 // Diagnostic button
                 Container(
                   decoration: BoxDecoration(
-                    color: isDarkMode
-                        ? Colors.white.withOpacity(0.1)
-                        : const Color(0xFFF5F5F7),
+                    color: isDarkMode 
+                        ? const Color(0xFF2C2C2E) // Dark theme: consistent with cards
+                        : Colors.white, // Light theme: white background
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: isDarkMode
-                          ? Colors.white.withOpacity(0.2)
-                          : const Color(0xFFE0E0E2),
+                          ? Colors.white.withOpacity(0.1)
+                          : Colors.white.withOpacity(0.3),
                       width: 1,
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: isDarkMode
+                            ? Colors.black.withOpacity(0.3)
+                            : Colors.black.withOpacity(0.15),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
                   ),
                   child: Material(
                     color: Colors.transparent,
@@ -535,173 +593,258 @@ class _NextScreenState extends State<NextScreen> {
     );
   }
 
+  /// Get heart metrics card decoration for dark theme
+  BoxDecoration _getHeartCardDecorationDark() {
+    return BoxDecoration(
+      color: const Color(0xFF2C2C2E), // Slightly lighter than main container for contrast
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(
+        color: Colors.white.withOpacity(0.1),
+        width: 1,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.4),
+          blurRadius: 16,
+          offset: const Offset(0, 6),
+        ),
+      ],
+    );
+  }
+
+  /// Get heart metrics card decoration for light theme
+  BoxDecoration _getHeartCardDecorationLight() {
+    return BoxDecoration(
+      color: Colors.white.withOpacity(1),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(
+        color: Colors.white.withOpacity(1),
+        width: 1,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.15),
+          blurRadius: 16,
+          offset: const Offset(0, 6),
+        ),
+      ],
+    );
+  }
+
   /// Health metrics row (pressure and rhythm)
   Widget _buildHealthMetricsRow(bool isDarkMode) {
     return Row(
       children: [
-        // Heart pressure card
+        // Heart pressure card with enhanced glassmorphism
         Expanded(
           child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+            height: 100, // Fixed height for uniformity like automation cards
+            decoration: isDarkMode 
+                ? _getHeartCardDecorationDark()
+                : _getHeartCardDecorationLight(),
+            child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: isDarkMode
-                      ? Colors.black.withOpacity(0.3)
-                      : const Color(0xFF475569).withOpacity(0.15),
-                  blurRadius: 15,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TweenAnimationBuilder<double>(
-                  duration: Duration(milliseconds: 1000 + (_heartRate * 5)),
-                  tween: Tween<double>(begin: 0.95, end: 1.05),
-                  builder: (context, scale, child) {
-                    return Transform.scale(
-                      scale: scale,
-                      child: Icon(
-                        CupertinoIcons.heart,
-                        color: isDarkMode
-                            ? Colors.white.withOpacity(0.7)
-                            : const Color(0xFF475569),
-                        size: 24,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  padding: const EdgeInsets.all(14), // Slightly reduced padding like automation cards
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Top row: Icon + Title aligned horizontally
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Enhanced icon with consistent styling
+                          Container(
+                            padding: const EdgeInsets.all(4), // Reduced padding for compact layout
+                            decoration: BoxDecoration(
+                              color: isDarkMode 
+                                  ? Colors.white.withOpacity(0.1) 
+                                  : Colors.white.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: TweenAnimationBuilder<double>(
+                              duration: Duration(milliseconds: 1000 + (_heartRate * 5)),
+                              tween: Tween<double>(begin: 0.95, end: 1.05),
+                              builder: (context, scale, child) {
+                                return Transform.scale(
+                                  scale: scale,
+                                  child: Icon(
+                                    CupertinoIcons.heart,
+                                    color: isDarkMode
+                                        ? Colors.white.withOpacity(0.8) // 80% opacity like automation cards
+                                        : const Color(0xFF475569).withOpacity(0.8),
+                                    size: 18, // Standardized 18px size
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          // Title aligned with icon
+                          Expanded(
+                            child: Text(
+                              'Heart pressure',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                                letterSpacing: -0.2,
+                                height: 1.2, // Improved line height for alignment
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Heart pressure',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: isDarkMode
-                        ? Colors.white.withOpacity(0.7)
-                        : const Color(0xFF475569),
+
+                      const Spacer(), // Use spacer to fill available space
+
+                      // Pressure reading at bottom
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 500),
+                        transitionBuilder: (Widget child, Animation<double> animation) {
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0.0, 0.1),
+                                end: Offset.zero,
+                              ).animate(CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeOut,
+                              )),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: Text(
+                          '$_heartPressureSystolic / $_heartPressureDiastolic',
+                          key: ValueKey('$_heartPressureSystolic-$_heartPressureDiastolic'),
+                          style: TextStyle(
+                            fontSize: 16, // Slightly smaller for card layout
+                            fontWeight: FontWeight.w700,
+                            color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                            letterSpacing: -0.1,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 500),
-                  transitionBuilder:
-                      (Widget child, Animation<double> animation) {
-                    return FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(
-                        position: Tween<Offset>(
-                          begin: const Offset(0.0, 0.1),
-                          end: Offset.zero,
-                        ).animate(CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeOut,
-                        )),
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: Text(
-                    '$_heartPressureSystolic / $_heartPressureDiastolic',
-                    key: ValueKey(
-                        '$_heartPressureSystolic-$_heartPressureDiastolic'),
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color:
-                          isDarkMode ? Colors.white : const Color(0xFF0F172A),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
 
         const SizedBox(width: 16),
 
-        // Heart rhythm card
+        // Heart rhythm card with enhanced glassmorphism
         Expanded(
           child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+            height: 100, // Fixed height for uniformity like automation cards
+            decoration: isDarkMode 
+                ? _getHeartCardDecorationDark()
+                : _getHeartCardDecorationLight(),
+            child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: isDarkMode
-                      ? Colors.black.withOpacity(0.3)
-                      : const Color(0xFF475569).withOpacity(0.15),
-                  blurRadius: 15,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TweenAnimationBuilder<double>(
-                  duration: Duration(milliseconds: 900 + (_heartRate * 6)),
-                  tween: Tween<double>(begin: 0.9, end: 1.1),
-                  builder: (context, scale, child) {
-                    return Transform.scale(
-                      scale: scale,
-                      child: Icon(
-                        CupertinoIcons.waveform,
-                        color: isDarkMode
-                            ? Colors.white.withOpacity(0.7)
-                            : const Color(0xFF475569),
-                        size: 24,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  padding: const EdgeInsets.all(14), // Slightly reduced padding like automation cards
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Top row: Icon + Title aligned horizontally
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Enhanced icon with consistent styling
+                          Container(
+                            padding: const EdgeInsets.all(4), // Reduced padding for compact layout
+                            decoration: BoxDecoration(
+                              color: isDarkMode 
+                                  ? Colors.white.withOpacity(0.1) 
+                                  : Colors.white.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: TweenAnimationBuilder<double>(
+                              duration: Duration(milliseconds: 900 + (_heartRate * 6)),
+                              tween: Tween<double>(begin: 0.9, end: 1.1),
+                              builder: (context, scale, child) {
+                                return Transform.scale(
+                                  scale: scale,
+                                  child: Icon(
+                                    CupertinoIcons.waveform,
+                                    color: isDarkMode
+                                        ? Colors.white.withOpacity(0.8) // 80% opacity like automation cards
+                                        : const Color(0xFF475569).withOpacity(0.8),
+                                    size: 18, // Standardized 18px size
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          // Title aligned with icon
+                          Expanded(
+                            child: Text(
+                              'Heart rhythm',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                                letterSpacing: -0.2,
+                                height: 1.2, // Improved line height for alignment
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Heart rhythm',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: isDarkMode
-                        ? Colors.white.withOpacity(0.7)
-                        : const Color(0xFF475569),
+
+                      const Spacer(), // Use spacer to fill available space
+
+                      // Heart rate reading at bottom
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 500),
+                        transitionBuilder: (Widget child, Animation<double> animation) {
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0.0, 0.1),
+                                end: Offset.zero,
+                              ).animate(CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeOut,
+                              )),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: Text(
+                          '$_heartRate / min',
+                          key: ValueKey(_heartRate),
+                          style: TextStyle(
+                            fontSize: 16, // Slightly smaller for card layout
+                            fontWeight: FontWeight.w700,
+                            color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                            letterSpacing: -0.1,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 500),
-                  transitionBuilder:
-                      (Widget child, Animation<double> animation) {
-                    return FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(
-                        position: Tween<Offset>(
-                          begin: const Offset(0.0, 0.1),
-                          end: Offset.zero,
-                        ).animate(CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeOut,
-                        )),
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: Text(
-                    '$_heartRate / min',
-                    key: ValueKey(_heartRate),
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color:
-                          isDarkMode ? Colors.white : const Color(0xFF0F172A),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -715,15 +858,23 @@ class _NextScreenState extends State<NextScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        color: isDarkMode 
+            ? const Color(0xFF1C1C1E) // Dark theme: consistent dark background
+            : Colors.white, // Light theme: white background
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.1)
+              : Colors.white.withOpacity(0.3),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: isDarkMode
                 ? Colors.black.withOpacity(0.3)
-                : const Color(0xFF475569).withOpacity(0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+                : Colors.black.withOpacity(0.15),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -746,18 +897,9 @@ class _NextScreenState extends State<NextScreen> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: isDarkMode
-                  ? Colors.white.withOpacity(0.05)
-                  : const Color(0xFFF5F5F7),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isDarkMode
-                    ? Colors.white.withOpacity(0.2)
-                    : const Color(0xFFE0E0E2),
-                width: 1,
-              ),
-            ),
+            decoration: isDarkMode 
+                ? _getAutomationCardDecorationDark()
+                : _getAutomationCardDecorationLight(),
             child: Row(
               children: [
                 // Safety icon
@@ -807,15 +949,23 @@ class _NextScreenState extends State<NextScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+        color: isDarkMode 
+            ? const Color(0xFF1C1C1E) // Standardized dark theme main container
+            : Colors.white,
         borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.1)
+              : Colors.white.withOpacity(0.3),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: isDarkMode
-                ? Colors.black.withOpacity(0.3)
+                ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
                 : const Color(0xFF475569).withOpacity(0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            blurRadius: 16, // Standardized blur radius
+            offset: const Offset(0, 6), // Standardized offset
           ),
         ],
       ),
@@ -978,12 +1128,20 @@ class _NextScreenState extends State<NextScreen> {
           width: 50,
           height: 50,
           decoration: BoxDecoration(
-            color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+            color: isDarkMode 
+                ? const Color(0xFF2C2C2E) // Standardized dark theme card
+                : Colors.white,
             borderRadius: BorderRadius.circular(25),
+            border: Border.all(
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.white.withOpacity(0.3),
+              width: 1,
+            ),
             boxShadow: [
               BoxShadow(
                 color: isDarkMode
-                    ? Colors.black.withOpacity(0.3)
+                    ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
                     : const Color(0xFF475569).withOpacity(0.08),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
@@ -1086,15 +1244,23 @@ class _NextScreenState extends State<NextScreen> {
             margin: const EdgeInsets.symmetric(horizontal: 4),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+              color: isDarkMode 
+                  ? const Color(0xFF2C2C2E) // Standardized dark theme card
+                  : Colors.white,
               borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDarkMode
+                    ? Colors.white.withOpacity(0.1)
+                    : Colors.white.withOpacity(0.3),
+                width: 1,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: isDarkMode
-                      ? Colors.black.withOpacity(0.3)
+                      ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
                       : const Color(0xFF475569).withOpacity(0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+                  blurRadius: 16, // Standardized blur radius
+                  offset: const Offset(0, 6), // Standardized offset
                 ),
               ],
             ),
@@ -1274,15 +1440,23 @@ class _NextScreenState extends State<NextScreen> {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+            color: isDarkMode 
+                ? const Color(0xFF2C2C2E) // Standardized dark theme card
+                : Colors.white,
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.white.withOpacity(0.3),
+              width: 1,
+            ),
             boxShadow: [
               BoxShadow(
                 color: isDarkMode
-                    ? Colors.black.withOpacity(0.3)
+                    ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
                     : const Color(0xFF475569).withOpacity(0.08),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+                blurRadius: 16, // Standardized blur radius
+                offset: const Offset(0, 6), // Standardized offset
               ),
             ],
           ),
@@ -1402,15 +1576,23 @@ class _NextScreenState extends State<NextScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+        color: isDarkMode 
+            ? const Color(0xFF2C2C2E) // Standardized dark theme card
+            : Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.1)
+              : Colors.white.withOpacity(0.3),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: isDarkMode
-                ? Colors.black.withOpacity(0.3)
+                ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
                 : const Color(0xFF475569).withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            blurRadius: 16, // Standardized blur radius
+            offset: const Offset(0, 6), // Standardized offset
           ),
         ],
       ),
@@ -1516,12 +1698,20 @@ class _NextScreenState extends State<NextScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+        color: isDarkMode 
+            ? const Color(0xFF1C1C1E) // Standardized dark theme main container
+            : Colors.white,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.1)
+              : Colors.white.withOpacity(0.3),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: isDarkMode
-                ? Colors.black.withOpacity(0.3)
+                ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
                 : const Color(0xFF475569).withOpacity(0.08),
             blurRadius: 12,
             offset: const Offset(0, 4),
@@ -1692,15 +1882,23 @@ class _NextScreenState extends State<NextScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+        color: isDarkMode 
+            ? const Color(0xFF2C2C2E) // Standardized dark theme card
+            : Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.1)
+              : Colors.white.withOpacity(0.3),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: isDarkMode
-                ? Colors.black.withOpacity(0.2)
+                ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
                 : const Color(0xFF475569).withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            blurRadius: 16, // Standardized blur radius
+            offset: const Offset(0, 6), // Standardized offset
           ),
         ],
       ),
@@ -1774,15 +1972,23 @@ class _NextScreenState extends State<NextScreen> {
         const SizedBox(height: 16),
         Container(
           decoration: BoxDecoration(
-            color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+            color: isDarkMode 
+                ? const Color(0xFF2C2C2E) // Standardized dark theme card
+                : Colors.white,
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.white.withOpacity(0.3),
+              width: 1,
+            ),
             boxShadow: [
               BoxShadow(
                 color: isDarkMode
-                    ? Colors.black.withOpacity(0.2)
+                    ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
                     : const Color(0xFF475569).withOpacity(0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+                blurRadius: 16, // Standardized blur radius
+                offset: const Offset(0, 6), // Standardized offset
               ),
             ],
           ),
@@ -1825,8 +2031,16 @@ class _NextScreenState extends State<NextScreen> {
         const SizedBox(height: 24),
         Container(
           decoration: BoxDecoration(
-            color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+            color: isDarkMode 
+                ? const Color(0xFF2C2C2E) // Standardized dark theme card
+                : Colors.white,
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.white.withOpacity(0.3),
+              width: 1,
+            ),
             boxShadow: [
               BoxShadow(
                 color: isDarkMode
@@ -2092,9 +2306,17 @@ class _NextScreenState extends State<NextScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+          backgroundColor: isDarkMode 
+              ? const Color(0xFF2C2C2E) // Standardized dark theme card
+              : Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.white.withOpacity(0.3),
+              width: 1,
+            ),
           ),
           title: Text(
             'Deactivate Account',
@@ -2278,14 +2500,14 @@ class _NextScreenState extends State<NextScreen> {
             child: Container(
               padding: const EdgeInsets.all(24), // Generous internal padding
               decoration: BoxDecoration(
-                // Enhanced glassmorphism effect
+                // Theme-aware background
                 color: isDarkMode 
-                    ? Colors.white.withOpacity(0.03)
-                    : Colors.white.withOpacity(0.7),
+                    ? const Color(0xFF1C1C1E) // Dark theme: proper dark background
+                    : Colors.white, // Light theme: white background
                 borderRadius: BorderRadius.circular(28), // Increased to 28px for organic Apple-style look
                 border: Border.all(
                   color: isDarkMode
-                      ? Colors.white.withOpacity(0.08)
+                      ? Colors.white.withOpacity(0.1)
                       : Colors.white.withOpacity(0.3),
                   width: 1,
                 ),
@@ -2343,12 +2565,7 @@ class _NextScreenState extends State<NextScreen> {
             height: 100,
           ),
 
-          const SizedBox(height: 20), // Increased spacing for divider
-
-          // Subtle functional group divider
-          _buildGroupDivider(isDarkMode),
-
-          const SizedBox(height: 20), // Consistent spacing after divider
+          const SizedBox(height: 16), // Standard spacing between cards
 
           // Thermostat Card
           _buildAutomationCard(
@@ -2386,20 +2603,43 @@ class _NextScreenState extends State<NextScreen> {
     ); // Close TweenAnimationBuilder
   }
 
-  /// Build subtle group divider with minimal opacity
-  Widget _buildGroupDivider(bool isDarkMode) {
-    return Container(
-      height: 1,
-      margin: const EdgeInsets.symmetric(horizontal: 8), // Slight inset for elegance
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.transparent,
-            (isDarkMode ? Colors.white : const Color(0xFF475569)).withOpacity(0.1), // 1px divider with 0.1 opacity
-            Colors.transparent,
-          ],
-        ),
+
+
+  /// Get automation card decoration for dark theme
+  BoxDecoration _getAutomationCardDecorationDark() {
+    return BoxDecoration(
+      color: const Color(0xFF2C2C2E), // Slightly lighter than main container for contrast
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(
+        color: Colors.white.withOpacity(0.1),
+        width: 1,
       ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.4),
+          blurRadius: 16,
+          offset: const Offset(0, 6),
+        ),
+      ],
+    );
+  }
+
+  /// Get automation card decoration for light theme
+  BoxDecoration _getAutomationCardDecorationLight() {
+    return BoxDecoration(
+      color: Colors.white.withOpacity(0.7),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(
+        color: Colors.white.withOpacity(0.3),
+        width: 1,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.15),
+          blurRadius: 16,
+          offset: const Offset(0, 6),
+        ),
+      ],
     );
   }
 
@@ -2415,27 +2655,9 @@ class _NextScreenState extends State<NextScreen> {
   }) {
     return Container(
       height: height,
-      decoration: BoxDecoration(
-        color: isDarkMode
-            ? Colors.white.withOpacity(0.05)
-            : Colors.white.withOpacity(0.7),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDarkMode
-              ? Colors.white.withOpacity(0.1)
-              : Colors.white.withOpacity(0.3),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isDarkMode
-                ? Colors.black.withOpacity(0.2)
-                : Colors.black.withOpacity(0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: isDarkMode 
+          ? _getAutomationCardDecorationDark()
+          : _getAutomationCardDecorationLight(),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: BackdropFilter(
@@ -2530,15 +2752,23 @@ class _NextScreenState extends State<NextScreen> {
       width: double.infinity,
       height: 160,
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+        color: isDarkMode 
+            ? const Color(0xFF1C1C1E) // Standardized dark theme main container
+            : Colors.white,
         borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.1)
+              : Colors.white.withOpacity(0.3),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: isDarkMode
-                ? Colors.black.withOpacity(0.3)
+                ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
                 : const Color(0xFF475569).withOpacity(0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            blurRadius: 16, // Standardized blur radius
+            offset: const Offset(0, 6), // Standardized offset
           ),
         ],
       ),
@@ -2623,36 +2853,56 @@ class _NextScreenState extends State<NextScreen> {
 
   /// Medication reminder container with time slots
   Widget _buildMedicationReminderContainer(bool isDarkMode) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: isDarkMode
-                ? Colors.black.withOpacity(0.3)
-                : const Color(0xFF475569).withOpacity(0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOut,
+      tween: Tween<double>(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 8 * (1 - value)), // Slide up effect: translateY(8px) -> translateY(0)
+          child: Opacity(
+            opacity: value, // Fade in effect: opacity: 0 -> opacity: 1
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24), // Generous internal padding
+              decoration: BoxDecoration(
+                // Theme-aware background
+                color: isDarkMode 
+                    ? const Color(0xFF1C1C1E) // Dark theme: proper dark background
+                    : Colors.white, // Light theme: white background
+                borderRadius: BorderRadius.circular(28), // Increased to 28px for organic Apple-style look
+                border: Border.all(
+                  color: isDarkMode
+                      ? Colors.white.withOpacity(0.1)
+                      : Colors.white.withOpacity(0.3),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: isDarkMode
+                        ? Colors.black.withOpacity(0.2) // Soft iOS floating card shadow
+                        : Colors.black.withOpacity(0.05), // Very subtle shadow for light mode
+                    blurRadius: 24, // Enhanced blur for glassmorphism
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title
+          // Enhanced title with better hierarchy
           Text(
             'Medication Reminder',
             style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
+              fontSize: 24, // Larger for better hierarchy
+              fontWeight: FontWeight.w700, // Semibold for stronger presence
+              letterSpacing: -0.4, // Tighter letter spacing as requested
+              height: 1.2, // Tighter line height for impact
               color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
             ),
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 24), // Slightly more space after title
 
           // Morning medications (8:30 AM)
           _buildMedicationTimeSlot(
@@ -2706,21 +2956,20 @@ class _NextScreenState extends State<NextScreen> {
 
           const SizedBox(height: 24),
 
-          // See More button
+          // Enhanced See More button with glassmorphism
           Center(
             child: Container(
-              decoration: BoxDecoration(
-                color: isDarkMode
-                    ? Colors.white.withOpacity(0.1)
-                    : const Color(0xFFF5F5F7),
+              decoration: isDarkMode 
+                  ? _getMedicationCardDecorationDark()
+                  : _getMedicationCardDecorationLight(),
+              child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isDarkMode
-                      ? Colors.white.withOpacity(0.2)
-                      : const Color(0xFFE0E0E2),
-                  width: 1,
-                ),
-              ),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.transparent,
+                    ),
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
@@ -2744,11 +2993,56 @@ class _NextScreenState extends State<NextScreen> {
                     ),
                   ),
                 ),
+                  ),
+                ),
               ),
             ),
           ),
+          )
         ],
+              ), // Close Column
+            ), // Close Container  
+          ), // Close Opacity
+        ); // Close Transform.translate
+      }, // Close builder function
+    ); // Close TweenAnimationBuilder
+  }
+
+  /// Get medication card decoration for dark theme
+  BoxDecoration _getMedicationCardDecorationDark() {
+    return BoxDecoration(
+      color: const Color(0xFF2C2C2E), // Slightly lighter than main container for contrast
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(
+        color: Colors.white.withOpacity(0.1),
+        width: 1,
       ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.4),
+          blurRadius: 16,
+          offset: const Offset(0, 6),
+        ),
+      ],
+    );
+  }
+
+  /// Get medication card decoration for light theme
+  BoxDecoration _getMedicationCardDecorationLight() {
+    return BoxDecoration(
+      color: Colors.white.withOpacity(0.7),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(
+        color: Colors.white.withOpacity(0.3),
+        width: 1,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.15),
+          blurRadius: 16,
+          offset: const Offset(0, 6),
+        ),
+      ],
     );
   }
 
@@ -2802,7 +3096,7 @@ class _NextScreenState extends State<NextScreen> {
     );
   }
 
-  /// Build individual medication card
+  /// Build individual medication card with enhanced glassmorphism
   Widget _buildMedicationCard({
     required String name,
     required String dose,
@@ -2811,48 +3105,56 @@ class _NextScreenState extends State<NextScreen> {
     required bool isDarkMode,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDarkMode
-              ? Colors.white.withOpacity(0.2)
-              : const Color(0xFFE0E0E2),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          // Medication icon
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: _buildMedicationIcon(type, isDarkMode),
-            ),
-          ),
-
-          const SizedBox(width: 12),
-
-          // Medication info
-          Expanded(
+      height: 100, // Fixed height for uniformity like automation cards
+      decoration: isDarkMode 
+          ? _getMedicationCardDecorationDark()
+          : _getMedicationCardDecorationLight(),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.all(14), // Slightly reduced padding
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  name,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-                  ),
+                // Top row: Icon + Name aligned horizontally
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Smaller icon with consistent styling
+                    Container(
+                      padding: const EdgeInsets.all(4), // Reduced padding for compact layout
+                      decoration: BoxDecoration(
+                        color: isDarkMode 
+                            ? Colors.white.withOpacity(0.1) 
+                            : Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: _buildMedicationIcon(type, isDarkMode),
+                    ),
+                    const SizedBox(width: 10),
+                    // Name aligned with icon
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                          letterSpacing: -0.2,
+                          height: 1.2, // Improved line height for alignment
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
+
+                const Spacer(), // Use spacer to fill available space
+
+                // Dose information at bottom
                 Text(
                   dose,
                   style: TextStyle(
@@ -2861,12 +3163,15 @@ class _NextScreenState extends State<NextScreen> {
                     color: isDarkMode
                         ? Colors.white.withOpacity(0.7)
                         : const Color(0xFF475569),
+                    letterSpacing: -0.1,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -2874,27 +3179,27 @@ class _NextScreenState extends State<NextScreen> {
   /// Build medication icon based on type
   Widget _buildMedicationIcon(String type, bool isDarkMode) {
     if (type == 'capsule') {
-      // Capsule icon
+      // Capsule icon - standardized 18px size
       return Container(
-        width: 20,
-        height: 12,
+        width: 18,
+        height: 10,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(5),
           color: isDarkMode
-              ? Colors.white.withOpacity(0.7)
-              : const Color(0xFF475569),
+              ? Colors.white.withOpacity(0.8) // 80% opacity like automation cards
+              : const Color(0xFF475569).withOpacity(0.8),
         ),
       );
     } else {
-      // Pill icon
+      // Pill icon - standardized 18px size
       return Container(
-        width: 16,
-        height: 16,
+        width: 14,
+        height: 14,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: isDarkMode
-              ? Colors.white.withOpacity(0.7)
-              : const Color(0xFF475569),
+              ? Colors.white.withOpacity(0.8) // 80% opacity like automation cards
+              : const Color(0xFF475569).withOpacity(0.8),
         ),
       );
     }
