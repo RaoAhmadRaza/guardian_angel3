@@ -146,46 +146,35 @@ class _NextScreenState extends State<NextScreen> {
         ),
       ),
       extendBody: true,
-      bottomNavigationBar: Container(
-        margin: const EdgeInsets.only(bottom: 30), // Move nav bar 30px higher
-        decoration: isDarkMode
-            ? BoxDecoration(
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(
-                  color: const Color(0xFF3C3C3E), // Subtle border for better definition
-                  width: 0.5,
-                ),
-              )
-            : null,
-        child: AnimatedNotchBottomBar(
-          /// Provide NotchBottomBarController
-          notchBottomBarController: _controller,
-          color: isDarkMode 
-              ? const Color(0xFF2C2C2E) // Distinct darker gray for better contrast against dark background
-              : const Color(0xFFFDFDFD),
-          showLabel: true,
-          textOverflow: TextOverflow.visible,
-          maxLine: 1,
-          shadowElevation: isDarkMode ? 8 : 5, // Add shadow elevation for better separation in dark mode
-          kBottomRadius: 28.0,
-          notchColor:
-              isDarkMode 
-                  ? const Color(0xFF3C3C3E) // Lighter notch color for better visibility
-                  : const Color(0xFF475569),
-          removeMargins: false,
-          bottomBarWidth: 500,
-          showShadow: isDarkMode ? true : true, // Enable shadow in dark mode for better separation
-          // Snappier indicator movement for better perceived responsiveness
-          durationInMilliSeconds: 220,
-          itemLabelStyle: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w500, // Slightly bolder text for better readability
-            color: isDarkMode
-                ? const Color(0xFF8E8E93) // More subtle iOS-style gray for labels
+      bottomNavigationBar: AnimatedNotchBottomBar(
+        /// Provide NotchBottomBarController
+        notchBottomBarController: _controller,
+        color: isDarkMode 
+            ? const Color(0xFF2C2C2E) // Distinct darker gray for better contrast against dark background
+            : const Color(0xFFFDFDFD),
+        showLabel: true,
+        textOverflow: TextOverflow.visible,
+        maxLine: 1,
+        shadowElevation: isDarkMode ? 8 : 5, // Add shadow elevation for better separation in dark mode
+        kBottomRadius: 28.0,
+        notchColor:
+            isDarkMode 
+                ? const Color(0xFF3C3C3E) // Lighter notch color for better visibility
                 : const Color(0xFF475569),
-          ),
-          elevation: isDarkMode ? 12 : 8, // Increase elevation in dark mode for better separation from background
-          bottomBarItems: [
+        removeMargins: false,
+        bottomBarWidth: 500,
+        showShadow: true, // Keep subtle shadow for separation
+        // Snappier indicator movement for better perceived responsiveness
+        durationInMilliSeconds: 220,
+        itemLabelStyle: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w500, // Slightly bolder text for better readability
+          color: isDarkMode
+              ? const Color(0xFF8E8E93) // More subtle iOS-style gray for labels
+              : const Color(0xFF475569),
+        ),
+        elevation: isDarkMode ? 12 : 8, // Increase elevation in dark mode for better separation from background
+        bottomBarItems: [
             BottomBarItem(
               inActiveItem: Icon(
                 CupertinoIcons.house,
@@ -252,7 +241,6 @@ class _NextScreenState extends State<NextScreen> {
           },
           kIconSize: 24.0,
         ),
-      ),
     );
   }
 
