@@ -45,5 +45,10 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Location usage description for weather & automation context -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Your location is used to provide local weather and context-aware automation.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Your location is used to provide local weather and context-aware automation.</string>
 </dict>
 </plist>

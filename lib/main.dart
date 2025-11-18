@@ -4,6 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'welcome.dart';
+// Home Automation boot + screen imports
+import 'home automation/main.dart' as ha_boot;
+import 'home automation/navigation/drawer_wrapper.dart';
+import 'home automation/main.dart' show HomeAutomationScreen; // screen class
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'home automation/src/logic/sync/sync_service.dart';
+import 'home automation/src/logic/sync/automation_sync_service.dart';
+import 'home automation/src/logic/providers/weather_location_providers.dart';
 import 'theme.dart';
 import 'colors.dart';
 import 'providers/theme_provider.dart';
@@ -12,14 +20,19 @@ import 'services/session_service.dart';
 import 'screens/onboarding_screen.dart';
 import 'next_screen.dart';
 import 'caregiver_main_screen.dart';
+import 'settings_screen.dart';
+import 'caregiver_settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize theme provider
+  // 1. Boot Home Automation (Hive + adapters + boxes)
+  await ha_boot.mainCommon();
+
+  // 2. Initialize theme provider (Guardian Angel)
   await ThemeProvider.instance.initialize();
 
-  // Set system UI overlay style
+  // 3. System UI styling
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -29,14 +42,23 @@ void main() async {
     ),
   );
 
-  runApp(const MyApp());
+  // 4. Run combined app under a single ProviderScope so Riverpod providers work
+  runApp(
+    ProviderScope(
+      child: const MyApp(),
+    ),
+  );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Keep automation engines alive (sync, MQTT/Tuya, location)
+    ref.watch(syncServiceProvider);
+    ref.watch(automationSyncServiceProvider);
+    ref.watch(deviceLocationProvider);
     return ListenableBuilder(
       listenable: ThemeProvider.instance,
       builder: (context, child) {
@@ -46,6 +68,11 @@ class MyApp extends StatelessWidget {
           theme: AppThemeData.lightTheme,
           darkTheme: AppThemeData.darkTheme,
           themeMode: ThemeProvider.instance.themeMode,
+          routes: {
+            '/settings': (context) => const SettingsScreen(),
+            '/caregiver-settings': (context) => const CaregiverSettingsScreen(),
+            '/home-automation': (context) => const DrawerWrapper(homeScreen: HomeAutomationScreen()),
+          },
           home: const AppInitializer(),
         );
       },

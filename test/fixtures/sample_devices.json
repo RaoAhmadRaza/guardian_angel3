@@ -1,0 +1,19 @@
+{
+  "devices": [
+    {
+      "id": "bulb-001",
+      "roomId": "living-room",
+      "type": "bulb",
+      "name": "Living Room Bulb",
+      "isOn": false,
+      "protocol": "mqtt",
+      "protocolData": {
+        "host": "localhost",
+        "port": 1883,
+        "clientId": "test-client",
+        "cmdTopic": "home/living/bulb/cmd",
+        "stateTopic": "home/living/bulb/state"
+      }
+    }
+  ]
+}

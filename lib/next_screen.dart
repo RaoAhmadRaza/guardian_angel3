@@ -4,17 +4,18 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:ui';
-import 'package:animated_notch_bottom_bar/animated_notch_bottom_bar/animated_notch_bottom_bar.dart';
+// Removed legacy notch bottom bar import
+// overlay_nav_bar removed
 import 'theme/app_theme.dart' as theme;
 
-import 'providers/theme_provider.dart';
 import 'services/session_service.dart';
 import 'chat_screen_new.dart';
-import 'controllers/home_automation_controller.dart';
-import 'room_details_screen.dart';
-import 'all_rooms_screen.dart';
 import 'diagnostic_screen.dart';
+import 'home automation/navigation/drawer_wrapper.dart';
+import 'home automation/main.dart' show HomeAutomationScreen;
 import 'main.dart';
+import 'settings_screen.dart';
+import 'widgets/overlay_nav_bar.dart';
 
 class NextScreen extends StatefulWidget {
   final String? selectedGender;
@@ -31,13 +32,10 @@ class NextScreen extends StatefulWidget {
 }
 
 class _NextScreenState extends State<NextScreen> {
-  /// Controller to handle PageView and also handles initial page
-  final _pageController = PageController(initialPage: 0);
+  int _selectedIndex = 0;
 
-  /// Controller to handle bottom nav bar and also handles initial page
-  late NotchBottomBarController _controller;
-  int _currentIndex = 0;
-  Brightness? _lastBrightness;
+  // Removed nav index state
+  // Removed overlay nav controller
 
   // Live health data variables
   int _heartPressureSystolic = 120;
@@ -51,19 +49,12 @@ class _NextScreenState extends State<NextScreen> {
     _checkSessionPeriodically();
     _startHealthDataAnimation();
 
-    // Initialize home automation controller
-    HomeAutomationController.instance.initialize();
-
-    // Initialize bottom bar controller
-    _controller = NotchBottomBarController(index: _currentIndex);
+    // Removed home automation initialization
   }
 
   @override
   void dispose() {
-    _pageController.dispose();
     _healthDataTimer?.cancel();
-    // Dispose bottom bar controller to prevent callbacks after widget is disposed
-    _controller.dispose();
     super.dispose();
   }
 
@@ -107,22 +98,9 @@ class _NextScreenState extends State<NextScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    final isDarkMode = brightness == Brightness.dark;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    // If theme brightness changed (e.g., light <-> dark), recreate controller to avoid
-    // stale listeners inside AnimatedNotchBottomBar referencing disposed animations.
-    if (_lastBrightness != brightness) {
-      _lastBrightness = brightness;
-      // Replace controller with a fresh one while preserving index
-      final old = _controller;
-      _controller = NotchBottomBarController(index: _currentIndex);
-      // Dispose the old one to drop any listeners
-      old.dispose();
-    }
-
-    /// widget list for bottom bar pages
-    final List<Widget> bottomBarPages = [
+    final List<Widget> pages = [
       _buildHomePage(isDarkMode),
       _buildChatPage(isDarkMode),
       _buildBulbPage(isDarkMode),
@@ -138,275 +116,167 @@ class _NextScreenState extends State<NextScreen> {
               ? theme.AppTheme.getPrimaryGradient(context)
               : theme.AppTheme.lightPrimaryGradient,
         ),
-        child: PageView(
-          controller: _pageController,
-          physics: const NeverScrollableScrollPhysics(),
-          children: List.generate(
-              bottomBarPages.length, (index) => bottomBarPages[index]),
+        child: Stack(
+          children: [
+            Positioned.fill(child: pages[_selectedIndex]),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 12,
+              child: OverlayNavBar(
+                icons: const [
+                  CupertinoIcons.house_fill,
+                  CupertinoIcons.chat_bubble_text_fill,
+                  CupertinoIcons.lightbulb_fill,
+                  CupertinoIcons.gear_solid,
+                ],
+                labels: const ['Home', 'Chat', 'Automation', 'Settings'],
+                selectedIndex: _selectedIndex,
+                onSelected: (i) => setState(() => _selectedIndex = i),
+                iconSize: 32,
+                activeColor: isDarkMode ? Colors.white : CupertinoColors.activeBlue,
+                inactiveColor: isDarkMode ? Colors.white70 : const Color(0xFF0F172A),
+                blurSigma: 26,
+                enableBlur: true,
+                showLabels: false,
+                respectSafeArea: false,
+                extraBottomPadding: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                borderGradient: isDarkMode
+                    ? LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Colors.white.withOpacity(0.22),
+                          Colors.white.withOpacity(0.08),
+                          Colors.white.withOpacity(0.22),
+                        ],
+                        stops: const [0.0, 0.5, 1.0],
+                      )
+                    : null,
+                tintColor: isDarkMode
+                    ? Colors.black.withOpacity(0.24)
+                    : null,
+                labelColor: isDarkMode ? Colors.white70 : Colors.black54,
+                activeLabelColor: isDarkMode ? Colors.white70 : Colors.black87,
+              ),
+            ),
+          ],
         ),
       ),
       extendBody: true,
-      bottomNavigationBar: AnimatedNotchBottomBar(
-        /// Provide NotchBottomBarController
-        notchBottomBarController: _controller,
-        color: isDarkMode 
-            ? const Color(0xFF2C2C2E) // Distinct darker gray for better contrast against dark background
-            : const Color(0xFFFDFDFD),
-        showLabel: true,
-        textOverflow: TextOverflow.visible,
-        maxLine: 1,
-        shadowElevation: isDarkMode ? 8 : 5, // Add shadow elevation for better separation in dark mode
-        kBottomRadius: 28.0,
-        notchColor:
-            isDarkMode 
-                ? const Color(0xFF3C3C3E) // Lighter notch color for better visibility
-                : const Color(0xFF475569),
-        removeMargins: false,
-        bottomBarWidth: 500,
-        showShadow: true, // Keep subtle shadow for separation
-        // Snappier indicator movement for better perceived responsiveness
-        durationInMilliSeconds: 220,
-        itemLabelStyle: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w500, // Slightly bolder text for better readability
-          color: isDarkMode
-              ? const Color(0xFF8E8E93) // More subtle iOS-style gray for labels
-              : const Color(0xFF475569),
-        ),
-        elevation: isDarkMode ? 12 : 8, // Increase elevation in dark mode for better separation from background
-        bottomBarItems: [
-            BottomBarItem(
-              inActiveItem: Icon(
-                CupertinoIcons.house,
-                color: isDarkMode
-                    ? const Color(0xFF8E8E93) // More subtle iOS-style gray for inactive icons
-                    : const Color(0xFF475569).withOpacity(0.6),
-              ),
-              activeItem: Icon(
-                CupertinoIcons.house_fill,
-                color: isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A), // Pure white for better contrast when active
-              ),
-              itemLabel: 'Home',
-            ),
-            BottomBarItem(
-              inActiveItem: Icon(
-                CupertinoIcons.chat_bubble,
-                color: isDarkMode
-                    ? const Color(0xFF8E8E93) // More subtle iOS-style gray for inactive icons
-                    : const Color(0xFF475569).withOpacity(0.6),
-              ),
-              activeItem: Icon(
-                CupertinoIcons.chat_bubble_fill,
-                color: isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A), // Pure white for better contrast when active
-              ),
-              itemLabel: 'Chat',
-            ),
-            BottomBarItem(
-              inActiveItem: Icon(
-                CupertinoIcons.lightbulb,
-                color: isDarkMode
-                    ? const Color(0xFF8E8E93) // More subtle iOS-style gray for inactive icons
-                    : const Color(0xFF475569).withOpacity(0.6),
-              ),
-              activeItem: Icon(
-                CupertinoIcons.lightbulb_fill,
-                color: isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A), // Pure white for better contrast when active
-              ),
-              itemLabel: 'Automation',
-            ),
-            BottomBarItem(
-              inActiveItem: Icon(
-                CupertinoIcons.gear,
-                color: isDarkMode
-                    ? const Color(0xFF8E8E93) // More subtle iOS-style gray for inactive icons
-                    : const Color(0xFF475569).withOpacity(0.6),
-              ),
-              activeItem: Icon(
-                CupertinoIcons.gear_solid,
-                color: isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A), // Pure white for better contrast when active
-              ),
-              itemLabel: 'Settings',
-            ),
-          ],
-          onTap: (index) {
-            // Move the notch indicator immediately
-            _controller.jumpTo(index);
-            _currentIndex = index;
-            // Animate page to stay in sync with the indicator motion
-            _pageController.animateToPage(
-              index,
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-            );
-          },
-          kIconSize: 24.0,
-        ),
     );
   }
 
   /// Build Home Page
   Widget _buildHomePage(bool isDarkMode) {
+    final displayGender = (widget.selectedGender ?? 'Male');
+    final displayName = (widget.patientName ?? 'Patient');
     return SafeArea(
-      child: Column(
-        children: [
-          // Top bar with debug reset and theme toggle
-          _buildTopBar(isDarkMode),
-          // Home content
-          Expanded(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header section with greeting
-                  _buildHeaderSection(isDarkMode),
-
-                  const SizedBox(height: 24),
-
-                  // Heart Health title
-                  Text(
-                    'Heart Health',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w700,
-                      color:
-                          isDarkMode ? Colors.white : const Color(0xFF0F172A),
+      bottom: false,
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Avatar
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.1)
+                        : const Color(0xFFF5F5F7),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: isDarkMode
+                            ? Colors.black.withOpacity(0.3)
+                            : const Color(0xFF475569).withOpacity(0.15),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                    image: DecorationImage(
+                      image: AssetImage(
+                        displayGender.toLowerCase() == 'female'
+                            ? 'images/female.jpg'
+                            : 'images/male.jpg',
+                      ),
+                      fit: BoxFit.cover,
                     ),
                   ),
-
-                  const SizedBox(height: 20),
-
-                  // Main health card with heart diagram
-                  _buildMainHealthCard(isDarkMode),
-
-                  const SizedBox(height: 20),
-
-                  // Health metrics row
-                  _buildHealthMetricsRow(isDarkMode),
-
-                  const SizedBox(height: 24),
-
-                  // Safety Status section
-                  _buildSafetyStatusContainer(isDarkMode),
-
-                  const SizedBox(height: 20),
-
-                  // Home Automation section (direct automation grid without outer container)
-                  _buildAutomationGrid(isDarkMode),
-
-                  const SizedBox(height: 20),
-
-                  // Doctor contact card
-                  _buildDoctorContactCard(isDarkMode),
-
-                  const SizedBox(height: 20),
-
-                  // Newspaper reading container
-                  _buildNewspaperContainer(isDarkMode),
-
-                  const SizedBox(height: 20),
-
-                  // Medication reminder container
-                  _buildMedicationReminderContainer(isDarkMode),
-
-                  const SizedBox(height: 80), // Extra space for bottom nav
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Header section with profile and greeting
-  Widget _buildHeaderSection(bool isDarkMode) {
-    // Use passed patient name first, then fallback to SharedPreferences, then default
-    final displayName = widget.patientName?.split(' ').first ?? 'Jacob';
-    final displayGender = widget.selectedGender ?? 'male';
-
-    // Debug prints to check what data is being received
-    print('NextScreen - patientName: ${widget.patientName}');
-    print('NextScreen - selectedGender: ${widget.selectedGender}');
-    print('NextScreen - displayName: $displayName');
-    print('NextScreen - displayGender: $displayGender');
-
-    return Row(
-      children: [
-        // Profile image placeholder
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: isDarkMode
-                ? Colors.white.withOpacity(0.1)
-                : const Color(0xFFF5F5F7),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: isDarkMode
-                    ? Colors.black.withOpacity(0.3)
-                    : const Color(0xFF475569).withOpacity(0.15),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-            image: DecorationImage(
-              image: AssetImage(
-                displayGender.toLowerCase() == 'female'
-                    ? 'images/female.jpg'
-                    : 'images/male.jpg',
-              ),
-              fit: BoxFit.cover,
-            ),
-          ),
-        ),
-
-        const SizedBox(width: 16),
-
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Hello, ${displayName.toUpperCase()}!',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 16),
+                // Greeting
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hello, ${displayName.toUpperCase()}!',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          color: isDarkMode
+                              ? Colors.white
+                              : const Color(0xFF0F172A),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Notification icon
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color:
+                        isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: isDarkMode
+                            ? Colors.black.withOpacity(0.3)
+                            : const Color(0xFF475569).withOpacity(0.15),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    CupertinoIcons.bell,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.7)
+                        : const Color(0xFF475569),
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            _buildMainHealthCard(isDarkMode),
+            const SizedBox(height: 20),
+            _buildHealthMetricsRow(isDarkMode),
+            const SizedBox(height: 20),
+            _buildSafetyStatusContainer(isDarkMode),
+            const SizedBox(height: 20),
+            _buildDoctorContactCard(isDarkMode),
+            const SizedBox(height: 20),
+            _buildAutomationGrid(isDarkMode),
+            const SizedBox(height: 20),
+            _buildNewspaperContainer(isDarkMode),
+            const SizedBox(height: 20),
+            _buildMedicationReminderContainer(isDarkMode),
+            const SizedBox(height: 40),
+          ],
         ),
-
-        // Notification icon
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: isDarkMode
-                    ? Colors.black.withOpacity(0.3)
-                    : const Color(0xFF475569).withOpacity(0.15),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Icon(
-            CupertinoIcons.bell,
-            color: isDarkMode
-                ? Colors.white.withOpacity(0.7)
-                : const Color(0xFF475569),
-            size: 20,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -1061,1418 +931,47 @@ class _NextScreenState extends State<NextScreen> {
     return ChatScreenNew();
   }
 
-  /// Build Home Automation Dashboard
+  /// Build Home Automation Page (integrated from module)
   Widget _buildBulbPage(bool isDarkMode) {
-    return SafeArea(
-      child: Column(
-        children: [
-          _buildTopBar(isDarkMode),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 20),
-
-                  // Header Section
-                  _buildAutomationHeader(isDarkMode),
-
-                  const SizedBox(height: 24),
-
-                  // Quick Status Overview
-                  _buildQuickStatusOverview(isDarkMode),
-
-                  const SizedBox(height: 28),
-
-                  // Room Section
-                  _buildRoomSection(isDarkMode),
-
-                  const SizedBox(height: 28),
-
-                  // Device Section
-                  _buildDeviceSection(isDarkMode),
-
-                  const SizedBox(height: 28),
-
-                  // Energy Usage Section
-                  _buildEnergyUsageSection(isDarkMode),
-
-                  const SizedBox(height: 20),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+    // Removed SafeArea to allow full bleed under status bar
+    return const DrawerWrapper(
+      homeScreen: HomeAutomationScreen(),
     );
   }
 
   /// Build automation header with user greeting
-  Widget _buildAutomationHeader(bool isDarkMode) {
-    return Row(
-      children: [
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: isDarkMode 
-                ? const Color(0xFF2C2C2E) // Standardized dark theme card
-                : Colors.white,
-            borderRadius: BorderRadius.circular(25),
-            border: Border.all(
-              color: isDarkMode
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.white.withOpacity(0.3),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isDarkMode
-                    ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
-                    : const Color(0xFF475569).withOpacity(0.08),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(25),
-            child: Image.asset(
-              'images/male.jpg',
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Icon(
-                  CupertinoIcons.person_fill,
-                  color: isDarkMode ? Colors.white : const Color(0xFF475569),
-                  size: 24,
-                );
-              },
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Alex',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-                ),
-              ),
-              Text(
-                'Good Morning!',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w400,
-                  color: isDarkMode
-                      ? Colors.white.withOpacity(0.7)
-                      : const Color(0xFF475569),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: isDarkMode
-                ? Colors.white.withOpacity(0.1)
-                : const Color(0xFFF5F5F7),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(
-            CupertinoIcons.bell,
-            color: isDarkMode ? Colors.white : const Color(0xFF475569),
-            size: 20,
-          ),
-        ),
-      ],
-    );
-  }
+  // Removed: _buildAutomationHeader moved to HomeAutomationDashboard
 
   /// Build quick status overview cards
-  Widget _buildQuickStatusOverview(bool isDarkMode) {
-    final statusItems = [
-      {
-        'icon': CupertinoIcons.thermometer,
-        'label': 'Temperature',
-        'value': '72°F',
-        'color': const Color(0xFF3B82F6),
-      },
-      {
-        'icon': CupertinoIcons.lightbulb,
-        'label': 'Light',
-        'value': '4 On',
-        'color': const Color(0xFFEAB308),
-      },
-      {
-        'icon': CupertinoIcons.bolt,
-        'label': 'Energy',
-        'value': 'Low',
-        'color': const Color(0xFF10B981),
-      },
-      {
-        'icon': CupertinoIcons.shield,
-        'label': 'Security',
-        'value': 'Alarmed',
-        'color': const Color(0xFF8B5CF6),
-      },
-    ];
-
-    return Row(
-      children: statusItems.map((item) {
-        return Expanded(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: isDarkMode 
-                  ? const Color(0xFF2C2C2E) // Standardized dark theme card
-                  : Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isDarkMode
-                    ? Colors.white.withOpacity(0.1)
-                    : Colors.white.withOpacity(0.3),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: isDarkMode
-                      ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
-                      : const Color(0xFF475569).withOpacity(0.08),
-                  blurRadius: 16, // Standardized blur radius
-                  offset: const Offset(0, 6), // Standardized offset
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: (item['color'] as Color).withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    item['icon'] as IconData,
-                    color: item['color'] as Color,
-                    size: 18,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  item['label'] as String,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: isDarkMode
-                        ? Colors.white.withOpacity(0.7)
-                        : const Color(0xFF475569),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  item['value'] as String,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
+  // Removed: _buildQuickStatusOverview moved to HomeAutomationDashboard
 
   /// Build room section
-  Widget _buildRoomSection(bool isDarkMode) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Room',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-              ),
-            ),
-            GestureDetector(
-              onTap: () {
-                HapticFeedback.lightImpact();
-                Navigator.push(
-                  context,
-                  PageRouteBuilder(
-                    pageBuilder: (context, animation, secondaryAnimation) =>
-                        AllRoomsScreen(isDarkMode: isDarkMode),
-                    transitionsBuilder:
-                        (context, animation, secondaryAnimation, child) {
-                      const begin = Offset(1.0, 0.0);
-                      const end = Offset.zero;
-                      const curve = Curves.easeInOutCubic;
-
-                      var tween = Tween(begin: begin, end: end).chain(
-                        CurveTween(curve: curve),
-                      );
-
-                      return SlideTransition(
-                        position: animation.drive(tween),
-                        child: child,
-                      );
-                    },
-                    transitionDuration: const Duration(milliseconds: 300),
-                  ),
-                );
-                print('Navigate to all rooms');
-              },
-              child: Text(
-                'See all',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: const Color(0xFF3B82F6),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            _buildRoomCard(
-              isDarkMode: isDarkMode,
-              icon: CupertinoIcons.house,
-              label: 'Living Room',
-              devices: '5 Devices',
-              color: const Color(0xFF3B82F6),
-            ),
-            const SizedBox(width: 12),
-            _buildRoomCard(
-              isDarkMode: isDarkMode,
-              icon: CupertinoIcons.scissors,
-              label: 'Kitchen',
-              devices: '3 Devices',
-              color: const Color(0xFFEAB308),
-            ),
-            const SizedBox(width: 12),
-            _buildRoomCard(
-              isDarkMode: isDarkMode,
-              icon: CupertinoIcons.bed_double,
-              label: 'Bed Room',
-              devices: '3 Devices',
-              color: const Color(0xFF8B5CF6),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+  // Removed: _buildRoomSection moved to HomeAutomationDashboard
 
   /// Build individual room card
-  Widget _buildRoomCard({
-    required bool isDarkMode,
-    required IconData icon,
-    required String label,
-    required String devices,
-    required Color color,
-  }) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          // Navigate to room detail screen
-          Navigator.push(
-            context,
-            PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) =>
-                  RoomDetailsScreen(
-                roomName: label,
-                roomIcon: icon,
-                roomColor: color,
-                isDarkMode: isDarkMode,
-              ),
-              transitionsBuilder:
-                  (context, animation, secondaryAnimation, child) {
-                const begin = Offset(1.0, 0.0);
-                const end = Offset.zero;
-                const curve = Curves.easeInOutCubic;
-
-                var tween = Tween(begin: begin, end: end).chain(
-                  CurveTween(curve: curve),
-                );
-
-                return SlideTransition(
-                  position: animation.drive(tween),
-                  child: child,
-                );
-              },
-              transitionDuration: const Duration(milliseconds: 300),
-            ),
-          );
-          print('Navigate to room: $label');
-        },
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isDarkMode 
-                ? const Color(0xFF2C2C2E) // Standardized dark theme card
-                : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isDarkMode
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.white.withOpacity(0.3),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isDarkMode
-                    ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
-                    : const Color(0xFF475569).withOpacity(0.08),
-                blurRadius: 16, // Standardized blur radius
-                offset: const Offset(0, 6), // Standardized offset
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(
-                  icon,
-                  color: color,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                devices,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: isDarkMode
-                      ? Colors.white.withOpacity(0.7)
-                      : const Color(0xFF475569),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  // Removed: _buildRoomCard moved to HomeAutomationDashboard
 
   /// Build device section
-  Widget _buildDeviceSection(bool isDarkMode) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Device',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-              ),
-            ),
-            Text(
-              'Manage',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: const Color(0xFF3B82F6),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        _buildDeviceItem(
-          isDarkMode: isDarkMode,
-          icon: CupertinoIcons.lightbulb,
-          name: 'Living Room Light',
-          status: 'On • 50% Brightness',
-          isOn: true,
-          color: const Color(0xFFEAB308),
-        ),
-        const SizedBox(height: 12),
-        _buildDeviceItem(
-          isDarkMode: isDarkMode,
-          icon: CupertinoIcons.thermometer,
-          name: 'Thermostat',
-          status: 'Cooling • Auto Mode',
-          isOn: true,
-          color: const Color(0xFF3B82F6),
-          showTemperature: true,
-          temperature: '72°F',
-        ),
-        const SizedBox(height: 12),
-        _buildDeviceItem(
-          isDarkMode: isDarkMode,
-          icon: CupertinoIcons.wind,
-          name: 'Fan',
-          status: 'On • 60% Speed',
-          isOn: true,
-          color: const Color(0xFF10B981),
-        ),
-      ],
-    );
-  }
+  // Removed: _buildDeviceSection moved to HomeAutomationDashboard
 
   /// Build individual device item
-  Widget _buildDeviceItem({
-    required bool isDarkMode,
-    required IconData icon,
-    required String name,
-    required String status,
-    required bool isOn,
-    required Color color,
-    bool showTemperature = false,
-    String? temperature,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDarkMode 
-            ? const Color(0xFF2C2C2E) // Standardized dark theme card
-            : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDarkMode
-              ? Colors.white.withOpacity(0.1)
-              : Colors.white.withOpacity(0.3),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isDarkMode
-                ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
-                : const Color(0xFF475569).withOpacity(0.08),
-            blurRadius: 16, // Standardized blur radius
-            offset: const Offset(0, 6), // Standardized offset
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  status,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w400,
-                    color: isDarkMode
-                        ? Colors.white.withOpacity(0.7)
-                        : const Color(0xFF475569),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (showTemperature && temperature != null) ...[
-            Text(
-              temperature,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(width: 16),
-          ],
-          GestureDetector(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              // TODO: Toggle device
-              print('Toggle device: $name');
-            },
-            child: Container(
-              width: 50,
-              height: 30,
-              decoration: BoxDecoration(
-                color: isOn
-                    ? const Color(0xFF3B82F6)
-                    : isDarkMode
-                        ? Colors.white.withOpacity(0.2)
-                        : const Color(0xFFE2E8F0),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: AnimatedAlign(
-                duration: const Duration(milliseconds: 200),
-                alignment: isOn ? Alignment.centerRight : Alignment.centerLeft,
-                child: Container(
-                  width: 26,
-                  height: 26,
-                  margin: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(13),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // Removed: _buildDeviceItem moved to HomeAutomationDashboard
 
   /// Build energy usage section
-  Widget _buildEnergyUsageSection(bool isDarkMode) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isDarkMode 
-            ? const Color(0xFF1C1C1E) // Standardized dark theme main container
-            : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDarkMode
-              ? Colors.white.withOpacity(0.1)
-              : Colors.white.withOpacity(0.3),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isDarkMode
-                ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
-                : const Color(0xFF475569).withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Energy Usage',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-                ),
-              ),
-              Text(
-                'Details',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: const Color(0xFF3B82F6),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Today's Usage",
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: isDarkMode
-                          ? Colors.white.withOpacity(0.7)
-                          : const Color(0xFF475569),
-                    ),
-                  ),
-                  Text(
-                    'Apr 22, 2025',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w400,
-                      color: isDarkMode
-                          ? Colors.white.withOpacity(0.5)
-                          : const Color(0xFF475569).withOpacity(0.7),
-                    ),
-                  ),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '12.4 kWh',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color:
-                          isDarkMode ? Colors.white : const Color(0xFF0F172A),
-                    ),
-                  ),
-                  Text(
-                    '-5% vs yesterday',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: const Color(0xFF10B981),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            height: 4,
-            decoration: BoxDecoration(
-              color: isDarkMode
-                  ? Colors.white.withOpacity(0.1)
-                  : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(2),
-            ),
-            child: FractionallySizedBox(
-              widthFactor: 0.6,
-              alignment: Alignment.centerLeft,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // Removed: _buildEnergyUsageSection moved to HomeAutomationDashboard
 
   /// Build Settings Page
   Widget _buildSettingsPage(bool isDarkMode) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSettingsHeader(isDarkMode),
-              const SizedBox(height: 24),
-              _buildUserProfileCard(isDarkMode),
-              const SizedBox(height: 32),
-              _buildOtherSettingsSection(isDarkMode),
-            ],
-          ),
-        ),
-      ),
-    );
+    return const SettingsScreen();
   }
 
-  Widget _buildSettingsHeader(bool isDarkMode) {
-    return Row(
-      children: [
-        GestureDetector(
-          onTap: () {
-            HapticFeedback.lightImpact();
-            // Back navigation if needed
-          },
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: isDarkMode
-                  ? Colors.white.withOpacity(0.1)
-                  : const Color(0xFF2A2A2A).withOpacity(0.05),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              Icons.arrow_back_ios_new,
-              color: isDarkMode ? Colors.white : const Color(0xFF2A2A2A),
-              size: 18,
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Text(
-          'Settings',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-            color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildUserProfileCard(bool isDarkMode) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDarkMode 
-            ? const Color(0xFF2C2C2E) // Standardized dark theme card
-            : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDarkMode
-              ? Colors.white.withOpacity(0.1)
-              : Colors.white.withOpacity(0.3),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isDarkMode
-                ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
-                : const Color(0xFF475569).withOpacity(0.06),
-            blurRadius: 16, // Standardized blur radius
-            offset: const Offset(0, 6), // Standardized offset
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: const Color(0xFF3B82F6).withOpacity(0.15),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(
-              Icons.person,
-              color: Color(0xFF3B82F6),
-              size: 28,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Alfred Daniel',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Product UI Designer',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDarkMode
-                        ? Colors.white.withOpacity(0.6)
-                        : const Color(0xFF475569),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Icon(
-            Icons.chevron_right,
-            color: isDarkMode
-                ? Colors.white.withOpacity(0.4)
-                : const Color(0xFF475569).withOpacity(0.4),
-            size: 20,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOtherSettingsSection(bool isDarkMode) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Other settings',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: isDarkMode
-                ? Colors.white.withOpacity(0.8)
-                : const Color(0xFF475569),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(
-            color: isDarkMode 
-                ? const Color(0xFF2C2C2E) // Standardized dark theme card
-                : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isDarkMode
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.white.withOpacity(0.3),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isDarkMode
-                    ? Colors.black.withOpacity(0.4) // Enhanced shadow for dark theme
-                    : const Color(0xFF475569).withOpacity(0.06),
-                blurRadius: 16, // Standardized blur radius
-                offset: const Offset(0, 6), // Standardized offset
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              _buildSettingsItem(
-                icon: Icons.person_outline,
-                title: 'Profile details',
-                isDarkMode: isDarkMode,
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  print('Navigate to profile details');
-                },
-              ),
-              _buildSettingsDivider(isDarkMode),
-              _buildSettingsItem(
-                icon: Icons.lock_outline,
-                title: 'Password',
-                isDarkMode: isDarkMode,
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  print('Navigate to password settings');
-                },
-              ),
-              _buildSettingsDivider(isDarkMode),
-              _buildSettingsItem(
-                icon: Icons.notifications_outlined,
-                title: 'Notifications',
-                isDarkMode: isDarkMode,
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  print('Navigate to notification settings');
-                },
-              ),
-              _buildSettingsDivider(isDarkMode),
-              _buildDarkModeToggleItem(isDarkMode),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        Container(
-          decoration: BoxDecoration(
-            color: isDarkMode 
-                ? const Color(0xFF2C2C2E) // Standardized dark theme card
-                : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isDarkMode
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.white.withOpacity(0.3),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isDarkMode
-                    ? Colors.black.withOpacity(0.2)
-                    : const Color(0xFF475569).withOpacity(0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              _buildSettingsItem(
-                icon: Icons.info_outline,
-                title: 'About application',
-                isDarkMode: isDarkMode,
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  print('Navigate to about application');
-                },
-              ),
-              _buildSettingsDivider(isDarkMode),
-              _buildSettingsItem(
-                icon: Icons.help_outline,
-                title: 'Help/FAQ',
-                isDarkMode: isDarkMode,
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  print('Navigate to help/FAQ');
-                },
-              ),
-              _buildSettingsDivider(isDarkMode),
-              _buildSettingsItem(
-                icon: Icons.logout,
-                title: 'Deactivate my account',
-                isDarkMode: isDarkMode,
-                isDestructive: true,
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  _showDeactivateAccountDialog(isDarkMode);
-                },
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 32),
-        if (kDebugMode) _buildDebugSection(isDarkMode),
-      ],
-    );
-  }
-
-  Widget _buildSettingsItem({
-    required IconData icon,
-    required String title,
-    required bool isDarkMode,
-    required VoidCallback onTap,
-    bool isDestructive = false,
-    Widget? trailing,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                color: isDestructive
-                    ? Colors.red
-                    : (isDarkMode ? Colors.white : const Color(0xFF2A2A2A)),
-                size: 20,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: isDestructive
-                        ? Colors.red
-                        : (isDarkMode ? Colors.white : const Color(0xFF0F172A)),
-                  ),
-                ),
-              ),
-              trailing ??
-                  Icon(
-                    Icons.chevron_right,
-                    color: isDarkMode
-                        ? Colors.white.withOpacity(0.4)
-                        : const Color(0xFF475569).withOpacity(0.4),
-                    size: 20,
-                  ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDarkModeToggleItem(bool isDarkMode) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Icon(
-            Icons.dark_mode_outlined,
-            color: isDarkMode ? Colors.white : const Color(0xFF2A2A2A),
-            size: 20,
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              'Dark mode',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: () async {
-              HapticFeedback.lightImpact();
-              await ThemeProvider.instance.toggleTheme();
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              width: 52,
-              height: 28,
-              decoration: BoxDecoration(
-                color: isDarkMode
-                    ? const Color(0xFF3B82F6)
-                    : const Color(0xFF475569).withOpacity(0.2),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: AnimatedAlign(
-                duration: const Duration(milliseconds: 300),
-                alignment:
-                    isDarkMode ? Alignment.centerRight : Alignment.centerLeft,
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  margin: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.15),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingsDivider(bool isDarkMode) {
-    return Container(
-      height: 1,
-      margin: const EdgeInsets.only(left: 52),
-      color: isDarkMode
-          ? Colors.white.withOpacity(0.1)
-          : const Color(0xFF475569).withOpacity(0.1),
-    );
-  }
-
-  Widget _buildDebugSection(bool isDarkMode) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.red.withOpacity(0.3),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.bug_report,
-                color: Colors.red,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Debug Mode',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.red,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () async {
-                HapticFeedback.lightImpact();
-                await SessionService.instance.resetSession();
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (context) => const MyApp()),
-                  (route) => false,
-                );
-              },
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.red.withOpacity(0.3),
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.refresh,
-                      color: Colors.red,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Reset Session',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.red,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeactivateAccountDialog(bool isDarkMode) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: isDarkMode 
-              ? const Color(0xFF2C2C2E) // Standardized dark theme card
-              : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(
-              color: isDarkMode
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.white.withOpacity(0.3),
-              width: 1,
-            ),
-          ),
-          title: Text(
-            'Deactivate Account',
-            style: TextStyle(
-              color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          content: Text(
-            'Are you sure you want to deactivate your account? This action cannot be undone.',
-            style: TextStyle(
-              color: isDarkMode
-                  ? Colors.white.withOpacity(0.8)
-                  : const Color(0xFF475569),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  color: isDarkMode
-                      ? Colors.white.withOpacity(0.8)
-                      : const Color(0xFF475569),
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                // Handle account deactivation
-                print('Account deactivation requested');
-              },
-              child: const Text(
-                'Deactivate',
-                style: TextStyle(color: Colors.red),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
+  
 
 
 
-  Widget _buildTopBar(bool isDarkMode) {
-    return Padding(
-      padding: const EdgeInsets.all(20.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Debug reset button (only in debug mode)
-          if (kDebugMode)
-            _buildDebugResetButton(isDarkMode)
-          else
-            const SizedBox(width: 56), // Spacer when not in debug mode
+  // Removed _buildTopBar (no longer used after automation integration)
 
-          // Theme toggle button
-          _buildThemeToggle(isDarkMode),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDebugResetButton(bool isDarkMode) {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        color: isDarkMode
-            ? Colors.red.withOpacity(0.1)
-            : Colors.red.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDarkMode
-              ? Colors.red.withOpacity(0.3)
-              : Colors.red.withOpacity(0.3),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isDarkMode
-                ? Colors.transparent
-                : const Color(0xFF475569).withOpacity(0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () async {
-            HapticFeedback.lightImpact();
-            // Reset session and restart app
-            await SessionService.instance.resetSession();
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (context) => const MyApp()),
-              (route) => false,
-            );
-          },
-          child: const Center(
-            child: Icon(
-              Icons.refresh,
-              color: Colors.red,
-              size: 24,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildThemeToggle(bool isDarkMode) {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        color: isDarkMode
-            ? Colors.white.withOpacity(0.1)
-            : const Color(0xFFFDFDFD),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDarkMode
-              ? Colors.white.withOpacity(0.1)
-              : const Color(0xFFE0E0E2),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isDarkMode
-                ? Colors.transparent
-                : const Color(0xFF475569).withOpacity(0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () async {
-            HapticFeedback.lightImpact();
-            await ThemeProvider.instance.toggleTheme();
-          },
-          child: Center(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: Icon(
-                isDarkMode ? Icons.light_mode : Icons.dark_mode,
-                key: ValueKey(isDarkMode),
-                color: isDarkMode
-                    ? Colors.white.withOpacity(0.8)
-                    : const Color(0xFF475569),
-                size: 24,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  // Removed debug reset and theme toggle helpers (unused)
 
   /// Build automation cards in vertical column layout with subtle animations
   Widget _buildAutomationGrid(bool isDarkMode) {

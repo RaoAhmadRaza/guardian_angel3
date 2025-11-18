@@ -211,6 +211,51 @@ class AppColors {
     ],
   );
 
+  // --------------------------------------------------------------------------
+  // Guardian Angel Brand Enhancements (Visual Identity Refresh)
+  // --------------------------------------------------------------------------
+  /// Calming sky gradient replacing legacy yellow accents
+  static const LinearGradient guardianAngelSkyGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFFB9D9FF), // soft sky blue
+      Color(0xFFE6F3FF), // very light airy blue
+      Color(0xFFFFFFFF), // fade to white / trust
+    ],
+    stops: [0.0, 0.65, 1.0],
+  );
+
+  /// Gentle lavender → ivory gradient alternative for variety
+  static const LinearGradient guardianAngelLavenderGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFFE8E6FA), // pastel lavender
+      Color(0xFFF9F9FD), // soft near-white blend
+      Color(0xFFFFFDF2), // ivory warmth
+    ],
+    stops: [0.0, 0.55, 1.0],
+  );
+
+  /// Status indicator colors (avatar shadow system)
+  static const Color statusStable = Color(0xFF10B981);     // Green = Active & Stable
+  static const Color statusMildAlert = Color(0xFFF59E0B);  // Orange = Mild alert
+  static const Color statusEmergency = Color(0xFFEF4444);  // Red = Emergency
+
+  /// Helper to get status shadow color based on vitals/mood/crisis
+  static Color getStatusShadowColor({
+    required String vitals,
+    required String mood,
+    bool crisis = false,
+  }) {
+    final v = vitals.toLowerCase();
+    final m = mood.toLowerCase();
+    if (crisis || v == 'fallalert') return statusEmergency;
+    if (v == 'irregular' || m == 'stressed') return statusMildAlert;
+    return statusStable;
+  }
+
   /// Dark Theme Gradients - Rich, Premium Depth
   static const LinearGradient darkPrimaryGradient = LinearGradient(
     begin: Alignment.topLeft,
