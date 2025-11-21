@@ -1,0 +1,12 @@
+{
+  "id": "99999999-9999-4999-8999-999999999999",
+  "schema_version": 1,
+  "op_type": "device_toggle",
+  "payload": {"device_id": "d2", "target_state": false},
+  "attempts": 3,
+  "error_code": "TIMEOUT",
+  "error_message": "Device unreachable after 3 attempts",
+  "archived": false,
+  "created_at": "2025-03-02T14:23:12.123Z",
+  "updated_at": "2025-03-02T14:25:12.123Z"
+}

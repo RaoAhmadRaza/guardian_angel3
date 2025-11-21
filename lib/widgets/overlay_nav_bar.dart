@@ -24,6 +24,7 @@ class OverlayNavBar extends StatelessWidget {
   final Color? tintColor;
   final Color? labelColor;
   final Color? activeLabelColor;
+  final double contentVerticalPadding;
 
   const OverlayNavBar({
     super.key,
@@ -46,6 +47,7 @@ class OverlayNavBar extends StatelessWidget {
     this.tintColor,
     this.labelColor,
     this.activeLabelColor,
+    this.contentVerticalPadding = 10,
   });
 
   @override
@@ -67,17 +69,29 @@ class OverlayNavBar extends StatelessWidget {
         padding: effectivePadding,
         child: Container(
           decoration: BoxDecoration(
-            gradient: borderGradient ?? LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withOpacity(0.55),
-                Colors.white.withOpacity(0.18),
-                Colors.white.withOpacity(0.55),
-              ],
-              stops: const [0.0, 0.5, 1.0],
-            ),
+            // If no custom borderGradient provided and blur disabled, use a plain border only.
+            gradient: (borderGradient != null || enableBlur)
+                ? (borderGradient ?? LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withOpacity(0.55),
+                      Colors.white.withOpacity(0.18),
+                      Colors.white.withOpacity(0.55),
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
+                  ))
+                : null,
+            color: (borderGradient == null && !enableBlur)
+                ? Colors.transparent
+                : null,
             borderRadius: BorderRadius.circular(borderRadius),
+            border: (borderGradient == null && !enableBlur)
+                ? Border.all(
+                    color: Colors.black.withOpacity(0.15),
+                    width: 1,
+                  )
+                : null,
           ),
           child: Container(
             margin: const EdgeInsets.all(borderWidth),
@@ -103,6 +117,7 @@ class OverlayNavBar extends StatelessWidget {
                           showLabels: showLabels,
                           labelColor: labelColor,
                           activeLabelColor: activeLabelColor,
+                          contentVerticalPadding: contentVerticalPadding,
                         ),
                       )
                     : _NavContent(
@@ -117,6 +132,7 @@ class OverlayNavBar extends StatelessWidget {
                         showLabels: showLabels,
                         labelColor: labelColor,
                         activeLabelColor: activeLabelColor,
+                        contentVerticalPadding: contentVerticalPadding,
                       ),
               ),
             ),
@@ -140,6 +156,7 @@ class _NavContent extends StatelessWidget {
     required this.showLabels,
     required this.labelColor,
     required this.activeLabelColor,
+    required this.contentVerticalPadding,
   });
 
   final int selectedIndex;
@@ -153,6 +170,7 @@ class _NavContent extends StatelessWidget {
   final bool showLabels;
   final Color? labelColor;
   final Color? activeLabelColor;
+  final double contentVerticalPadding;
 
   @override
   Widget build(BuildContext context) {
@@ -161,7 +179,7 @@ class _NavContent extends StatelessWidget {
     const double inactiveOpacity = 0.88;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: EdgeInsets.symmetric(vertical: contentVerticalPadding),
       child: Focus(
         autofocus: true,
         canRequestFocus: true,
@@ -268,7 +286,8 @@ class _NavContent extends StatelessWidget {
                                           showDuration: const Duration(milliseconds: 1200),
                                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                           decoration: BoxDecoration(
-                                            color: (isSelected ? activeColor : inactiveColor).withOpacity(0.92),
+                                            // Force a light background so black text is readable in both themes
+                                            color: Colors.white,
                                             borderRadius: BorderRadius.circular(10),
                                             boxShadow: [
                                               BoxShadow(
@@ -278,7 +297,7 @@ class _NavContent extends StatelessWidget {
                                               ),
                                             ],
                                           ),
-                                          textStyle: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                                          textStyle: const TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.w600),
                                           child: _HoverIcon(
                                             key: ValueKey('icon_$index'),
                                             icon: icons[index],

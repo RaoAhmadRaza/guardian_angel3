@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "op_type": "device_toggle",
+  "idempotency_key": "2025-03-02-device_toggle-d1-001",
+  "payload": {"device_id": "d1", "target_state": true},
+  "attempts": 0,
+  "status": "pending",
+  "created_at": "2025-03-02T14:23:12.123Z"
+}

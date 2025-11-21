@@ -1,0 +1,11 @@
+{
+  "id": "88888888-8888-4888-8888-888888888888",
+  "schema_version": 1,
+  "op_type": 42,
+  "idempotency_key": true,
+  "payload": "should-be-object",
+  "attempts": -1,
+  "status": "unknown_status",
+  "created_at": "not-a-date",
+  "updated_at": 123
+}

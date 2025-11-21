@@ -1,0 +1,12 @@
+{
+  "id": "77777777-7777-4777-8777-777777777777",
+  "schema_version": 1,
+  "op_type": "update_property",
+  "idempotency_key": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  "payload": {"device_id": "d1", "values": {"brightness": 100}},
+  "attempts": 9,
+  "status": "retry",
+  "last_error": "Previous timeout after max backoff",
+  "created_at": "2025-03-02T14:23:12.123Z",
+  "updated_at": "2025-03-02T14:23:12.123Z"
+}

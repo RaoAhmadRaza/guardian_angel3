@@ -9,6 +9,7 @@ import '../../utils/network_status_provider.dart';
 import 'conflict_provider.dart';
 import '../../data/hive_adapters/room_model_hive.dart';
 import '../../data/hive_adapters/device_model_hive.dart';
+import 'package:guardian_angel_fyp/services/lock_service.dart';
 
 /// SyncService watches the pending ops box and attempts to flush queued operations
 /// when online. It applies exponential backoff on repeated failures.
@@ -16,10 +17,18 @@ typedef Reader = T Function<T>(ProviderListenable<T>);
 
 class SyncService {
   final Reader read;
+  final LockService _lockService;
   late final Box<PendingOp> _pending;
   late final Box<PendingOp> _failed;
+  static const String _lockName = 'sync_service_processing';
 
-  SyncService(this.read) {
+  SyncService(this.read, {LockService? lockService}) 
+      : _lockService = lockService ?? LockService() {
+    _init();
+  }
+
+  Future<void> _init() async {
+    await _lockService.init();
     _pending = LocalHiveService.pendingOpsBox();
     _failed = LocalHiveService.failedOpsBox();
     _boxSub = _pending.watch().listen((_) => _processQueue());
@@ -27,22 +36,35 @@ class SyncService {
     _timer = Timer.periodic(const Duration(seconds: 60), (_) => _processQueue());
   }
 
-  bool _isProcessing = false;
   StreamSubscription? _boxSub;
   Timer? _timer;
 
   void dispose() {
     _boxSub?.cancel();
     _timer?.cancel();
+    _lockService.stopHeartbeat(_lockName);
+    _lockService.releaseLock(_lockName);
   }
 
   Future<void> _processQueue() async {
-    if (_isProcessing) return;
-    _isProcessing = true;
+    // Try to acquire distributed lock with heartbeat monitoring
+    final acquired = await _lockService.acquireLock(_lockName, metadata: {
+      'source': 'SyncService',
+      'operation': 'processQueue',
+    });
+    
+    if (!acquired) {
+      // Another runner is processing or lock is held
+      return;
+    }
+    
+    // Start automatic heartbeat to keep lock alive during processing
+    _lockService.startHeartbeat(_lockName);
 
     final isOnline = read(networkStatusProvider);
     if (!isOnline) {
-      _isProcessing = false;
+      _lockService.stopHeartbeat(_lockName);
+      await _lockService.releaseLock(_lockName);
       return;
     }
 
@@ -75,7 +97,8 @@ class SyncService {
         }
       }
     } finally {
-      _isProcessing = false;
+      _lockService.stopHeartbeat(_lockName);
+      await _lockService.releaseLock(_lockName);
     }
   }
 

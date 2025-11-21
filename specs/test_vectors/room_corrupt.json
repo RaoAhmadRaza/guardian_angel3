@@ -1,0 +1,10 @@
+{
+  "id": 123, 
+  "schema_version": 1,
+  "name": 789, 
+  "icon": false,
+  "color": "#GGGGGG", 
+  "device_ids": "not-an-array",
+  "meta": {"floor": "first"},
+  "created_at": "2025-03-02T14:23:12.123Z"
+}

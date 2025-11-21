@@ -1,0 +1,14 @@
+{
+  "id": 123,
+  "schema_version": 1,
+  "user_id": true,
+  "heart_rate": "fast",
+  "systolic_bp": -10,
+  "diastolic_bp": "low",
+  "temperature_c": "36.point5",
+  "oxygen_percent": 150,
+  "stress_index": "high",
+  "recorded_at": "not-a-date",
+  "created_at": 999999999,
+  "updated_at": null
+}

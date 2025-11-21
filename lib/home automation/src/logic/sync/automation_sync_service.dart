@@ -10,16 +10,22 @@ import '../../automation/adapters/mqtt_driver.dart';
 import '../../data/hive_adapters/pending_op_hive.dart';
 import '../../data/hive_adapters/device_model_hive.dart';
 import '../../data/local_hive_service.dart';
+import 'package:guardian_angel_fyp/services/lock_service.dart';
 
 class AutomationSyncService {
   final Ref ref;
+  final LockService _lockService;
   StreamSubscription? _sub;
   Timer? _scanTimer;
-  AutomationSyncService(this.ref) {
+  static const String _lockName = 'automation_sync_service_processing';
+  
+  AutomationSyncService(this.ref, {LockService? lockService})
+      : _lockService = lockService ?? LockService() {
     _start();
   }
 
   Future<void> _start() async {
+    await _lockService.init();
     // Initialize global driver once (non-fatal if fails; retries later)
     try {
       await ref.read(automationDriverProvider).init();
@@ -44,6 +50,8 @@ class AutomationSyncService {
   void dispose() {
     _sub?.cancel();
     _scanTimer?.cancel();
+    _lockService.stopHeartbeat(_lockName);
+    _lockService.releaseLock(_lockName);
   }
 
   /// Convenience: attempt an immediate non-blocking flush for a specific pending op id.
@@ -55,10 +63,25 @@ class AutomationSyncService {
   }
 
   Future<void> _processAll() async {
-    final box = LocalHiveService.pendingOpsBox();
-    // Snapshot and sort to preserve global order
-    final ops = box.values.toList()
-      ..sort((a, b) => a.queuedAt.compareTo(b.queuedAt));
+    // Try to acquire distributed lock with heartbeat monitoring
+    final acquired = await _lockService.acquireLock(_lockName, metadata: {
+      'source': 'AutomationSyncService',
+      'operation': 'processAll',
+    });
+    
+    if (!acquired) {
+      // Another runner is processing or lock is held
+      return;
+    }
+    
+    // Start automatic heartbeat to keep lock alive during processing
+    _lockService.startHeartbeat(_lockName);
+    
+    try {
+      final box = LocalHiveService.pendingOpsBox();
+      // Snapshot and sort to preserve global order
+      final ops = box.values.toList()
+        ..sort((a, b) => a.queuedAt.compareTo(b.queuedAt));
 
     // Coalesce frequent intensity updates per device: keep only the latest
     // 'setIntensity' control op for each device. Older ones will be dropped
@@ -114,6 +137,10 @@ class AutomationSyncService {
       }
 
       await tryFlushOp(op);
+      }
+    } finally {
+      _lockService.stopHeartbeat(_lockName);
+      await _lockService.releaseLock(_lockName);
     }
   }
 

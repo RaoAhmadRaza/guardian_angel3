@@ -1,0 +1,50 @@
+schema_version: 1
+model: FailedOp
+box: failed_ops_box
+encrypted: true
+primary_key: id
+indices:
+  - created_at
+  - op_type
+fields:
+  id:
+    type: string
+    format: uuid
+    required: true
+  source_pending_op_id:
+    type: string
+    format: uuid
+    required: false
+  op_type:
+    type: string
+    required: true
+  payload:
+    type: object
+    required: true
+  error_code:
+    type: string
+    required: false
+  error_message:
+    type: string
+    required: false
+    constraints:
+      max_length: 512
+  attempts:
+    type: integer
+    required: true
+  created_at:
+    type: string
+    format: iso8601_utc
+    required: true
+  updated_at:
+    type: string
+    format: iso8601_utc
+    required: true
+  archived:
+    type: boolean
+    required: true
+    default: false
+validation_rules:
+  - archived true marks eligible for purge after TTL
+future_notes:
+  - Add retry_policy reference

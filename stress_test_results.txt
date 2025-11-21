@@ -1,0 +1,55 @@
+00:00 +0: loading /Users/muhammadafzal/Downloads/guardian_angel2-main/test/performance/queue_stress_test.dart
+test/performance/queue_stress_test.dart:19:28: Error: Method not found: 'PendingOpAdapter'.
+      Hive.registerAdapter(PendingOpAdapter());
+                           ^^^^^^^^^^^^^^^^
+test/performance/queue_stress_test.dart:126:47: Error: Too few positional arguments: 1 required, 0 given.
+        final oldestId = await index.getOldest();
+                                              ^
+test/performance/queue_stress_test.dart:183:45: Error: Too few positional arguments: 1 required, 0 given.
+      final oldestId = await index.getOldest();
+                                            ^
+test/performance/queue_stress_test.dart:275:47: Error: Too few positional arguments: 1 required, 0 given.
+        final oldestId = await index.getOldest();
+                                              ^
+test/performance/queue_stress_test.dart:279:21: Error: The method 'dequeue' isn't defined for the class 'PendingIndex'.
+ - 'PendingIndex' is from 'package:guardian_angel_fyp/persistence/index/pending_index.dart' ('lib/persistence/index/pending_index.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'dequeue'.
+        await index.dequeue(oldestId);
+                    ^^^^^^^
+test/performance/queue_stress_test.dart:330:47: Error: Too few positional arguments: 1 required, 0 given.
+        final oldestId = await index.getOldest();
+                                              ^
+test/performance/queue_stress_test.dart:385:21: Error: The method 'dequeue' isn't defined for the class 'PendingIndex'.
+ - 'PendingIndex' is from 'package:guardian_angel_fyp/persistence/index/pending_index.dart' ('lib/persistence/index/pending_index.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'dequeue'.
+        await index.dequeue(id);
+                    ^^^^^^^
+00:00 +0 -1: loading /Users/muhammadafzal/Downloads/guardian_angel2-main/test/performance/queue_stress_test.dart [E]
+  Failed to load "/Users/muhammadafzal/Downloads/guardian_angel2-main/test/performance/queue_stress_test.dart":
+  Compilation failed for testPath=/Users/muhammadafzal/Downloads/guardian_angel2-main/test/performance/queue_stress_test.dart: test/performance/queue_stress_test.dart:19:28: Error: Method not found: 'PendingOpAdapter'.
+        Hive.registerAdapter(PendingOpAdapter());
+                             ^^^^^^^^^^^^^^^^
+  test/performance/queue_stress_test.dart:126:47: Error: Too few positional arguments: 1 required, 0 given.
+          final oldestId = await index.getOldest();
+                                                ^
+  test/performance/queue_stress_test.dart:183:45: Error: Too few positional arguments: 1 required, 0 given.
+        final oldestId = await index.getOldest();
+                                              ^
+  test/performance/queue_stress_test.dart:275:47: Error: Too few positional arguments: 1 required, 0 given.
+          final oldestId = await index.getOldest();
+                                                ^
+  test/performance/queue_stress_test.dart:279:21: Error: The method 'dequeue' isn't defined for the class 'PendingIndex'.
+   - 'PendingIndex' is from 'package:guardian_angel_fyp/persistence/index/pending_index.dart' ('lib/persistence/index/pending_index.dart').
+  Try correcting the name to the name of an existing method, or defining a method named 'dequeue'.
+          await index.dequeue(oldestId);
+                      ^^^^^^^
+  test/performance/queue_stress_test.dart:330:47: Error: Too few positional arguments: 1 required, 0 given.
+          final oldestId = await index.getOldest();
+                                                ^
+  test/performance/queue_stress_test.dart:385:21: Error: The method 'dequeue' isn't defined for the class 'PendingIndex'.
+   - 'PendingIndex' is from 'package:guardian_angel_fyp/persistence/index/pending_index.dart' ('lib/persistence/index/pending_index.dart').
+  Try correcting the name to the name of an existing method, or defining a method named 'dequeue'.
+          await index.dequeue(id);
+                      ^^^^^^^
+  .
+00:00 +0 -1: Some tests failed.

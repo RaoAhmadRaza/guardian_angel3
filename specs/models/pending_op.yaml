@@ -1,0 +1,59 @@
+schema_version: 1
+model: PendingOp
+box: pending_ops_box
+encrypted: true
+primary_key: id
+indices:
+  - created_at
+  - op_type
+  - status
+fields:
+  id:
+    type: string
+    format: uuid
+    required: true
+  op_type:
+    type: string
+    required: true
+    constraints:
+      enum: ["device_toggle", "update_property", "sync_state", "alert_dispatch"]
+  idempotency_key:
+    type: string
+    required: true
+    constraints:
+      min_length: 8
+  payload:
+    type: object
+    required: true
+  attempts:
+    type: integer
+    required: true
+    default: 0
+    constraints:
+      min: 0
+      max: 10
+  status:
+    type: string
+    required: true
+    constraints:
+      enum: ["pending", "in_progress", "retry", "failed", "completed"]
+    default: "pending"
+  last_error:
+    type: string
+    required: false
+    constraints:
+      max_length: 512
+  created_at:
+    type: string
+    format: iso8601_utc
+    required: true
+  updated_at:
+    type: string
+    format: iso8601_utc
+    required: true
+validation_rules:
+  - attempts incremented only after failure
+  - status transitions must follow lifecycle
+future_notes:
+  - Add next_retry_at for backoff
+  - Add priority level

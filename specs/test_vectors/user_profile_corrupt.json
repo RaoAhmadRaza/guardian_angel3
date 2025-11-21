@@ -1,0 +1,11 @@
+{
+  "id": false,
+  "schema_version": 1,
+  "user_type": 999,
+  "display_name": "",
+  "email": "not-an-email",
+  "phone": "12345",
+  "demographics": "should-be-object",
+  "preferences": [],
+  "created_at": "bad-date"
+}

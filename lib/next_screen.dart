@@ -122,8 +122,11 @@ class _NextScreenState extends State<NextScreen> {
             Positioned(
               left: 0,
               right: 0,
-              bottom: 12,
-              child: OverlayNavBar(
+              bottom: 49,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 250),
+                  child: OverlayNavBar(
                 icons: const [
                   CupertinoIcons.house_fill,
                   CupertinoIcons.chat_bubble_text_fill,
@@ -133,32 +136,31 @@ class _NextScreenState extends State<NextScreen> {
                 labels: const ['Home', 'Chat', 'Automation', 'Settings'],
                 selectedIndex: _selectedIndex,
                 onSelected: (i) => setState(() => _selectedIndex = i),
-                iconSize: 32,
-                activeColor: isDarkMode ? Colors.white : CupertinoColors.activeBlue,
-                inactiveColor: isDarkMode ? Colors.white70 : const Color(0xFF0F172A),
-                blurSigma: 26,
-                enableBlur: true,
-                showLabels: false,
+                iconSize: 24, // Reduced icon size per request
+                    contentVerticalPadding: 4, // Reduce bar height
+                    // Active/inactive/icon colors per theme
+                    // Dark theme: white background, active icons black
+                    // Light theme: black background, active icons white
+                    activeColor: isDarkMode ? Colors.black : Colors.white,
+                    inactiveColor: Colors.grey, // grey inactive both themes
+                    // Disable blur/glass effect (commented out functionality)
+                    blurSigma: 0,
+                    enableBlur: false,
+                    showLabels: false
+                  , // Enable labels to apply black text color
                 respectSafeArea: false,
                 extraBottomPadding: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                borderGradient: isDarkMode
-                    ? LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Colors.white.withOpacity(0.22),
-                          Colors.white.withOpacity(0.08),
-                          Colors.white.withOpacity(0.22),
-                        ],
-                        stops: const [0.0, 0.5, 1.0],
-                      )
-                    : null,
-                tintColor: isDarkMode
-                    ? Colors.black.withOpacity(0.24)
-                    : null,
-                labelColor: isDarkMode ? Colors.white70 : Colors.black54,
-                activeLabelColor: isDarkMode ? Colors.white70 : Colors.black87,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    // Remove gradient border for simple solid background
+                    borderGradient: null,
+                    // Solid background per theme
+                    tintColor: isDarkMode ? Colors.white : Colors.black,
+                    // Label colors aligned with icon colors
+                    // Force black label text for both themes
+                    labelColor: Colors.black,
+                    activeLabelColor: Colors.black,
+                  ),
+                ),
               ),
             ),
           ],

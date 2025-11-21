@@ -1,0 +1,10 @@
+{
+  "id": 42,
+  "schema_version": 1,
+  "op_type": null,
+  "payload": "not-an-object",
+  "attempts": -5,
+  "archived": "nope",
+  "created_at": "yesterday",
+  "updated_at": false
+}
