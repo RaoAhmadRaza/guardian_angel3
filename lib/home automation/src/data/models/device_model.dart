@@ -1,5 +1,13 @@
 enum DeviceType { bulb, lamp, fan }
 
+/// Validation error for DeviceModel data integrity checks.
+class DeviceValidationError implements Exception {
+  final String message;
+  DeviceValidationError(this.message);
+  @override
+  String toString() => 'DeviceValidationError: $message';
+}
+
 class DeviceModel {
   final String id;
   final String roomId;
@@ -18,6 +26,32 @@ class DeviceModel {
     this.state = const {},
     DateTime? lastSeen,
   }) : lastSeen = lastSeen ?? DateTime.now();
+
+  /// Validates this device model.
+  /// Throws [DeviceValidationError] if invalid.
+  /// Returns this instance for method chaining.
+  DeviceModel validate() {
+    if (id.isEmpty) {
+      throw DeviceValidationError('id cannot be empty');
+    }
+    if (roomId.isEmpty) {
+      throw DeviceValidationError('roomId cannot be empty');
+    }
+    if (name.isEmpty) {
+      throw DeviceValidationError('name cannot be empty');
+    }
+    if (name.length > 50) {
+      throw DeviceValidationError('name too long (max 50 characters)');
+    }
+    // Validate brightness if present
+    if (state.containsKey('brightness')) {
+      final brightness = state['brightness'];
+      if (brightness is num && (brightness < 0 || brightness > 1)) {
+        throw DeviceValidationError('brightness must be between 0 and 1');
+      }
+    }
+    return this;
+  }
 
   DeviceModel copyWith({
     bool? isOn,

@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import 'src/data/hive_adapters/room_model_hive.dart';
-import 'src/data/hive_adapters/device_model_hive.dart';
-import 'src/data/hive_adapters/pending_op_hive.dart';
+import 'src/data/home_automation_hive_bridge.dart';
 import 'src/data/local_hive_service.dart';
 // Host app will import these directly where needed.
 import 'src/logic/providers/room_providers.dart';
@@ -17,12 +14,9 @@ import 'navigation/drawer_wrapper.dart';
 /// Testable entrypoint which accepts provider overrides (used by tests).
 /// Pass overrides to override providers (in-memory Hive, MockDriver, etc).
 Future<void> mainCommon({List<Override> overrides = const []}) async {
-  await Hive.initFlutter();
-  Hive
-    ..registerAdapter(RoomModelHiveAdapter())
-    ..registerAdapter(DeviceModelHiveAdapter())
-    ..registerAdapter(PendingOpAdapter());
-  await LocalHiveService.openAllBoxes();
+  // Hive is initialized and adapters are registered by the host app's HiveService.
+  // Use the shared bridge to open Home Automation boxes idempotently.
+  await HomeAutomationHiveBridge.open();
   _automationOverrides = overrides; // store for later ProviderScope usage
 }
 

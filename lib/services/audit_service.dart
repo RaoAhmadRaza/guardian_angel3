@@ -1,5 +1,6 @@
 import 'package:hive/hive.dart';
 import '../persistence/box_registry.dart';
+import '../persistence/wrappers/box_accessor.dart';
 import 'models/audit_log_entry.dart';
 
 /// Service for append-only audit logging with export and tail operations
@@ -17,7 +18,7 @@ class AuditService {
 
   /// Create service instance with initialized audit box
   static Future<AuditService> create() async {
-    final box = Hive.box<AuditLogEntry>(BoxRegistry.auditLogsBox);
+    final box = BoxAccess.I.box<AuditLogEntry>(BoxRegistry.auditLogsBox);
     return AuditService(box);
   }
 

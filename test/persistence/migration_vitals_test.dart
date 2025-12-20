@@ -7,15 +7,29 @@ import 'package:guardian_angel_fyp/persistence/meta/meta_store.dart';
 import 'package:guardian_angel_fyp/persistence/box_registry.dart';
 import 'package:guardian_angel_fyp/persistence/adapters/vitals_adapter.dart';
 import 'package:guardian_angel_fyp/models/vitals_model.dart';
+import 'package:guardian_angel_fyp/persistence/adapters/room_adapter.dart';
+import 'package:guardian_angel_fyp/persistence/adapters/device_adapter.dart';
+import 'package:guardian_angel_fyp/home automation/src/data/models/room_model.dart';
+import 'package:guardian_angel_fyp/home automation/src/data/models/device_model.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUpAll(() {
+    // Register adapters once before all tests
+    Hive.registerAdapter(VitalsAdapter());
+    Hive.registerAdapter(RoomAdapter());
+    Hive.registerAdapter(DeviceModelAdapter());
+  });
+
   setUp(() async {
     await setUpTestHive();
-    Hive.registerAdapter(VitalsAdapter());
     await Hive.openBox(BoxRegistry.metaBox);
     await Hive.openBox<VitalsModel>(BoxRegistry.vitalsBox);
+    // Required for migration 003 (add_room_index)
+    await Hive.openBox<RoomModel>(BoxRegistry.roomsBox);
+    // Required for migration 004 (device_lastseen_cleanup)
+    await Hive.openBox<DeviceModel>(BoxRegistry.devicesBox);
     final meta = MetaStore(Hive.box(BoxRegistry.metaBox));
     await meta.setSchemaVersion('core', 1); // start before migration 002
   });
@@ -50,6 +64,7 @@ void main() {
     final updated = vitalsBox.get(v.id)!;
     expect(updated.stressIndex, isNotNull);
     expect(updated.modelVersion, 2);
-    expect(meta.getSchemaVersion('core'), 2);
+    // All 4 migrations run (001-004), ending at schema version 4
+    expect(meta.getSchemaVersion('core'), 4);
   });
 }

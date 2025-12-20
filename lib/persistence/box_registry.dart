@@ -3,11 +3,22 @@ import 'package:hive/hive.dart';
 import '../models/pending_op.dart';
 import '../models/room_model.dart';
 import '../models/vitals_model.dart';
+import 'wrappers/box_accessor.dart';
+
+// Re-export TypeIds from authoritative source for backward compatibility
+export 'type_ids.dart' show TypeIds;
 
 class BoxRegistry {
-  // Box names (authoritative)
+  // ═══════════════════════════════════════════════════════════════════════
+  // CORE PERSISTENCE BOX NAMES (authoritative)
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  /// Core room data (RoomModel) - used by core persistence layer
   static const roomsBox = 'rooms_box';
+  
+  /// Core device data (DeviceModel) - used by core persistence layer
   static const devicesBox = 'devices_box';
+  
   static const vitalsBox = 'vitals_box';
   static const userProfileBox = 'user_profile_box';
   static const sessionsBox = 'sessions_box';
@@ -19,6 +30,31 @@ class BoxRegistry {
   static const assetsCacheBox = 'assets_cache_box';
   static const uiPreferencesBox = 'ui_preferences_box';
   static const metaBox = 'persistence_metadata_box';
+  static const emergencyOpsBox = 'emergency_ops_box';
+  static const safetyStateBox = 'safety_state_box';
+  static const transactionJournalBox = 'transaction_journal_box';
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // HOME AUTOMATION BOX NAMES (authoritative)
+  // These use different Hive models (RoomModelHive, DeviceModelHive)
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  /// Home automation room data (RoomModelHive) - CANONICAL name
+  /// @deprecated 'rooms_v1' is legacy. Use homeAutomationRoomsBox for new code.
+  static const homeAutomationRoomsBoxLegacy = 'rooms_v1';
+  
+  /// Home automation room data (RoomModelHive) - CURRENT name
+  static const homeAutomationRoomsBox = 'ha_rooms_box';
+  
+  /// Home automation device data (DeviceModelHive) - CANONICAL name  
+  /// @deprecated 'devices_v1' is legacy. Use homeAutomationDevicesBox for new code.
+  static const homeAutomationDevicesBoxLegacy = 'devices_v1';
+  
+  /// Home automation device data (DeviceModelHive) - CURRENT name
+  static const homeAutomationDevicesBox = 'ha_devices_box';
+
+  /// Home automation failed operations (PendingOp) - domain-specific
+  static const homeAutomationFailedOpsBox = 'ha_failed_ops_box';
 
   static const allBoxes = <String>[
     roomsBox,
@@ -34,14 +70,35 @@ class BoxRegistry {
     assetsCacheBox,
     uiPreferencesBox,
     metaBox,
+    emergencyOpsBox,
+    safetyStateBox,
+    transactionJournalBox,
+    // Home automation boxes
+    homeAutomationRoomsBox,
+    homeAutomationDevicesBox,
+    homeAutomationFailedOpsBox,
+  ];
+  
+  /// Legacy box names that may still contain data (for migration)
+  static const legacyBoxes = <String>[
+    homeAutomationRoomsBoxLegacy,  // 'rooms_v1'
+    homeAutomationDevicesBoxLegacy, // 'devices_v1'
   ];
 
-  Box<T> box<T>(String name) => Hive.box<T>(name);
+  /// @deprecated Use BoxAccess.I.box<T>() instead
+  Box<T> box<T>(String name) => BoxAccess.I.box<T>(name);
 
-  Box<PendingOp> pendingOps() => Hive.box<PendingOp>(pendingOpsBox);
-  Box pendingIndex() => Hive.box(pendingIndexBox);
-  Box<RoomModel> rooms() => Hive.box<RoomModel>(roomsBox);
-  Box<VitalsModel> vitals() => Hive.box<VitalsModel>(vitalsBox);
+  /// @deprecated Use BoxAccess.I.pendingOps() instead
+  Box<PendingOp> pendingOps() => BoxAccess.I.pendingOps();
+  
+  /// @deprecated Use BoxAccess.I.boxUntyped(pendingIndexBox) instead
+  Box pendingIndex() => BoxAccess.I.boxUntyped(pendingIndexBox);
+  
+  /// @deprecated Use BoxAccess.I.rooms() instead
+  Box<RoomModel> rooms() => BoxAccess.I.rooms();
+  
+  /// @deprecated Use BoxAccess.I.vitals() instead
+  Box<VitalsModel> vitals() => BoxAccess.I.vitals();
 
   Future<Box> openTempBox(String name) async => Hive.openBox(name);
 
@@ -51,7 +108,7 @@ class BoxRegistry {
     for (final name in allBoxes) {
       if (!Hive.isBoxOpen(name)) continue;
       try {
-        final dynamic b = Hive.box(name);
+        final dynamic b = BoxAccess.I.boxUntyped(name);
         final String? p = (b as Box).path;
         if (p != null && p.contains('/$name')) {
           hiveDirPath = p.replaceAll('/$name', '');
@@ -76,20 +133,4 @@ class BoxRegistry {
       }
     }
   }
-}
-
-// Stable type IDs for Hive Adapters (documented in specs)
-class TypeIds {
-  static const room = 10;
-  static const pendingOp = 11;
-  static const device = 12;
-  static const vitals = 13;
-  static const userProfile = 14;
-  static const session = 15;
-  static const failedOp = 16;
-  static const auditLog = 17;
-  static const settings = 18;
-  static const assetsCache = 19;
-  // reserve ranges for other models to avoid collisions
-  // device=12, user=14, session=15, failedOp=16, auditLog=17, settings=18
 }

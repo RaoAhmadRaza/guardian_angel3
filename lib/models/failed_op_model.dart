@@ -1,3 +1,6 @@
+import 'package:uuid/uuid.dart';
+import 'pending_op.dart';
+
 class FailedOpModel {
   final String id;
   final String? sourcePendingOpId;
@@ -24,6 +27,31 @@ class FailedOpModel {
     required this.createdAt,
     required this.updatedAt,
   });
+
+  /// Create a FailedOpModel from a PendingOp that exceeded max attempts.
+  ///
+  /// This preserves the original op's data for debugging and potential
+  /// manual re-enqueue.
+  factory FailedOpModel.fromPendingOp(
+    PendingOp op, {
+    String? errorCode,
+    String? errorMessage,
+  }) {
+    final now = DateTime.now().toUtc();
+    return FailedOpModel(
+      id: const Uuid().v4(),
+      sourcePendingOpId: op.id,
+      opType: op.opType,
+      payload: op.payload,
+      errorCode: errorCode,
+      errorMessage: errorMessage ?? op.lastError,
+      idempotencyKey: op.idempotencyKey,
+      attempts: op.attempts,
+      archived: false,
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
 
   factory FailedOpModel.fromJson(Map<String, dynamic> json) => FailedOpModel(
         id: json['id'] as String,

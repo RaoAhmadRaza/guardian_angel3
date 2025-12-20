@@ -1,0 +1,300 @@
+name: CI - Sync Engine Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Run All Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+      
+      - name: Get dependencies
+        run: flutter pub get
+      
+      - name: Verify dependencies
+        run: flutter pub outdated
+      
+      - name: Analyze code
+        run: flutter analyze
+        continue-on-error: true
+      
+      - name: Run all tests
+        run: dart run tool/run_all_tests.dart
+        timeout-minutes: 20
+      
+      - name: Upload validation report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validation-report
+          path: validation-report.json
+          retention-days: 30
+      
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            test/**/*.dart
+            validation-report.json
+          retention-days: 7
+      
+      - name: Comment PR with results
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request' && always()
+        with:
+          script: |
+            const fs = require('fs');
+            let report;
+            try {
+              const reportData = fs.readFileSync('validation-report.json', 'utf8');
+              report = JSON.parse(reportData);
+            } catch (error) {
+              console.log('No validation report found');
+              return;
+            }
+            const summary = report.summary;
+            const status = summary.failed === 0 ? 'PASSED' : 'FAILED';
+            const successRate = (summary.success_rate * 100).toFixed(1);
+            let comment = `## Test Results ${status}\n\n`;
+            comment += `**Summary:**\n`;
+            comment += `- Total Suites: ${summary.total_suites}\n`;
+            comment += `- Passed: ${summary.passed}\n`;
+            comment += `- Failed: ${summary.failed}\n`;
+            comment += `- Success Rate: ${successRate}%\n`;
+            comment += `- Duration: ${(summary.total_duration_ms / 1000).toFixed(1)}s\n\n`;
+            comment += `**Test Suites:**\n`;
+            for (const suite of report.suites) {
+              const status = suite.passed ? 'PASS' : 'FAIL';
+              const duration = (suite.duration_ms / 1000).toFixed(1);
+              comment += `- ${status} - ${suite.suite_name} (${duration}s)\n`;
+            }
+            comment += `\n**Environment:**\n`;
+            comment += `- Dart: ${report.environment.dart_version}\n`;
+            comment += `- OS: ${report.environment.os}\n`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  test-matrix:
+    name: Test on Multiple Platforms
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        flutter-version: ['3.24.0']
+      fail-fast: false
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ matrix.flutter-version }}
+          channel: 'stable'
+      
+      - name: Get dependencies
+        run: flutter pub get
+      
+      - name: Run unit tests only
+        run: flutter test test/sync/ --reporter compact
+        timeout-minutes: 10
+      
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.os }}
+          path: test/**/*.dart
+          retention-days: 7
+
+  acceptance:
+    name: Acceptance Tests & Release Gate
+    runs-on: ubuntu-latest
+    needs: test
+    # Only run on main branch or merged PRs
+    if: github.ref == 'refs/heads/main' || github.event.pull_request.merged == true
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+      
+      - name: Get dependencies
+        run: flutter pub get
+      
+      - name: Run acceptance tests
+        run: dart run tool/acceptance_runner.dart
+        timeout-minutes: 15
+      
+      - name: Upload acceptance report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-report
+          path: acceptance-report.json
+          retention-days: 90
+      
+      - name: Download validation report
+        uses: actions/download-artifact@v4
+        with:
+          name: validation-report
+      
+      - name: Generate release checklist
+        run: dart run scripts/generate_release_checklist.dart
+      
+      - name: Upload release checklist
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-checklist
+          path: release-checklist.json
+          retention-days: 90
+      
+      - name: Comment on commit with acceptance results
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+            let report, checklist;
+            
+            try {
+              const reportData = fs.readFileSync('acceptance-report.json', 'utf8');
+              report = JSON.parse(reportData);
+            } catch (error) {
+              console.log('No acceptance report found');
+              return;
+            }
+            
+            try {
+              const checklistData = fs.readFileSync('release-checklist.json', 'utf8');
+              checklist = JSON.parse(checklistData);
+            } catch (error) {
+              console.log('No checklist found');
+            }
+            
+            const status = report.success ? '✅ PASSED' : '❌ FAILED';
+            const duration = report.duration_seconds;
+            
+            let comment = `## 🎯 Acceptance Tests ${status}\n\n`;
+            comment += `**Duration:** ${duration}s\n\n`;
+            comment += `**Critical Scenarios:**\n`;
+            
+            for (const [key, scenario] of Object.entries(report.scenarios)) {
+              const icon = scenario.status === 'PASSED' ? '✅' : '❌';
+              comment += `${icon} **${scenario.name}**\n`;
+              comment += `   _${scenario.description}_\n\n`;
+            }
+            
+            if (checklist && checklist.release_ready) {
+              comment += `\n---\n\n`;
+              comment += `### ✅ Release Ready\n\n`;
+              comment += `All automated checks passed. Complete manual verification:\n\n`;
+              comment += `- [ ] Metrics dashboard review\n`;
+              comment += `- [ ] Security review\n`;
+              comment += `- [ ] Documentation review\n\n`;
+              comment += `When ready, run: \`bash scripts/mark_signoff.sh\`\n`;
+            } else {
+              comment += `\n---\n\n`;
+              comment += `### ⚠️ Not Release Ready\n\n`;
+              comment += `Fix failing checks before release.\n`;
+            }
+            
+            // Create or update comment
+            if (context.payload.pull_request) {
+              // For PRs
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            } else {
+              // For commits to main
+              github.rest.repos.createCommitComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+                body: comment
+              });
+            }
+      
+      - name: Create release draft (if accepted)
+        if: success() && github.ref == 'refs/heads/main'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let report;
+            
+            try {
+              const reportData = fs.readFileSync('acceptance-report.json', 'utf8');
+              report = JSON.parse(reportData);
+            } catch (error) {
+              console.log('No acceptance report found');
+              return;
+            }
+            
+            if (!report.success) {
+              console.log('Acceptance tests failed - skipping release draft');
+              return;
+            }
+            
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            const tagName = `release-candidate-${timestamp}`;
+            const releaseName = `Release Candidate ${timestamp}`;
+            
+            let releaseNotes = `# Release Candidate\n\n`;
+            releaseNotes += `**Generated:** ${report.timestamp}\n`;
+            releaseNotes += `**Duration:** ${report.duration_seconds}s\n\n`;
+            releaseNotes += `## ✅ Acceptance Tests Passed\n\n`;
+            releaseNotes += `All critical scenarios validated:\n\n`;
+            
+            for (const [key, scenario] of Object.entries(report.scenarios)) {
+              releaseNotes += `- ✅ ${scenario.name}\n`;
+            }
+            
+            releaseNotes += `\n## 📋 Next Steps\n\n`;
+            releaseNotes += `1. Complete manual verification (see release-checklist.json)\n`;
+            releaseNotes += `2. Run sign-off: \`bash scripts/mark_signoff.sh\`\n`;
+            releaseNotes += `3. Publish release\n\n`;
+            releaseNotes += `## 📊 Environment\n\n`;
+            releaseNotes += `- Flutter: ${report.environment.flutter_version}\n`;
+            releaseNotes += `- Dart: ${report.environment.dart_version}\n`;
+            releaseNotes += `- Platform: ${report.environment.platform}\n`;
+            
+            await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tagName,
+              name: releaseName,
+              body: releaseNotes,
+              draft: true,
+              prerelease: true
+            });
+            
+            console.log(`Created draft release: ${releaseName}`);

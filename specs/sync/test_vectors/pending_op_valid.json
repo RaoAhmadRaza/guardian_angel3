@@ -1,0 +1,113 @@
+{
+  "description": "Valid pending operation for creating a new user",
+  "operation": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "idempotency_key": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "trace_id": "aabbccdd-1122-3344-5566-778899aabbcc",
+    "type": "CREATE_USER",
+    "payload": {
+      "email": "john.doe@example.com",
+      "display_name": "John Doe",
+      "birth_date": "1990-05-15T00:00:00.000Z"
+    },
+    "created_at": "2025-11-22T12:00:00.000Z",
+    "attempts": 0,
+    "last_attempted_at": null,
+    "next_retry_at": null
+  },
+  "expected_request": {
+    "method": "POST",
+    "url": "/api/v1/users",
+    "headers": {
+      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+      "Idempotency-Key": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "Content-Type": "application/json; charset=utf-8",
+      "X-App-Version": "1.2.3",
+      "X-Device-Id": "device-uuid-1234567890",
+      "Trace-Id": "aabbccdd-1122-3344-5566-778899aabbcc"
+    },
+    "body": {
+      "meta": {
+        "trace_id": "aabbccdd-1122-3344-5566-778899aabbcc",
+        "timestamp": "2025-11-22T12:00:00.000Z",
+        "txn_token": "txn-01ARZ3NDEKTSV4RRFFQ69G5FAV"
+      },
+      "payload": {
+        "email": "john.doe@example.com",
+        "display_name": "John Doe",
+        "birth_date": "1990-05-15T00:00:00.000Z"
+      }
+    }
+  },
+  "expected_response": {
+    "status_code": 201,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Request-Id": "req_2TgFzK9bC8N3vP7mL1qR",
+      "X-Rate-Limit-Limit": "100",
+      "X-Rate-Limit-Remaining": "99",
+      "X-Rate-Limit-Reset": "1732281600",
+      "Location": "/api/v1/users/123e4567-e89b-12d3-a456-426614174000",
+      "ETag": "\"33a64df551425fcc55e4d42a148795d9f25f89d4\""
+    },
+    "body": {
+      "meta": {
+        "trace_id": "aabbccdd-1122-3344-5566-778899aabbcc",
+        "timestamp": "2025-11-22T12:00:00.123Z",
+        "txn_token": "txn-01ARZ3NDEKTSV4RRFFQ69G5FAV"
+      },
+      "data": {
+        "user_id": "123e4567-e89b-12d3-a456-426614174000",
+        "email": "john.doe@example.com",
+        "display_name": "John Doe",
+        "birth_date": "1990-05-15T00:00:00.000Z",
+        "created_at": "2025-11-22T12:00:00.123Z",
+        "version": 1
+      }
+    }
+  },
+  "expected_outcome": {
+    "success": true,
+    "operation_removed_from_queue": true,
+    "idempotency_marked_success": true,
+    "optimistic_update_resolved": true
+  },
+  "test_scenarios": [
+    {
+      "name": "Successful creation on first attempt",
+      "description": "Operation succeeds immediately without retries",
+      "assertions": [
+        "HTTP 201 response received",
+        "Response contains user_id",
+        "Operation removed from pending_ops queue",
+        "Idempotency key marked as succeeded locally",
+        "No retries needed"
+      ]
+    },
+    {
+      "name": "Idempotent retry (same key)",
+      "description": "Retry with same idempotency key returns cached response",
+      "setup": "First request succeeds, second request sent with same key",
+      "assertions": [
+        "Second request returns same user_id",
+        "Backend only creates one user",
+        "No duplicate detected"
+      ]
+    },
+    {
+      "name": "Serialization/deserialization",
+      "description": "Operation can be serialized to Hive and deserialized",
+      "assertions": [
+        "Operation serializes to TypeId 30",
+        "All fields preserved after round-trip",
+        "DateTime fields correctly converted"
+      ]
+    }
+  ],
+  "notes": [
+    "This is the happy path scenario with no errors",
+    "Use this as baseline for integration tests",
+    "Idempotency key should be reused across retries",
+    "Trace ID should propagate through all logs"
+  ]
+}

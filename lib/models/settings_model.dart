@@ -1,3 +1,14 @@
+/// Validation error for data integrity checks.
+class SettingsValidationError implements Exception {
+  final String message;
+  SettingsValidationError(this.message);
+  @override
+  String toString() => 'SettingsValidationError: $message';
+}
+
+/// Valid roles for settings.
+const validSettingsRoles = {'patient', 'caregiver', 'admin'};
+
 class SettingsModel {
   final bool notificationsEnabled;
   final int vitalsRetentionDays;
@@ -12,6 +23,22 @@ class SettingsModel {
     this.devToolsEnabled = false,
     this.userRole = 'patient',
   });
+
+  /// Validates this settings model.
+  /// Throws [SettingsValidationError] if invalid.
+  /// Returns this instance for method chaining.
+  SettingsModel validate() {
+    if (vitalsRetentionDays < 1) {
+      throw SettingsValidationError('vitalsRetentionDays must be at least 1');
+    }
+    if (vitalsRetentionDays > 365) {
+      throw SettingsValidationError('vitalsRetentionDays cannot exceed 365');
+    }
+    if (!validSettingsRoles.contains(userRole)) {
+      throw SettingsValidationError('userRole must be one of: ${validSettingsRoles.join(", ")}');
+    }
+    return this;
+  }
 
   factory SettingsModel.fromJson(Map<String, dynamic> json) => SettingsModel(
         notificationsEnabled: json['notifications_enabled'] as bool? ?? true,

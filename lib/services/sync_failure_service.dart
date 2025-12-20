@@ -5,12 +5,35 @@ import '../models/sync_failure.dart';
 import 'telemetry_service.dart';
 import 'audit_log_service.dart';
 
+// Shared instance management (avoids circular imports)
+SyncFailureService? _sharedSyncFailureInstance;
+
+/// Sets the shared SyncFailureService instance.
+void setSharedSyncFailureInstance(SyncFailureService instance) {
+  _sharedSyncFailureInstance = instance;
+}
+
+/// Gets or creates the shared SyncFailureService instance.
+SyncFailureService getSharedSyncFailureInstance() {
+  return _sharedSyncFailureInstance ??= SyncFailureService(telemetry: TelemetryService.I);
+}
+
 /// Service for managing sync failures and user notifications
 class SyncFailureService {
-  static final I = SyncFailureService._();
-  SyncFailureService._();
+  // ═══════════════════════════════════════════════════════════════════════
+  // SINGLETON (DEPRECATED - Use ServiceInstances or Riverpod provider)
+  // ═══════════════════════════════════════════════════════════════════════
+  /// Legacy singleton accessor - routes to shared instance.
+  @Deprecated('Use syncFailureServiceProvider or ServiceInstances.syncFailure instead')
+  static SyncFailureService get I => getSharedSyncFailureInstance();
 
-  final _telemetry = TelemetryService.I;
+  // ═══════════════════════════════════════════════════════════════════════
+  // PROPER DI CONSTRUCTOR (Use this via Riverpod)
+  // ═══════════════════════════════════════════════════════════════════════
+  /// Creates a new SyncFailureService instance for dependency injection.
+  SyncFailureService({required TelemetryService telemetry}) : _telemetry = telemetry;
+
+  final TelemetryService _telemetry;
   static const String _boxName = 'sync_failures';
   static const int _maxRetries = 3;
   static const Duration _retryDelay = Duration(minutes: 5);

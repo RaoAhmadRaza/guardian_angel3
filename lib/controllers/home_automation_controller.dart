@@ -1,5 +1,12 @@
 /// Home Automation Navigation Controller
 /// Manages navigation states and workflow for home automation
+///
+/// ⚠️ DEPRECATED: PHASE 3 - This controller uses the deprecated HomeAutomationService.
+/// Use roomsControllerProvider and devicesControllerProvider from device_providers.dart.
+/// The Hive repository is the ONLY authoritative source of truth.
+///
+/// ❌ THIS CLASS WILL THROW IF ANY METHOD IS CALLED.
+/// All consumers must migrate to the Hive repository providers.
 
 import '../models/home_automation_models.dart';
 import '../services/home_automation_service.dart';
@@ -10,29 +17,54 @@ enum NavigationLevel {
   deviceControl // Level 3: Individual device control
 }
 
+/// Exception thrown when deprecated HomeAutomationController is used.
+class DeprecatedControllerError extends Error {
+  final String message;
+  DeprecatedControllerError(this.message);
+  @override
+  String toString() => 'DeprecatedControllerError: $message\n'
+      'Use roomsControllerProvider/devicesControllerProvider from device_providers.dart instead.';
+}
+
+@Deprecated('PHASE 3: Use device_providers.dart with HomeAutomationRepositoryHive')
 class HomeAutomationController {
+  // ═══════════════════════════════════════════════════════════════════════
+  // SINGLETON (DEPRECATED - Use Riverpod provider instead)
+  // ═══════════════════════════════════════════════════════════════════════
+  @Deprecated('Use homeAutomationControllerProvider from service_providers.dart instead')
   static HomeAutomationController? _instance;
+  @Deprecated('Use homeAutomationControllerProvider from service_providers.dart instead')
   static HomeAutomationController get instance {
-    _instance ??= HomeAutomationController._internal();
-    return _instance!;
+    throw DeprecatedControllerError('HomeAutomationController.instance is deprecated');
+  }
+  HomeAutomationController._internal() : _service = _throwService();
+
+  static HomeAutomationService _throwService() {
+    throw DeprecatedControllerError('HomeAutomationController is deprecated');
   }
 
-  HomeAutomationController._internal();
+  // ═══════════════════════════════════════════════════════════════════════
+  // PROPER DI CONSTRUCTOR (Use this via Riverpod)
+  // ═══════════════════════════════════════════════════════════════════════
+  /// Creates a new HomeAutomationController instance for dependency injection.
+  HomeAutomationController({required HomeAutomationService service}) : _service = service {
+    throw DeprecatedControllerError('HomeAutomationController is deprecated');
+  }
 
-  final HomeAutomationService _service = HomeAutomationService.instance;
+  final HomeAutomationService _service;
 
   NavigationLevel _currentLevel = NavigationLevel.dashboard;
   List<NavigationLevel> _navigationHistory = [NavigationLevel.dashboard];
 
   /// Current navigation level
-  NavigationLevel get currentLevel => _currentLevel;
+  NavigationLevel get currentLevel => throw DeprecatedControllerError('currentLevel is deprecated');
 
   /// Navigation history
-  List<NavigationLevel> get navigationHistory => List.from(_navigationHistory);
+  List<NavigationLevel> get navigationHistory => throw DeprecatedControllerError('navigationHistory is deprecated');
 
   /// Initialize the controller
   void initialize() {
-    _service.initialize();
+    throw DeprecatedControllerError('initialize() is deprecated');
     print('🎮 Home Automation Controller initialized');
   }
 

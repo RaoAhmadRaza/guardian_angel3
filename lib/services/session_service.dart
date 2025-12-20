@@ -6,14 +6,23 @@ class SessionService {
   static const String _userTypeKey = 'user_type';
   static const int _sessionDurationDays = 2;
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // SINGLETON (DEPRECATED - Use Riverpod provider instead)
+  // ═══════════════════════════════════════════════════════════════════════
+  @Deprecated('Use sessionServiceProvider from service_providers.dart instead')
   static SessionService? _instance;
-
+  @Deprecated('Use sessionServiceProvider from service_providers.dart instead')
   static SessionService get instance {
     _instance ??= SessionService._internal();
     return _instance!;
   }
-
   SessionService._internal();
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // PROPER DI CONSTRUCTOR (Use this via Riverpod)
+  // ═══════════════════════════════════════════════════════════════════════
+  /// Creates a new SessionService instance for dependency injection.
+  SessionService();
 
   /// Check if user has a valid session
   Future<bool> hasValidSession() async {

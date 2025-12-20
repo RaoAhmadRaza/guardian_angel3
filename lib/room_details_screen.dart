@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'colors.dart' as app_colors;
 import 'controllers/home_automation_controller.dart';
 import 'models/home_automation_models.dart';
+import 'home automation/src/data/models/device_model.dart' as ha;
+import 'home automation/src/logic/providers/device_providers.dart';
 
-class RoomDetailsScreen extends StatefulWidget {
+/// PHASE 2: RoomDetailsScreen now uses backend data.
+/// Accepts roomId to fetch devices from Hive via devicesControllerProvider.
+class RoomDetailsScreen extends ConsumerStatefulWidget {
+  final String roomId;
   final String roomName;
   final IconData roomIcon;
   final Color roomColor;
@@ -12,6 +18,7 @@ class RoomDetailsScreen extends StatefulWidget {
 
   const RoomDetailsScreen({
     Key? key,
+    required this.roomId,
     required this.roomName,
     required this.roomIcon,
     required this.roomColor,
@@ -19,23 +26,41 @@ class RoomDetailsScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<RoomDetailsScreen> createState() => _RoomDetailsScreenState();
+  ConsumerState<RoomDetailsScreen> createState() => _RoomDetailsScreenState();
 }
 
-class _RoomDetailsScreenState extends State<RoomDetailsScreen>
+class _RoomDetailsScreenState extends ConsumerState<RoomDetailsScreen>
     with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
-  List<Device> roomDevices = [];
-  bool isLoading = true;
-
   @override
   void initState() {
     super.initState();
     _setupAnimations();
-    _loadRoomDevices();
+  }
+
+  /// Convert home automation DeviceModel to legacy Device for UI compatibility.
+  Device _convertToLegacyDevice(ha.DeviceModel d) {
+    return Device(
+      id: d.id,
+      name: d.name,
+      type: _mapDeviceType(d.type),
+      roomId: d.roomId,
+      status: d.isOn ? DeviceStatus.on : DeviceStatus.off,
+      properties: d.state,
+    );
+  }
+
+  DeviceType _mapDeviceType(ha.DeviceType haType) {
+    switch (haType) {
+      case ha.DeviceType.bulb:
+      case ha.DeviceType.lamp:
+        return DeviceType.light;
+      case ha.DeviceType.fan:
+        return DeviceType.fan;
+    }
   }
 
   void _setupAnimations() {
@@ -63,161 +88,16 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     _animationController.forward();
   }
 
-  void _loadRoomDevices() {
-    // Simulate loading room devices
-    Future.delayed(const Duration(milliseconds: 500), () {
-      setState(() {
-        roomDevices = _getDevicesForRoom(widget.roomName);
-        isLoading = false;
-      });
-    });
-  }
-
-  List<Device> _getDevicesForRoom(String roomName) {
-    // Sample devices based on room using the existing Device model
-    switch (roomName.toLowerCase()) {
-      case 'living room':
-        return [
-          Device(
-              id: '1',
-              name: 'Main Light',
-              type: DeviceType.light,
-              roomId: 'living_room',
-              status: DeviceStatus.on,
-              properties: {'brightness': 75}),
-          Device(
-              id: '2',
-              name: 'Floor Lamp',
-              type: DeviceType.light,
-              roomId: 'living_room',
-              status: DeviceStatus.off,
-              properties: {'brightness': 50}),
-          Device(
-              id: '3',
-              name: 'TV',
-              type: DeviceType.tv,
-              roomId: 'living_room',
-              status: DeviceStatus.on),
-          Device(
-              id: '4',
-              name: 'Air Conditioner',
-              type: DeviceType.airConditioner,
-              roomId: 'living_room',
-              status: DeviceStatus.on,
-              properties: {'temperature': 22}),
-          Device(
-              id: '5',
-              name: 'Router',
-              type: DeviceType.router,
-              roomId: 'living_room',
-              status: DeviceStatus.on),
-        ];
-      case 'kitchen':
-        return [
-          Device(
-              id: '6',
-              name: 'Kitchen Light',
-              type: DeviceType.light,
-              roomId: 'kitchen',
-              status: DeviceStatus.on,
-              properties: {'brightness': 85}),
-          Device(
-              id: '7',
-              name: 'Under Cabinet Lights',
-              type: DeviceType.light,
-              roomId: 'kitchen',
-              status: DeviceStatus.off,
-              properties: {'brightness': 40}),
-          Device(
-              id: '8',
-              name: 'Exhaust Fan',
-              type: DeviceType.fan,
-              roomId: 'kitchen',
-              status: DeviceStatus.on),
-        ];
-      case 'bed room':
-        return [
-          Device(
-              id: '10',
-              name: 'Bedroom Light',
-              type: DeviceType.light,
-              roomId: 'bedroom',
-              status: DeviceStatus.off,
-              properties: {'brightness': 30}),
-          Device(
-              id: '11',
-              name: 'Bedside Lamp',
-              type: DeviceType.light,
-              roomId: 'bedroom',
-              status: DeviceStatus.on,
-              properties: {'brightness': 25}),
-          Device(
-              id: '12',
-              name: 'Fan',
-              type: DeviceType.fan,
-              roomId: 'bedroom',
-              status: DeviceStatus.on),
-          Device(
-              id: '13',
-              name: 'TV',
-              type: DeviceType.tv,
-              roomId: 'bedroom',
-              status: DeviceStatus.off),
-        ];
-      case 'bath room':
-        return [
-          Device(
-              id: '14',
-              name: 'Bathroom Light',
-              type: DeviceType.light,
-              roomId: 'bathroom',
-              status: DeviceStatus.on,
-              properties: {'brightness': 70}),
-          Device(
-              id: '15',
-              name: 'Exhaust Fan',
-              type: DeviceType.fan,
-              roomId: 'bathroom',
-              status: DeviceStatus.off),
-        ];
-      case 'guest room':
-        return [
-          Device(
-              id: '17',
-              name: 'Guest Light',
-              type: DeviceType.light,
-              roomId: 'guest_room',
-              status: DeviceStatus.off,
-              properties: {'brightness': 60}),
-          Device(
-              id: '18',
-              name: 'Reading Lamp',
-              type: DeviceType.light,
-              roomId: 'guest_room',
-              status: DeviceStatus.off,
-              properties: {'brightness': 40}),
-          Device(
-              id: '19',
-              name: 'AC Unit',
-              type: DeviceType.airConditioner,
-              roomId: 'guest_room',
-              status: DeviceStatus.off,
-              properties: {'temperature': 24}),
-        ];
-      default:
-        return [];
-    }
-  }
+  // PHASE 3: _getDevicesForRoom hardcoded data REMOVED
+  // Backend is the sole source of truth - empty room = empty state
 
   void _toggleDevice(Device device) {
     HapticFeedback.lightImpact();
-    setState(() {
-      final index = roomDevices.indexWhere((d) => d.id == device.id);
-      if (index != -1) {
-        roomDevices[index].togglePower();
-      }
-    });
-    print('Toggle device: ${device.name}');
+    // PHASE 2: Toggle via repository instead of local state
+    final repo = ref.read(deviceRepositoryProvider);
+    final newState = device.status != DeviceStatus.on;
+    repo.toggleDevice(device.id, newState);
+    print('Toggle device: ${device.name} -> ${newState ? "on" : "off"}');
   }
 
   @override
@@ -228,6 +108,9 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
 
   @override
   Widget build(BuildContext context) {
+    // PHASE 2: Fetch devices from Hive via provider
+    final devicesAsync = ref.watch(devicesControllerProvider(widget.roomId));
+    
     return Scaffold(
       backgroundColor:
           widget.isDarkMode ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
@@ -236,13 +119,32 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
           opacity: _fadeAnimation,
           child: SlideTransition(
             position: _slideAnimation,
-            child: Column(
-              children: [
-                _buildHeader(),
-                Expanded(
-                  child: isLoading ? _buildLoadingState() : _buildDevicesList(),
-                ),
-              ],
+            child: devicesAsync.when(
+              loading: () => Column(
+                children: [
+                  _buildHeader(deviceCount: 0, activeCount: 0),
+                  Expanded(child: _buildLoadingState()),
+                ],
+              ),
+              error: (e, _) => Column(
+                children: [
+                  _buildHeader(deviceCount: 0, activeCount: 0),
+                  Expanded(child: _buildErrorState(e.toString())),
+                ],
+              ),
+              data: (haDevices) {
+                // PHASE 3: Backend is authoritative - no fallback to hardcoded data
+                final devices = haDevices.map(_convertToLegacyDevice).toList();
+                final activeCount = devices.where((d) => d.status == DeviceStatus.on).length;
+                return Column(
+                  children: [
+                    _buildHeader(deviceCount: devices.length, activeCount: activeCount),
+                    Expanded(child: devices.isEmpty 
+                        ? _buildEmptyState()
+                        : _buildDevicesList(devices)),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -250,7 +152,50 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.devices_other,
+            size: 64,
+            color: widget.isDarkMode ? Colors.white38 : const Color(0xFFCBD5E1),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No devices in this room',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+              color: widget.isDarkMode ? Colors.white70 : const Color(0xFF475569),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Add devices to control them from here',
+            style: TextStyle(
+              fontSize: 14,
+              color: widget.isDarkMode ? Colors.white38 : const Color(0xFF94A3B8),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Text(
+        'Error loading devices: $error',
+        style: TextStyle(
+          color: widget.isDarkMode ? Colors.white70 : const Color(0xFF475569),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader({required int deviceCount, required int activeCount}) {
     return Container(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -369,7 +314,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${roomDevices.length} devices',
+                        '$deviceCount devices',
                         style: TextStyle(
                           fontSize: 14,
                           color: widget.isDarkMode
@@ -388,7 +333,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    '${roomDevices.where((d) => d.status == DeviceStatus.on).length} On',
+                    '$activeCount On',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -412,7 +357,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     );
   }
 
-  Widget _buildDevicesList() {
+  Widget _buildDevicesList(List<Device> roomDevices) {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       children: [

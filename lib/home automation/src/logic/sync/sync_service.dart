@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
-import '../../data/hive_adapters/pending_op_hive.dart';
+import 'package:guardian_angel_fyp/persistence/models/pending_op.dart';
 import '../../data/local_hive_service.dart';
 import '../../network/api_client.dart';
 import '../../utils/network_status_provider.dart';
@@ -79,19 +79,21 @@ class SyncService {
           await _pending.delete(op.opId);
         } catch (e) {
           // Increment attempts and re-store, update lastAttemptAt
-          op.attempts += 1;
-          op.lastAttemptAt = DateTime.now();
+          final updatedOp = op.copyWith(
+            attempts: op.attempts + 1,
+            lastTriedAt: DateTime.now(),
+          );
 
-          if (op.attempts >= 5) {
+          if (updatedOp.attempts >= 5) {
             // Move to failed ops box for visibility and manual retry
             await _pending.delete(op.opId);
-            await _failed.put(op.opId, op);
+            await _failed.put(op.opId, updatedOp);
             // Don't delay further here; proceed to next op
             continue;
           } else {
-            await _pending.put(op.opId, op);
+            await _pending.put(op.opId, updatedOp);
             // Apply backoff up to 30s before next attempt
-            final delayMs = min(30000, pow(2, op.attempts) * 1000).toInt();
+            final delayMs = min(30000, pow(2, updatedOp.attempts) * 1000).toInt();
             await Future.delayed(Duration(milliseconds: delayMs));
           }
         }
@@ -104,32 +106,34 @@ class SyncService {
 
   Future<void> _executeOp(PendingOp op) async {
     final api = read(apiClientProvider);
+    final entityId = op.entityId ?? '';
+    final entityType = op.entityType ?? 'unknown';
     try {
       switch (op.opType) {
         case 'create':
-          if (op.entityType == 'room') {
+          if (entityType == 'room') {
             await api.createRoom(op.payload);
           } else {
             await api.createDevice(op.payload);
           }
           break;
         case 'update':
-          if (op.entityType == 'room') {
-            await api.updateRoom(op.entityId, op.payload);
+          if (entityType == 'room') {
+            await api.updateRoom(entityId, op.payload);
           } else {
-            await api.updateDevice(op.entityId, op.payload);
+            await api.updateDevice(entityId, op.payload);
           }
           break;
         case 'delete':
-          if (op.entityType == 'room') {
-            await api.deleteRoom(op.entityId);
+          if (entityType == 'room') {
+            await api.deleteRoom(entityId);
           } else {
-            await api.deleteDevice(op.entityId);
+            await api.deleteDevice(entityId);
           }
           break;
         case 'toggle':
           // device toggle
-          await api.toggleDevice(op.entityId, op.payload['isOn'] as bool);
+          await api.toggleDevice(entityId, op.payload['isOn'] as bool);
           break;
         default:
           throw Exception('Unknown opType ${op.opType}');
@@ -141,6 +145,8 @@ class SyncService {
   }
 
   Future<void> _handleConflict(PendingOp op, Map<String, dynamic> serverEntity) async {
+    final entityId = op.entityId ?? '';
+    final entityType = op.entityType ?? 'unknown';
     // Last-writer-wins by updatedAt; fallback to version if timestamps equal/unavailable
     DateTime? localUpdated;
     DateTime? remoteUpdated;
@@ -166,7 +172,7 @@ class SyncService {
 
     if (remoteWins) {
       // Accept server: update local storage and drop the op
-      await _applyServerEntityToLocal(op.entityType, serverEntity);
+      await _applyServerEntityToLocal(entityType, serverEntity);
       // no re-queue; resolution complete
       return;
     }
@@ -194,10 +200,10 @@ class SyncService {
     merged['updatedAt'] = DateTime.now().toIso8601String();
 
     // Re-queue as a fresh op to retry
-    final newOp = PendingOp(
-      opId: 'op_${DateTime.now().millisecondsSinceEpoch}_${op.entityId}',
-      entityId: op.entityId,
-      entityType: op.entityType,
+    final newOp = PendingOp.forHomeAutomation(
+      opId: 'op_${DateTime.now().millisecondsSinceEpoch}_$entityId',
+      entityId: entityId,
+      entityType: entityType,
       opType: op.opType,
       payload: merged,
       attempts: op.attempts + 1,
@@ -207,8 +213,8 @@ class SyncService {
     // If we've tried many times, surface to UI for manual resolution
     if (newOp.attempts >= 5) {
       read(conflictProvider.notifier).add(ConflictRecord(
-        entityType: op.entityType,
-        entityId: op.entityId,
+        entityType: entityType,
+        entityId: entityId,
         opType: op.opType,
         localPayload: op.payload,
         serverEntity: serverEntity,

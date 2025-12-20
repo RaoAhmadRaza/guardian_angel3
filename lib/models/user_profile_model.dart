@@ -1,3 +1,14 @@
+/// Validation error for data integrity checks.
+class UserProfileValidationError implements Exception {
+  final String message;
+  UserProfileValidationError(this.message);
+  @override
+  String toString() => 'UserProfileValidationError: $message';
+}
+
+/// Valid roles for user profiles.
+const validUserRoles = {'patient', 'caregiver', 'admin'};
+
 class UserProfileModel {
   final String id;
   final String role; // patient, caregiver, admin
@@ -14,6 +25,34 @@ class UserProfileModel {
     required this.createdAt,
     required this.updatedAt,
   });
+
+  /// Validates this user profile model.
+  /// Throws [UserProfileValidationError] if invalid.
+  /// Returns this instance for method chaining.
+  UserProfileModel validate() {
+    if (id.isEmpty) {
+      throw UserProfileValidationError('id cannot be empty');
+    }
+    if (role.isEmpty) {
+      throw UserProfileValidationError('role cannot be empty');
+    }
+    if (!validUserRoles.contains(role)) {
+      throw UserProfileValidationError('role must be one of: ${validUserRoles.join(", ")}');
+    }
+    if (displayName.isEmpty) {
+      throw UserProfileValidationError('displayName cannot be empty');
+    }
+    if (displayName.length > 100) {
+      throw UserProfileValidationError('displayName too long (max 100 characters)');
+    }
+    if (email != null && email!.isNotEmpty && !email!.contains('@')) {
+      throw UserProfileValidationError('email format invalid');
+    }
+    if (updatedAt.isBefore(createdAt)) {
+      throw UserProfileValidationError('updatedAt cannot be before createdAt');
+    }
+    return this;
+  }
 
   factory UserProfileModel.fromJson(Map<String, dynamic> json) => UserProfileModel(
         id: json['id'] as String,

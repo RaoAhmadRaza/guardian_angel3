@@ -19,35 +19,95 @@ import '../models/pending_op.dart';
 import '../models/failed_op_model.dart';
 import '../models/audit_log_record.dart';
 import '../models/settings_model.dart';
+// Additional adapters required by schema validation
+import '../models/sync_failure.dart';
+import '../services/models/transaction_record.dart';
+import '../services/models/lock_record.dart';
+import '../services/models/audit_log_entry.dart';
+// Home Automation generated adapters (TypeIds 0-1)
+import '../home automation/src/data/hive_adapters/room_model_hive.dart';
+import '../home automation/src/data/hive_adapters/device_model_hive.dart';
 import 'box_registry.dart';
+import 'encryption_policy.dart';
+import 'wrappers/box_accessor.dart';
 import '../services/telemetry_service.dart';
+import 'type_ids.dart';
 
 class HiveService {
   static const _secureKeyName = 'hive_enc_key_v1';
   static const _prevKeyName = 'hive_enc_key_prev';
   static const _rotationStateKey = 'rotation_state'; // stored in meta box
   final FlutterSecureStorage secureStorage;
+  final TelemetryService _telemetry;
 
-  HiveService({required this.secureStorage});
+  HiveService({required this.secureStorage, TelemetryService? telemetry})
+      : _telemetry = telemetry ?? TelemetryService.I;
 
-  static Future<HiveService> create() async {
+  static Future<HiveService> create({TelemetryService? telemetry}) async {
     const secure = FlutterSecureStorage();
-    return HiveService(secureStorage: secure);
+    return HiveService(secureStorage: secure, telemetry: telemetry);
   }
 
   Future<void> init() async {
     await Hive.initFlutter();
-    Hive
-      ..registerAdapter(RoomAdapter())
-      ..registerAdapter(PendingOpAdapter())
-      ..registerAdapter(VitalsAdapter())
-      ..registerAdapter(DeviceModelAdapter())
-      ..registerAdapter(SessionModelAdapter())
-      ..registerAdapter(UserProfileModelAdapter())
-      ..registerAdapter(FailedOpModelAdapter())
-      ..registerAdapter(AuditLogRecordAdapter())
-      ..registerAdapter(SettingsModelAdapter())
-      ..registerAdapter(AssetsCacheEntryAdapter());
+    // Idempotent adapter registration: register only if not already registered.
+    if (!Hive.isAdapterRegistered(TypeIds.roomHive)) {
+      Hive.registerAdapter(RoomModelHiveAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.deviceHive)) {
+      Hive.registerAdapter(DeviceModelHiveAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.room)) {
+      Hive.registerAdapter(RoomAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.pendingOp)) {
+      Hive.registerAdapter(PendingOpAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.vitals)) {
+      Hive.registerAdapter(VitalsAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.device)) {
+      Hive.registerAdapter(DeviceModelAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.session)) {
+      Hive.registerAdapter(SessionModelAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.userProfile)) {
+      Hive.registerAdapter(UserProfileModelAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.failedOp)) {
+      Hive.registerAdapter(FailedOpModelAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.auditLogRecord)) {
+      Hive.registerAdapter(AuditLogRecordAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.settings)) {
+      Hive.registerAdapter(SettingsModelAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.assetsCache)) {
+      Hive.registerAdapter(AssetsCacheEntryAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.syncFailure)) {
+      Hive.registerAdapter(SyncFailureAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.syncFailureStatus)) {
+      Hive.registerAdapter(SyncFailureStatusAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.syncFailureSeverity)) {
+      Hive.registerAdapter(SyncFailureSeverityAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.transactionRecord)) {
+      Hive.registerAdapter(TransactionRecordAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.lockRecord)) {
+      Hive.registerAdapter(LockRecordAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.auditLogEntry)) {
+      Hive.registerAdapter(AuditLogEntryAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.auditLogArchive)) {
+      Hive.registerAdapter(AuditLogArchiveAdapter());
+    }
 
     final key = await _getOrCreateKey();
     await _openBoxes(key);
@@ -88,7 +148,7 @@ class HiveService {
     // Persist new key TEMPORARILY under prev name for resume capability.
     await secureStorage.write(key: _prevKeyName, value: base64.encode(oldKey));
     await secureStorage.write(key: '${_secureKeyName}_candidate', value: base64.encode(newKey));
-    final meta = Hive.box(BoxRegistry.metaBox);
+    final meta = BoxAccess.I.meta();
     meta.put(_rotationStateKey, {
       'status': 'in_progress',
       'started_at': DateTime.now().toUtc().toIso8601String(),
@@ -107,11 +167,11 @@ class HiveService {
       'status': 'completed',
       'completed_at': DateTime.now().toUtc().toIso8601String(),
     });
-    TelemetryService.I.time('key_rotation.duration_ms', () => startSw.elapsed);
+    _telemetry.time('key_rotation.duration_ms', () => startSw.elapsed);
   }
 
   Future<void> resumeInterruptedRotation() async {
-    final meta = Hive.box(BoxRegistry.metaBox);
+    final meta = BoxAccess.I.meta();
     final state = meta.get(_rotationStateKey);
     if (state is! Map || state['status'] != 'in_progress') return;
     final oldKeyB64 = await secureStorage.read(key: _prevKeyName);
@@ -134,7 +194,7 @@ class HiveService {
       'status': 'completed',
       'resumed_at': DateTime.now().toUtc().toIso8601String(),
     });
-    TelemetryService.I.time('key_rotation.duration_ms', () => sw.elapsed);
+    _telemetry.time('key_rotation.duration_ms', () => sw.elapsed);
   }
 
   Future<void> _rotateSingleBox(String boxName, List<int> oldKey, List<int> newKey, Box meta,
@@ -172,7 +232,7 @@ class HiveService {
       throw StateError('Key rotation validation failed for $boxName');
     }
     // Append telemetry for each box
-    TelemetryService.I.increment('key_rotation.box_completed');
+    _telemetry.increment('key_rotation.box_completed');
     final state = meta.get(_rotationStateKey) as Map?;
     if (state != null) {
       final list = (state['boxes_completed'] as List?)?.cast<String>() ?? <String>[];
@@ -188,23 +248,23 @@ class HiveService {
   Box _typedBox(String name) {
     switch (name) {
       case BoxRegistry.roomsBox:
-        return Hive.box<RoomModel>(name);
+        return BoxAccess.I.rooms();
       case BoxRegistry.pendingOpsBox:
-        return Hive.box<PendingOp>(name);
+        return BoxAccess.I.pendingOps();
       case BoxRegistry.vitalsBox:
-        return Hive.box<VitalsModel>(name);
+        return BoxAccess.I.vitals();
       case BoxRegistry.userProfileBox:
-        return Hive.box(name); // could be UserProfileModel typed if defined
+        return BoxAccess.I.boxUntyped(name); // could be UserProfileModel typed if defined
       case BoxRegistry.sessionsBox:
-        return Hive.box(name); // SessionModel
+        return BoxAccess.I.boxUntyped(name); // SessionModel
       case BoxRegistry.failedOpsBox:
-        return Hive.box<FailedOpModel>(name);
+        return BoxAccess.I.failedOps();
       case BoxRegistry.auditLogsBox:
-        return Hive.box<AuditLogRecord>(name);
+        return BoxAccess.I.auditLogs();
       case BoxRegistry.settingsBox:
-        return Hive.box<SettingsModel>(name);
+        return BoxAccess.I.settings();
       default:
-        return Hive.box(name);
+        return BoxAccess.I.boxUntyped(name);
     }
   }
 
@@ -234,44 +294,125 @@ class HiveService {
   Future<void> _openBoxes(List<int> key) async {
     final cipher = HiveAesCipher(key);
     final sw = Stopwatch()..start();
-    try {
-      await Future.wait([
-        Hive.openBox<RoomModel>(BoxRegistry.roomsBox, encryptionCipher: cipher),
-        Hive.openBox<PendingOp>(BoxRegistry.pendingOpsBox, encryptionCipher: cipher),
-        Hive.openBox<VitalsModel>(BoxRegistry.vitalsBox, encryptionCipher: cipher),
-        Hive.openBox(BoxRegistry.userProfileBox, encryptionCipher: cipher),
-        Hive.openBox(BoxRegistry.sessionsBox, encryptionCipher: cipher),
-        Hive.openBox(BoxRegistry.failedOpsBox, encryptionCipher: cipher),
-        Hive.openBox(BoxRegistry.auditLogsBox, encryptionCipher: cipher),
-        Hive.openBox(BoxRegistry.assetsCacheBox),
-        Hive.openBox(BoxRegistry.uiPreferencesBox),
-        Hive.openBox(BoxRegistry.settingsBox, encryptionCipher: cipher),
-        Hive.openBox(BoxRegistry.metaBox),
-        Hive.openBox(BoxRegistry.pendingIndexBox),
-      ]);
-    } catch (e) {
-      await _backupRawFiles();
-      TelemetryService.I.increment('corruption.events');
-      try {
-        await Hive.openBox(BoxRegistry.metaBox);
-        await Hive.openBox(BoxRegistry.uiPreferencesBox);
-      } catch (_) {}
-    }
+    
+    // Open boxes with individual error handling and recovery
+    // All typed boxes must specify their type to avoid Box<dynamic> conflicts
+    await _openBoxSafely<RoomModel>(BoxRegistry.roomsBox, cipher: cipher);
+    await _openBoxSafely<PendingOp>(BoxRegistry.pendingOpsBox, cipher: cipher);
+    await _openBoxSafely<VitalsModel>(BoxRegistry.vitalsBox, cipher: cipher);
+    await _openBoxSafely<dynamic>(BoxRegistry.userProfileBox, cipher: cipher);
+    await _openBoxSafely<dynamic>(BoxRegistry.sessionsBox, cipher: cipher);
+    await _openBoxSafely<FailedOpModel>(BoxRegistry.failedOpsBox, cipher: cipher);
+    await _openBoxSafely<AuditLogRecord>(BoxRegistry.auditLogsBox, cipher: cipher);
+    await _openBoxSafely<dynamic>(BoxRegistry.assetsCacheBox, cipher: null);
+    await _openBoxSafely<dynamic>(BoxRegistry.uiPreferencesBox, cipher: null);
+    await _openBoxSafely<SettingsModel>(BoxRegistry.settingsBox, cipher: cipher);
+    await _openBoxSafely<dynamic>(BoxRegistry.metaBox, cipher: null);
+    await _openBoxSafely<dynamic>(BoxRegistry.pendingIndexBox, cipher: null);
+    
     sw.stop();
-    TelemetryService.I.time('hive.open.duration_ms', () => sw.elapsed);
+    _telemetry.time('hive.open.duration_ms', () => sw.elapsed);
   }
 
-  Future<void> _backupRawFiles() async {
-    // Determine Hive root by checking current directory for box files.
-    final root = Directory.current.path;
-    final backupDir = Directory('$root/corruption_backups');
-    if (!backupDir.existsSync()) backupDir.createSync(recursive: true);
-    final stamp = DateTime.now().toUtc().toIso8601String().replaceAll(':', '-');
-    for (final name in BoxRegistry.allBoxes) {
-      final f = File('$root/$name.hive');
-      if (f.existsSync()) {
-        f.copySync('${backupDir.path}/$name.$stamp.bak');
+  /// Opens a single box with try/catch recovery.
+  /// 
+  /// On corruption:
+  /// 1. Marks box as corrupted (telemetry)
+  /// 2. Attempts backup of corrupt file
+  /// 3. Attempts to delete and recreate empty box
+  /// 4. If all fails, logs and continues (non-fatal for most boxes)
+  Future<Box<T>?> _openBoxSafely<T>(
+    String boxName, {
+    HiveAesCipher? cipher,
+  }) async {
+    try {
+      if (Hive.isBoxOpen(boxName)) {
+        return BoxAccess.I.box<T>(boxName);
       }
+      
+      final box = await Hive.openBox<T>(
+        boxName,
+        encryptionCipher: cipher,
+      );
+      
+      // Register box encryption status for policy enforcement
+      if (cipher != null) {
+        EncryptionPolicyEnforcer.registerEncryptedBox(boxName);
+      }
+      
+      _telemetry.increment('hive.box_open.success.$boxName');
+      return box;
+    } catch (e) {
+      // Mark box as corrupted
+      _telemetry.increment('hive.box_open.failed.$boxName');
+      _telemetry.increment('corruption.events');
+      print('[HiveService] Box "$boxName" failed to open: $e');
+      
+      // Attempt recovery
+      await _attemptBoxRecovery<T>(boxName, cipher, e);
+      return null;
+    }
+  }
+  
+  /// Attempts to recover a corrupted box.
+  /// 
+  /// Recovery steps:
+  /// 1. Backup the corrupt file
+  /// 2. Delete the corrupt file
+  /// 3. Try to open fresh empty box
+  Future<void> _attemptBoxRecovery<T>(
+    String boxName,
+    HiveAesCipher? cipher,
+    Object originalError,
+  ) async {
+    final stamp = DateTime.now().toUtc().toIso8601String().replaceAll(':', '-');
+    
+    try {
+      // Find and backup corrupt file
+      String? boxPath;
+      try {
+        // Try to determine Hive's path from an open box or app documents
+        if (Hive.isBoxOpen(BoxRegistry.metaBox)) {
+          final metaBox = BoxAccess.I.meta();
+          boxPath = metaBox.path?.replaceAll('/${BoxRegistry.metaBox}.hive', '/$boxName.hive');
+        }
+      } catch (_) {}
+      
+      if (boxPath != null) {
+        final corruptFile = File(boxPath);
+        if (corruptFile.existsSync()) {
+          // Create backup directory
+          final backupDir = Directory('${corruptFile.parent.path}/corruption_backups');
+          if (!backupDir.existsSync()) {
+            backupDir.createSync(recursive: true);
+          }
+          
+          // Backup corrupt file
+          final backupPath = '${backupDir.path}/$boxName.$stamp.corrupt.bak';
+          corruptFile.copySync(backupPath);
+          print('[HiveService] Backed up corrupt box to: $backupPath');
+          _telemetry.increment('hive.box_recovery.backup_success.$boxName');
+          
+          // Delete corrupt file
+          corruptFile.deleteSync();
+          print('[HiveService] Deleted corrupt box file: $boxPath');
+          
+          // Attempt to open fresh box
+          await Hive.openBox<T>(boxName, encryptionCipher: cipher);
+          print('[HiveService] Recovered box "$boxName" (data lost)');
+          _telemetry.increment('hive.box_recovery.success.$boxName');
+          return;
+        }
+      }
+      
+      // If we couldn't find/backup the file, still try to open fresh
+      await Hive.openBox<T>(boxName, encryptionCipher: cipher);
+      _telemetry.increment('hive.box_recovery.success_no_backup.$boxName');
+    } catch (recoveryError) {
+      _telemetry.increment('hive.box_recovery.failed.$boxName');
+      print('[HiveService] Recovery failed for "$boxName": $recoveryError');
+      print('[HiveService] Original error was: $originalError');
+      // Don't rethrow - let app continue with degraded functionality
     }
   }
 

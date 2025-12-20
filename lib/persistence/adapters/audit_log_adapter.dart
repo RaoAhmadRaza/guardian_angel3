@@ -4,7 +4,7 @@ import '../box_registry.dart';
 
 class AuditLogRecordAdapter extends TypeAdapter<AuditLogRecord> {
   @override
-  final int typeId = TypeIds.auditLog;
+  final int typeId = TypeIds.auditLogRecord;
 
   @override
   AuditLogRecord read(BinaryReader reader) {

@@ -3,30 +3,44 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Theme provider for managing dark/light mode switching with persistence
 ///
-/// This provider handles:
-/// - Theme state management using ChangeNotifier
-/// - Persistent storage using SharedPreferences
-/// - Seamless theme switching without app restart
+/// ⚠️ DEPRECATED: Use ThemeController from theme_controller.dart instead.
+/// This class is kept for backward compatibility only.
+///
+/// Migration:
+/// ```dart
+/// // OLD:
+/// ThemeProvider.instance.setThemeMode(ThemeMode.dark);
+///
+/// // NEW:
+/// ref.read(themeControllerProvider.notifier).setThemeMode(ThemeMode.dark);
+/// ```
+@Deprecated('Use themeControllerProvider from theme_controller.dart instead')
 class ThemeProvider with ChangeNotifier {
   static const String _themePreferenceKey = 'theme_mode';
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // SINGLETON (DEPRECATED - Use themeControllerProvider instead)
+  // ═══════════════════════════════════════════════════════════════════════
+  @Deprecated('Use themeControllerProvider from theme_controller.dart instead')
   static ThemeProvider? _instance;
 
-  ThemeMode _themeMode = ThemeMode.system;
-  bool _isInitialized = false;
-
-  /// Get singleton instance
+  @Deprecated('Use themeControllerProvider from theme_controller.dart instead')
   static ThemeProvider get instance {
     _instance ??= ThemeProvider._internal();
     return _instance!;
   }
 
-  /// Get theme provider from context
+  /// Get theme provider from context (DEPRECATED)
+  @Deprecated('Use ref.watch(themeControllerProvider) instead')
   static ThemeProvider of(BuildContext context) {
     return instance;
   }
 
   /// Private constructor
   ThemeProvider._internal();
+
+  ThemeMode _themeMode = ThemeMode.system;
+  bool _isInitialized = false;
 
   /// Current theme mode
   ThemeMode get themeMode => _themeMode;

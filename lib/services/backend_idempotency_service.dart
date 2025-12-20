@@ -13,11 +13,13 @@ enum IdempotencySupport {
 /// `X-Idempotency-Accepted: true`.
 class BackendIdempotencyService {
   final Dio _client;
+  final TelemetryService _telemetry;
   IdempotencySupport _support = IdempotencySupport.unknown;
   DateTime? _lastHandshakeAt;
 
-  BackendIdempotencyService({Dio? client})
-      : _client = client ?? Dio();
+  BackendIdempotencyService({Dio? client, TelemetryService? telemetry})
+      : _client = client ?? Dio(),
+        _telemetry = telemetry ?? TelemetryService.I;
 
   IdempotencySupport get support => _support;
 
@@ -51,8 +53,8 @@ class BackendIdempotencyService {
       _lastHandshakeAt = DateTime.now().toUtc();
       
       sw.stop();
-      TelemetryService.I.time('backend_idempotency.handshake.duration_ms', () => sw.elapsed);
-      TelemetryService.I.gauge('backend_idempotency.supported', accepted ? 1 : 0);
+      _telemetry.time('backend_idempotency.handshake.duration_ms', () => sw.elapsed);
+      _telemetry.gauge('backend_idempotency.supported', accepted ? 1 : 0);
       
       return accepted;
     } on DioException {
@@ -60,16 +62,16 @@ class BackendIdempotencyService {
       _support = IdempotencySupport.unsupported;
       _lastHandshakeAt = DateTime.now().toUtc();
       sw.stop();
-      TelemetryService.I.time('backend_idempotency.handshake.duration_ms', () => sw.elapsed);
-      TelemetryService.I.gauge('backend_idempotency.supported', 0);
-      TelemetryService.I.increment('backend_idempotency.handshake.errors');
+      _telemetry.time('backend_idempotency.handshake.duration_ms', () => sw.elapsed);
+      _telemetry.gauge('backend_idempotency.supported', 0);
+      _telemetry.increment('backend_idempotency.handshake.errors');
       return false;
     } catch (e) {
       // Other error - also treat as unsupported
       _support = IdempotencySupport.unsupported;
       _lastHandshakeAt = DateTime.now().toUtc();
       sw.stop();
-      TelemetryService.I.increment('backend_idempotency.handshake.errors');
+      _telemetry.increment('backend_idempotency.handshake.errors');
       return false;
     }
   }
@@ -80,7 +82,7 @@ class BackendIdempotencyService {
     final accepted = _checkIdempotencyHeader(response);
     if (!accepted && _support == IdempotencySupport.supported) {
       // Backend previously supported but now doesn't - log degradation
-      TelemetryService.I.increment('backend_idempotency.support_degraded');
+      _telemetry.increment('backend_idempotency.support_degraded');
     }
     return accepted;
   }

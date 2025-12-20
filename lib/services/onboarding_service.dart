@@ -6,15 +6,23 @@ class OnboardingService {
   static const String _onboardingVersionKey = 'onboarding_version';
   static const int _currentOnboardingVersion = 1; // Increment this to force re-onboarding
   
+  // ═══════════════════════════════════════════════════════════════════════
+  // SINGLETON (DEPRECATED - Use Riverpod provider instead)
+  // ═══════════════════════════════════════════════════════════════════════
+  @Deprecated('Use onboardingServiceProvider from service_providers.dart instead')
   static OnboardingService? _instance;
-
-  /// Get singleton instance
+  @Deprecated('Use onboardingServiceProvider from service_providers.dart instead')
   static OnboardingService get instance {
     _instance ??= OnboardingService._internal();
     return _instance!;
   }
-
   OnboardingService._internal();
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // PROPER DI CONSTRUCTOR (Use this via Riverpod)
+  // ═══════════════════════════════════════════════════════════════════════
+  /// Creates a new OnboardingService instance for dependency injection.
+  OnboardingService();
 
   /// Check if onboarding has been completed for the current version
   Future<bool> hasCompletedOnboarding() async {

@@ -2,7 +2,7 @@
 
 import 'package:uuid/uuid.dart';
 import 'package:hive/hive.dart';
-import '../../data/hive_adapters/pending_op_hive.dart';
+import 'package:guardian_angel_fyp/persistence/models/pending_op.dart';
 
 /// Standardized control op payload shape:
 /// {
@@ -47,7 +47,7 @@ class ControlOpHelper {
       if (meta != null) 'meta': meta,
     };
 
-    final pending = PendingOp(
+    final pending = PendingOp.forHomeAutomation(
       opId: opId,
       entityId: deviceId,
       entityType: 'device',

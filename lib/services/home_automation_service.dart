@@ -1,16 +1,48 @@
 /// Home Automation Service
 /// Manages the business logic for home automation features
+///
+/// ⚠️ DEPRECATED: PHASE 3 - This service uses hardcoded sample data.
+/// Use [HomeAutomationRepositoryHive] via providers instead:
+/// - roomsControllerProvider → for rooms
+/// - devicesControllerProvider(roomId) → for devices
+/// The Hive repository is the ONLY authoritative source of truth.
+///
+/// ❌ THIS CLASS WILL THROW IF ANY METHOD IS CALLED.
+/// All consumers must migrate to the Hive repository.
 
 import '../models/home_automation_models.dart';
 
+/// Exception thrown when deprecated HomeAutomationService is used.
+class DeprecatedServiceError extends Error {
+  final String message;
+  DeprecatedServiceError(this.message);
+  @override
+  String toString() => 'DeprecatedServiceError: $message\n'
+      'Use HomeAutomationRepositoryHive via roomsControllerProvider/devicesControllerProvider instead.';
+}
+
+@Deprecated('PHASE 3: Use HomeAutomationRepositoryHive via domain_providers.dart')
 class HomeAutomationService {
+  // ═══════════════════════════════════════════════════════════════════════
+  // SINGLETON (DEPRECATED - Use Riverpod provider instead)
+  // ═══════════════════════════════════════════════════════════════════════
+  @Deprecated('Use homeAutomationServiceProvider from service_providers.dart instead')
   static HomeAutomationService? _instance;
+  @Deprecated('Use homeAutomationServiceProvider from service_providers.dart instead')
   static HomeAutomationService get instance {
-    _instance ??= HomeAutomationService._internal();
-    return _instance!;
+    throw DeprecatedServiceError('HomeAutomationService.instance is deprecated');
+  }
+  HomeAutomationService._internal() {
+    throw DeprecatedServiceError('HomeAutomationService is deprecated');
   }
 
-  HomeAutomationService._internal();
+  // ═══════════════════════════════════════════════════════════════════════
+  // PROPER DI CONSTRUCTOR (Use this via Riverpod)
+  // ═══════════════════════════════════════════════════════════════════════
+  /// Creates a new HomeAutomationService instance for dependency injection.
+  HomeAutomationService() {
+    throw DeprecatedServiceError('HomeAutomationService is deprecated');
+  }
 
   Home? _currentHome;
   String? _selectedRoomId;
@@ -18,17 +50,17 @@ class HomeAutomationService {
 
   /// Initialize with sample data
   void initialize() {
-    _currentHome = _createSampleHome();
+    throw DeprecatedServiceError('initialize() is deprecated');
   }
 
   /// Get current home
-  Home? get currentHome => _currentHome;
+  Home? get currentHome => throw DeprecatedServiceError('currentHome is deprecated');
 
   /// Get selected room ID
-  String? get selectedRoomId => _selectedRoomId;
+  String? get selectedRoomId => throw DeprecatedServiceError('selectedRoomId is deprecated');
 
   /// Get selected device ID
-  String? get selectedDeviceId => _selectedDeviceId;
+  String? get selectedDeviceId => throw DeprecatedServiceError('selectedDeviceId is deprecated');
 
   /// Get selected room
   Room? get selectedRoom {

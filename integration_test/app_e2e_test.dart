@@ -9,7 +9,7 @@ import 'package:guardian_angel_fyp/home%20automation/src/core/keys.dart';
 import 'package:guardian_angel_fyp/home%20automation/src/utils/network_status_provider.dart';
 import 'package:guardian_angel_fyp/home%20automation/src/data/local_hive_service.dart';
 import 'package:guardian_angel_fyp/home%20automation/src/data/hive_adapters/device_model_hive.dart';
-import 'package:guardian_angel_fyp/home%20automation/src/data/hive_adapters/pending_op_hive.dart';
+import 'package:guardian_angel_fyp/persistence/models/pending_op.dart';
 import 'package:guardian_angel_fyp/home%20automation/src/logic/providers/device_providers.dart';
 // room_providers not needed explicitly here
 import 'package:guardian_angel_fyp/home%20automation/src/data/models/device_model.dart' as domain;

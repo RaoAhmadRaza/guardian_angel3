@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../src/automation/automation_observability.dart';
 import '../../src/automation/automation_providers.dart';
 import '../../src/automation/adapters/mqtt_driver.dart';
-import '../../src/data/hive_adapters/pending_op_hive.dart';
+import 'package:guardian_angel_fyp/persistence/models/pending_op.dart';
 import '../../src/data/local_hive_service.dart';
 import 'package:hive/hive.dart';
 

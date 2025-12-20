@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/hive_adapters/pending_op_hive.dart';
+import 'package:guardian_angel_fyp/persistence/models/pending_op.dart';
 import '../../data/local_hive_service.dart';
 
 /// Debounced control queue to reduce write pressure to the pending ops box
@@ -72,7 +72,7 @@ class _IntensityDebounce {
   void _fire() {
     final now = DateTime.now();
     final opId = 'op_${now.millisecondsSinceEpoch}_$deviceId';
-    final op = PendingOp(
+    final op = PendingOp.forHomeAutomation(
       opId: opId,
       entityId: deviceId,
       entityType: 'device',

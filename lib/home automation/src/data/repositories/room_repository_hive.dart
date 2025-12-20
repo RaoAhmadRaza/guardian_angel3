@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:hive/hive.dart';
 import '../models/room_model.dart' as domain;
 import '../hive_adapters/room_model_hive.dart';
-import '../hive_adapters/pending_op_hive.dart';
+import 'package:guardian_angel_fyp/persistence/models/pending_op.dart';
 import '../../core/utils/id_generator.dart';
 import '../../data/file_storage.dart';
 import 'room_repository.dart';
@@ -112,7 +112,7 @@ class RoomRepositoryHive implements RoomRepository {
     mergedPayload.putIfAbsent('operationId', () => opId);
     mergedPayload['clientId'] = _clientId;
 
-    final op = PendingOp(
+    final op = PendingOp.forHomeAutomation(
       opId: opId,
       entityId: entityId,
       entityType: 'room',

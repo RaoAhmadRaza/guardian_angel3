@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
-import '../../data/hive_adapters/pending_op_hive.dart';
+import 'package:guardian_angel_fyp/persistence/models/pending_op.dart';
 import '../../data/local_hive_service.dart';
 
 final failedOpsBoxProvider = Provider<Box<PendingOp>>((ref) => LocalHiveService.failedOpsBox());
@@ -33,10 +33,9 @@ class FailedOpsController {
     final pending = LocalHiveService.pendingOpsBox();
     final op = failed.get(opId);
     if (op == null) return;
-    op.attempts = 0;
-    op.lastAttemptAt = null;
+    final resetOp = op.copyWith(attempts: 0, lastTriedAt: null);
     await failed.delete(opId);
-    await pending.put(opId, op);
+    await pending.put(opId, resetOp);
   }
 
   /// Remove a failed op permanently.

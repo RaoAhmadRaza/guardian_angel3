@@ -3,7 +3,9 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
-import 'package:guardian_angel_fyp/home automation/src/data/hive_adapters/pending_op_hive.dart';
+import 'package:guardian_angel_fyp/persistence/models/pending_op.dart';
+import 'package:guardian_angel_fyp/persistence/adapters/pending_op_adapter.dart';
+import 'package:guardian_angel_fyp/persistence/box_registry.dart';
 
 /// Performance and load testing for queue/index operations with 10k+ PendingOps
 /// 
@@ -29,7 +31,7 @@ void main() {
     Hive.init(tempDir.path);
     
     // Open pending ops box
-    pendingBox = await Hive.openBox<PendingOp>(kPendingOpsBoxName);
+    pendingBox = await Hive.openBox<PendingOp>(BoxRegistry.pendingOpsBox);
   });
 
   tearDown(() async {
@@ -550,7 +552,7 @@ PendingOp _generatePendingOp(int index) {
   final entityTypes = ['room', 'device'];
   final opTypes = ['create', 'update', 'delete', 'toggle', 'control'];
   
-  return PendingOp(
+  return PendingOp.forHomeAutomation(
     opId: 'op_$index',
     entityId: 'entity_${random.nextInt(1000)}',
     entityType: entityTypes[random.nextInt(entityTypes.length)],

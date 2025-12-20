@@ -1,6 +1,7 @@
 import 'package:hive/hive.dart';
-import '../../models/pending_op.dart';
+import '../models/pending_op.dart';
 import '../box_registry.dart';
+import '../queue/op_priority.dart';
 
 class PendingOpAdapter extends TypeAdapter<PendingOp> {
   @override
@@ -24,6 +25,11 @@ class PendingOpAdapter extends TypeAdapter<PendingOp> {
       final schemaVersion = (fields[7] as int?) ?? 1;
       final createdAtStr = fields[8] as String?;
       final updatedAtStr = fields[9] as String?;
+      final lastTriedAtStr = fields[10] as String?; // Field 10: lastTriedAt
+      final nextEligibleAtStr = fields[11] as String?; // Field 11: nextEligibleAt
+      final entityKey = fields[12] as String?; // Field 12: entityKey
+      final priorityStr = fields[13] as String?; // Field 13: priority
+      final deliveryStateStr = fields[14] as String?; // Field 14: deliveryState
 
       return PendingOp(
         id: id,
@@ -33,6 +39,12 @@ class PendingOpAdapter extends TypeAdapter<PendingOp> {
         attempts: attempts,
         status: status,
         lastError: lastError,
+        lastTriedAt: lastTriedAtStr != null
+            ? DateTime.tryParse(lastTriedAtStr)?.toUtc()
+            : null,
+        nextEligibleAt: nextEligibleAtStr != null
+            ? DateTime.tryParse(nextEligibleAtStr)?.toUtc()
+            : null,
         schemaVersion: schemaVersion,
         createdAt: createdAtStr != null
             ? DateTime.tryParse(createdAtStr)?.toUtc() ?? DateTime.now().toUtc()
@@ -40,6 +52,9 @@ class PendingOpAdapter extends TypeAdapter<PendingOp> {
         updatedAt: updatedAtStr != null
             ? DateTime.tryParse(updatedAtStr)?.toUtc() ?? DateTime.now().toUtc()
             : DateTime.now().toUtc(),
+        entityKey: entityKey,
+        priority: OpPriority.fromString(priorityStr ?? 'normal'),
+        deliveryState: _parseDeliveryState(deliveryStateStr),
       );
     } catch (_) {
       return PendingOp(
@@ -54,11 +69,22 @@ class PendingOpAdapter extends TypeAdapter<PendingOp> {
       );
     }
   }
+  
+  static DeliveryState _parseDeliveryState(String? value) {
+    switch (value?.toLowerCase()) {
+      case 'sent':
+        return DeliveryState.sent;
+      case 'acknowledged':
+        return DeliveryState.acknowledged;
+      default:
+        return DeliveryState.pending;
+    }
+  }
 
   @override
   void write(BinaryWriter writer, PendingOp obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(15) // 15 fields now (added priority and deliveryState)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -78,6 +104,16 @@ class PendingOpAdapter extends TypeAdapter<PendingOp> {
       ..writeByte(8)
       ..write(obj.createdAt.toUtc().toIso8601String())
       ..writeByte(9)
-      ..write(obj.updatedAt.toUtc().toIso8601String());
+      ..write(obj.updatedAt.toUtc().toIso8601String())
+      ..writeByte(10)
+      ..write(obj.lastTriedAt?.toUtc().toIso8601String())
+      ..writeByte(11)
+      ..write(obj.nextEligibleAt?.toUtc().toIso8601String())
+      ..writeByte(12)
+      ..write(obj.entityKey)
+      ..writeByte(13)
+      ..write(obj.priority.name)
+      ..writeByte(14)
+      ..write(obj.deliveryState.name);
   }
 }

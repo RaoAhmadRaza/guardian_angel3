@@ -3,7 +3,7 @@ import 'package:hive/hive.dart';
 import '../../logic/sync/control_op_helper.dart';
 import '../models/device_model.dart' as domain;
 import '../hive_adapters/device_model_hive.dart';
-import '../hive_adapters/pending_op_hive.dart';
+import 'package:guardian_angel_fyp/persistence/models/pending_op.dart';
 import '../../core/utils/id_generator.dart';
 import 'device_repository.dart';
 
@@ -171,7 +171,7 @@ class DeviceRepositoryHive implements DeviceRepository {
     mergedPayload.putIfAbsent('operationId', () => opId);
     mergedPayload['clientId'] = _clientId;
 
-    final op = PendingOp(
+    final op = PendingOp.forHomeAutomation(
       opId: opId,
       entityId: entityId,
       entityType: 'device',

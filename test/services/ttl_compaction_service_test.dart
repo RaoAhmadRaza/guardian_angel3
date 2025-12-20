@@ -5,8 +5,10 @@ import 'package:hive_test/hive_test.dart';
 import 'package:guardian_angel_fyp/persistence/box_registry.dart';
 import 'package:guardian_angel_fyp/models/vitals_model.dart';
 import 'package:guardian_angel_fyp/models/settings_model.dart';
+import 'package:guardian_angel_fyp/models/pending_op.dart';
 import 'package:guardian_angel_fyp/persistence/adapters/vitals_adapter.dart';
 import 'package:guardian_angel_fyp/persistence/adapters/settings_adapter.dart';
+import 'package:guardian_angel_fyp/persistence/adapters/pending_op_adapter.dart';
 import 'package:guardian_angel_fyp/services/ttl_compaction_service.dart';
 
 void main() {
@@ -18,9 +20,13 @@ void main() {
     if (!Hive.isAdapterRegistered(SettingsModelAdapter().typeId)) {
       Hive.registerAdapter(SettingsModelAdapter());
     }
+    if (!Hive.isAdapterRegistered(PendingOpAdapter().typeId)) {
+      Hive.registerAdapter(PendingOpAdapter());
+    }
     await Hive.openBox<VitalsModel>(BoxRegistry.vitalsBox);
     await Hive.openBox<SettingsModel>(BoxRegistry.settingsBox);
-    await Hive.openBox(BoxRegistry.pendingOpsBox); // for low activity check
+    // Open with correct type to match BoxAccessor.pendingOps()
+    await Hive.openBox<PendingOp>(BoxRegistry.pendingOpsBox);
   });
 
   tearDown(() async {

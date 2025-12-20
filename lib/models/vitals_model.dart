@@ -1,5 +1,13 @@
 import 'dart:convert';
 
+/// PHASE 3 STEP 3.4: Validation error for model data integrity.
+class VitalsValidationError implements Exception {
+  final String message;
+  VitalsValidationError(this.message);
+  @override
+  String toString() => 'VitalsValidationError: $message';
+}
+
 class VitalsModel {
   final String id;
   final String userId;
@@ -30,6 +38,67 @@ class VitalsModel {
     required this.updatedAt,
     this.modelVersion = 1,
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 3 STEP 3.4: DATA VALIDATION AT WRITE BOUNDARIES
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Validates the model and returns it if valid.
+  /// Throws [VitalsValidationError] if any field is out of range.
+  ///
+  /// Usage in repository:
+  /// ```dart
+  /// await box.put(id, vitals.validated());
+  /// ```
+  VitalsModel validated() {
+    // Heart rate: 20-300 bpm (covers extremes)
+    if (heartRate < 20 || heartRate > 300) {
+      throw VitalsValidationError('Heart rate must be 20-300 bpm, got $heartRate');
+    }
+
+    // Blood pressure: systolic 50-250, diastolic 30-150
+    if (systolicBp < 50 || systolicBp > 250) {
+      throw VitalsValidationError('Systolic BP must be 50-250 mmHg, got $systolicBp');
+    }
+    if (diastolicBp < 30 || diastolicBp > 150) {
+      throw VitalsValidationError('Diastolic BP must be 30-150 mmHg, got $diastolicBp');
+    }
+
+    // Oxygen: 0-100%
+    if (oxygenPercent != null && (oxygenPercent! < 0 || oxygenPercent! > 100)) {
+      throw VitalsValidationError('Oxygen percent must be 0-100%, got $oxygenPercent');
+    }
+
+    // Temperature: 30-45°C (covers extremes)
+    if (temperatureC != null && (temperatureC! < 30.0 || temperatureC! > 45.0)) {
+      throw VitalsValidationError('Temperature must be 30-45°C, got $temperatureC');
+    }
+
+    // Stress index: 0-100
+    if (stressIndex != null && (stressIndex! < 0.0 || stressIndex! > 100.0)) {
+      throw VitalsValidationError('Stress index must be 0-100, got $stressIndex');
+    }
+
+    // ID and userId must not be empty
+    if (id.isEmpty) {
+      throw VitalsValidationError('ID cannot be empty');
+    }
+    if (userId.isEmpty) {
+      throw VitalsValidationError('User ID cannot be empty');
+    }
+
+    return this;
+  }
+
+  /// Returns true if all fields are within valid ranges.
+  bool get isValid {
+    try {
+      validated();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   VitalsModel copyWith({
     int? heartRate,

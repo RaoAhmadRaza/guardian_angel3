@@ -5,6 +5,31 @@ import 'package:uuid/uuid.dart';
 import 'models/lock_record.dart';
 import 'telemetry_service.dart';
 
+/// ═══════════════════════════════════════════════════════════════════════════
+/// DEPRECATED FOR QUEUE PROCESSING
+/// ═══════════════════════════════════════════════════════════════════════════
+/// 
+/// This service provides general-purpose distributed locking but should
+/// NOT be used for PendingQueueService or queue-related operations.
+/// 
+/// For queue processing, use the canonical authority:
+///   lib/persistence/locking/processing_lock.dart
+/// 
+/// This service opens its own Hive boxes ('distributed_locks', 'runner_metadata')
+/// which are separate from the persistence layer's BoxRegistry. Using this
+/// for queue operations would create dual-lock scenarios and initialization
+/// order issues.
+/// 
+/// WHEN TO USE THIS:
+/// - General-purpose distributed locking for non-queue operations
+/// - Resource coordination between app components (not sync/queue)
+/// 
+/// WHEN NOT TO USE:
+/// - PendingQueueService (use ProcessingLock from persistence/locking/)
+/// - SyncEngine (use ProcessingLock from sync/)
+/// - Any queue/sync processing
+/// ═══════════════════════════════════════════════════════════════════════════
+/// 
 /// LockService provides distributed locking with heartbeat monitoring.
 /// 
 /// Features:
@@ -44,12 +69,17 @@ class LockService {
   
   static final _uuid = Uuid();
   
+  final TelemetryService _telemetry;
   Box<LockRecord>? _lockBox;
   Box? _runnerBox;
   String? _runnerId;
   
   /// Active heartbeat timers per lock name
   final Map<String, Timer> _heartbeatTimers = {};
+  
+  /// Creates a LockService with optional injected TelemetryService.
+  LockService({TelemetryService? telemetry})
+      : _telemetry = telemetry ?? TelemetryService.I;
 
   /// Initialize lock service and generate/load runner ID
   Future<void> init() async {
@@ -113,8 +143,8 @@ class LockService {
       );
       await _lockBox!.put(lockName, lock);
 
-      TelemetryService.I.increment('lock.acquired');
-      TelemetryService.I.gauge('lock.${lockName}.holder', runnerId.hashCode);
+      _telemetry.increment('lock.acquired');
+      _telemetry.gauge('lock.${lockName}.holder', runnerId.hashCode);
       
       print('[LockService] Acquired lock: $lockName');
       return true;
@@ -136,16 +166,16 @@ class LockService {
       );
       await _lockBox!.put(lockName, lock);
 
-      TelemetryService.I.increment('lock.takeover_detected');
-      TelemetryService.I.increment('lock.stale_detected');
-      TelemetryService.I.gauge('lock.${lockName}.holder', runnerId.hashCode);
+      _telemetry.increment('lock.takeover_detected');
+      _telemetry.increment('lock.stale_detected');
+      _telemetry.gauge('lock.${lockName}.holder', runnerId.hashCode);
 
       print('[LockService] Took over stale lock: $lockName (previous: ${existingLock.runnerId}, stale for ${existingLock.timeSinceHeartbeat.inSeconds}s)');
       return true;
     }
 
     // Case 4: Lock held by active runner - cannot acquire
-    TelemetryService.I.increment('lock.contention');
+    _telemetry.increment('lock.contention');
     print('[LockService] Lock $lockName held by ${existingLock.runnerId} (heartbeat ${existingLock.timeSinceHeartbeat.inSeconds}s ago)');
     return false;
   }
@@ -163,13 +193,13 @@ class LockService {
 
     if (!existingLock.isOwnedBy(runnerId)) {
       print('[LockService] Warning: Attempting to release lock $lockName not owned by current runner');
-      TelemetryService.I.increment('lock.release_mismatch');
+      _telemetry.increment('lock.release_mismatch');
       return;
     }
 
     await _lockBox!.delete(lockName);
-    TelemetryService.I.increment('lock.released');
-    TelemetryService.I.gauge('lock.${lockName}.hold_duration_ms', existingLock.age.inMilliseconds);
+    _telemetry.increment('lock.released');
+    _telemetry.gauge('lock.${lockName}.hold_duration_ms', existingLock.age.inMilliseconds);
 
     print('[LockService] Released lock: $lockName (held for ${existingLock.age.inSeconds}s, ${existingLock.renewalCount} renewals)');
   }
@@ -193,7 +223,7 @@ class LockService {
     existingLock.renewHeartbeat();
     await _lockBox!.put(lockName, existingLock);
 
-    TelemetryService.I.increment('lock.heartbeat_renewed');
+    _telemetry.increment('lock.heartbeat_renewed');
 
     return true;
   }
@@ -209,7 +239,7 @@ class LockService {
         // Heartbeat renewal failed - stop timer
         print('[LockService] Heartbeat renewal failed for $lockName, stopping heartbeat');
         stopHeartbeat(lockName);
-        TelemetryService.I.increment('lock.heartbeat_failure');
+        _telemetry.increment('lock.heartbeat_failure');
       }
     });
 
@@ -271,13 +301,13 @@ class LockService {
       if (lock.isStale(stalenessThreshold)) {
         await _lockBox!.delete(lock.lockName);
         cleaned++;
-        TelemetryService.I.increment('lock.stale_cleaned');
+        _telemetry.increment('lock.stale_cleaned');
         print('[LockService] Cleaned stale lock: ${lock.lockName} (runner: ${lock.runnerId}, stale for ${lock.timeSinceHeartbeat.inSeconds}s)');
       }
     }
 
     if (cleaned > 0) {
-      TelemetryService.I.gauge('lock.cleanup_count', cleaned);
+      _telemetry.gauge('lock.cleanup_count', cleaned);
     }
 
     return cleaned;

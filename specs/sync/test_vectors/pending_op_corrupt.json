@@ -1,0 +1,210 @@
+{
+  "description": "Corrupted pending operation with invalid/missing payload fields",
+  "operation": {
+    "id": "badc0ffe-badc-0ffe-badc-0ffebadc0ffe",
+    "idempotency_key": "deadc0de-dead-c0de-dead-c0dedeadc0de",
+    "trace_id": "badbeef0-badb-eef0-badb-eef0badbeef0",
+    "type": "UPDATE_ROOM",
+    "payload": {
+      "name": "Living Room (Updated)",
+      "version": "not-a-number"
+    },
+    "created_at": "2025-11-22T12:15:00.000Z",
+    "attempts": 0,
+    "last_attempted_at": null,
+    "next_retry_at": null
+  },
+  "corruption_issues": [
+    {
+      "field": "payload.room_id",
+      "issue": "Missing required path parameter",
+      "severity": "critical",
+      "impact": "Cannot construct API endpoint"
+    },
+    {
+      "field": "payload.version",
+      "issue": "Invalid type (string instead of int)",
+      "severity": "critical",
+      "impact": "API will reject with 400 Bad Request"
+    }
+  ],
+  "expected_request_attempt": {
+    "method": "PUT",
+    "url": "/api/v1/rooms/{room_id}",
+    "failure_point": "Path building",
+    "error": "ValidationException: Missing required path parameter: room_id"
+  },
+  "expected_response": {
+    "status_code": 400,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Request-Id": "req_9ZkLdO3fF1Q7yS0pP4uV"
+    },
+    "body": {
+      "meta": {
+        "trace_id": "badbeef0-badb-eef0-badb-eef0badbeef0",
+        "timestamp": "2025-11-22T12:15:00.678Z"
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Invalid field type: version must be integer",
+        "details": {
+          "field": "version",
+          "constraint": "type",
+          "expected_type": "integer",
+          "actual_type": "string"
+        }
+      }
+    }
+  },
+  "expected_outcome": {
+    "success": false,
+    "exception_type": "ValidationException",
+    "retry_attempted": false,
+    "operation_moved_to_failed_ops": true,
+    "user_notified": true
+  },
+  "test_scenarios": [
+    {
+      "name": "Detect missing path parameter",
+      "description": "Router detects missing room_id before sending request",
+      "assertions": [
+        "ValidationException thrown in router",
+        "Error message: 'Missing required path parameter: room_id'",
+        "No HTTP request sent (caught locally)",
+        "Operation moved to failed_ops immediately"
+      ]
+    },
+    {
+      "name": "Backend validation error",
+      "description": "If local validation missed, backend catches invalid type",
+      "setup": "Assume room_id present but version is string",
+      "assertions": [
+        "HTTP request sent with invalid payload",
+        "Backend returns 400 Bad Request",
+        "ValidationException thrown with field='version'",
+        "Operation moved to failed_ops (permanent error)"
+      ]
+    },
+    {
+      "name": "Failed ops storage",
+      "description": "Corrupted operation stored in failed_ops with details",
+      "assertions": [
+        "FailedOp created with original PendingOp data",
+        "Error message preserved",
+        "failureReason = 'ValidationException: ...'",
+        "Timestamp of failure recorded",
+        "Original idempotency_key preserved"
+      ]
+    },
+    {
+      "name": "User notification",
+      "description": "User is notified of permanent failure",
+      "assertions": [
+        "Error toast/snackbar shown",
+        "Message: 'Failed to update room: Invalid field type'",
+        "User can view failed_ops in settings",
+        "User can retry after manual fix"
+      ]
+    },
+    {
+      "name": "No retry loop",
+      "description": "Permanent errors do not retry",
+      "assertions": [
+        "Operation attempts = 1",
+        "No exponential backoff applied",
+        "Immediately moved to failed_ops",
+        "No network spam with invalid data"
+      ]
+    }
+  ],
+  "corruption_scenarios": [
+    {
+      "scenario": "Hive database corruption",
+      "cause": "App crash during write, disk error, or manual database edit",
+      "detection": "Deserialization fails or type mismatch",
+      "recovery": "Skip operation, log error, notify user"
+    },
+    {
+      "scenario": "Schema migration bug",
+      "cause": "Migration script has bug, leaves data inconsistent",
+      "detection": "Type mismatch or missing field",
+      "recovery": "Detect old schema, apply fix-up logic"
+    },
+    {
+      "scenario": "Manual payload modification",
+      "cause": "Developer testing or debugging",
+      "detection": "Validation error",
+      "recovery": "Fail gracefully, show helpful error"
+    }
+  ],
+  "additional_corruption_examples": [
+    {
+      "description": "Missing email in CREATE_USER",
+      "payload": {
+        "display_name": "John Doe",
+        "birth_date": "1990-05-15T00:00:00.000Z"
+      },
+      "error": "ValidationException: Email address is required"
+    },
+    {
+      "description": "Invalid UUID format",
+      "payload": {
+        "room_id": "not-a-uuid",
+        "name": "Living Room"
+      },
+      "error": "ValidationException: Invalid UUID format for room_id"
+    },
+    {
+      "description": "Invalid enum value",
+      "payload": {
+        "device_type": "unknown_device",
+        "model": "Model-X"
+      },
+      "error": "ValidationException: Invalid device_type: unknown_device"
+    },
+    {
+      "description": "Negative version number",
+      "payload": {
+        "room_id": "987",
+        "name": "Living Room",
+        "version": -1
+      },
+      "error": "ValidationException: Version must be positive integer"
+    },
+    {
+      "description": "Future timestamp",
+      "payload": {
+        "bpm": 72,
+        "measured_at": "2099-12-31T23:59:59.000Z"
+      },
+      "error": "ValidationException: measured_at cannot be in the future"
+    }
+  ],
+  "testing_strategy": {
+    "unit_tests": [
+      "Test router validation logic with missing fields",
+      "Test type checking before serialization",
+      "Test error message generation"
+    ],
+    "integration_tests": [
+      "Send corrupted operation to mock API",
+      "Verify 400 response handling",
+      "Verify failed_ops migration"
+    ],
+    "fault_injection": [
+      "Corrupt Hive database manually",
+      "Inject type mismatches at runtime",
+      "Simulate schema migration bugs"
+    ]
+  },
+  "notes": [
+    "Corruption can occur at multiple layers: Hive storage, payload construction, network transmission",
+    "Local validation should catch most issues before network request",
+    "Backend validation is last line of defense",
+    "Permanent errors should NEVER retry (waste of resources)",
+    "Failed operations should be preserved for debugging and manual recovery",
+    "User-facing error messages should be helpful, not technical",
+    "Audit logs should capture full error context for debugging"
+  ]
+}

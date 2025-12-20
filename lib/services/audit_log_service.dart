@@ -7,10 +7,29 @@ import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
 import 'models/audit_log_entry.dart';
 import 'telemetry_service.dart';
+import '../persistence/wrappers/box_accessor.dart';
+
+// Shared instance management (avoids circular imports)
+AuditLogService? _sharedAuditLogInstance;
+
+/// Sets the shared AuditLogService instance.
+void setSharedAuditLogInstance(AuditLogService instance) {
+  _sharedAuditLogInstance = instance;
+}
+
+/// Gets or creates the shared AuditLogService instance.
+AuditLogService getSharedAuditLogInstance() {
+  return _sharedAuditLogInstance ??= AuditLogService(telemetry: TelemetryService.I);
+}
 
 /// Central audit log service with rotation, purging, and redaction
 class AuditLogService {
-  static final I = AuditLogService._();
+  // ═══════════════════════════════════════════════════════════════════════
+  // SINGLETON (DEPRECATED - Use ServiceInstances or Riverpod provider)
+  // ═══════════════════════════════════════════════════════════════════════
+  /// Legacy singleton accessor - routes to shared instance.
+  @Deprecated('Use auditLogServiceProvider or ServiceInstances.auditLog instead')
+  static AuditLogService get I => getSharedAuditLogInstance();
   
   final TelemetryService _telemetry;
   RetentionPolicy _retentionPolicy;
@@ -27,18 +46,31 @@ class AuditLogService {
   
   final _uuid = const Uuid();
   bool _initialized = false;
+  
+  /// Buffered entries logged before init() was called.
+  /// These are flushed after initialization.
+  final List<_BufferedLogEntry> _preInitBuffer = [];
+  
+  /// Maximum number of entries to buffer before init.
+  static const int _maxBufferSize = 100;
 
-  AuditLogService._()
-      : _telemetry = TelemetryService.I,
-        _retentionPolicy = RetentionPolicy.standard,
-        _archiveDirectory = '';
-        
-  // Legacy constructor for backward compatibility
-  factory AuditLogService({
+  // ═══════════════════════════════════════════════════════════════════════
+  // PROPER DI CONSTRUCTOR (Use this via Riverpod)
+  // ═══════════════════════════════════════════════════════════════════════
+  /// Creates a new AuditLogService instance for dependency injection.
+  AuditLogService({
     required TelemetryService telemetry,
     RetentionPolicy retentionPolicy = RetentionPolicy.standard,
-    String? archiveDirectory,
-  }) => I;
+    String archiveDirectory = '',
+  })  : _telemetry = telemetry,
+        _retentionPolicy = retentionPolicy,
+        _archiveDirectory = archiveDirectory;
+
+  /// Whether the service has been initialized.
+  bool get isInitialized => _initialized;
+  
+  /// Number of buffered entries waiting to be flushed.
+  int get bufferedCount => _preInitBuffer.length;
 
   /// Initialize the audit log service
   Future<void> init({
@@ -81,7 +113,79 @@ class AuditLogService {
     _initialized = true;
     _telemetry.increment('audit_log.service_initialized');
     
+    // Flush any buffered entries
+    await _flushBuffer();
+    
     print('[AuditLog] Service initialized with ${_retentionPolicy.activePeriod.inDays}d active, ${_retentionPolicy.archivePeriod.inDays}d archive retention');
+  }
+  
+  /// Buffer an entry when service is not yet initialized.
+  void _bufferEntry({
+    required String userId,
+    required String action,
+    String? entityType,
+    String? entityId,
+    Map<String, dynamic>? metadata,
+    String severity = 'info',
+    String? ipAddress,
+    String? deviceInfo,
+  }) {
+    // Don't buffer if already at capacity
+    if (_preInitBuffer.length >= _maxBufferSize) {
+      _telemetry.increment('audit_log.buffer_overflow');
+      return;
+    }
+    
+    _preInitBuffer.add(_BufferedLogEntry(
+      userId: userId,
+      action: action,
+      entityType: entityType,
+      entityId: entityId,
+      metadata: metadata,
+      severity: severity,
+      ipAddress: ipAddress,
+      deviceInfo: deviceInfo,
+      bufferedAt: DateTime.now(),
+    ));
+    
+    _telemetry.increment('audit_log.entry_buffered');
+  }
+  
+  /// Flush all buffered entries to the actual log.
+  Future<void> _flushBuffer() async {
+    if (_preInitBuffer.isEmpty) return;
+    
+    final count = _preInitBuffer.length;
+    
+    for (final buffered in _preInitBuffer) {
+      try {
+        final entry = AuditLogEntry(
+          entryId: _uuid.v4(),
+          timestamp: buffered.bufferedAt,
+          userId: buffered.userId,
+          action: buffered.action,
+          entityType: buffered.entityType,
+          entityId: buffered.entityId,
+          metadata: {
+            ...?buffered.metadata,
+            '_buffered': true,
+            '_buffer_delay_ms': DateTime.now().difference(buffered.bufferedAt).inMilliseconds,
+          },
+          severity: buffered.severity,
+          ipAddress: buffered.ipAddress,
+          deviceInfo: buffered.deviceInfo,
+        );
+
+        await _activeLogBox.put(entry.entryId, entry);
+      } catch (e) {
+        _telemetry.increment('audit_log.flush_entry_failed');
+      }
+    }
+    
+    _preInitBuffer.clear();
+    
+    _telemetry.gauge('audit_log.buffer_flushed_count', count);
+    print('[AuditLog] Flushed $count buffered entries');
   }
 
   /// Log an audit entry
@@ -95,8 +199,19 @@ class AuditLogService {
     String? ipAddress,
     String? deviceInfo,
   }) async {
+    // Buffer entries if not initialized yet
     if (!_initialized) {
-      throw StateError('AuditLogService not initialized. Call init() first.');
+      _bufferEntry(
+        userId: userId,
+        action: action,
+        entityType: entityType,
+        entityId: entityId,
+        metadata: metadata,
+        severity: severity,
+        ipAddress: ipAddress,
+        deviceInfo: deviceInfo,
+      );
+      return;
     }
 
     final entry = AuditLogEntry(
@@ -223,7 +338,7 @@ class AuditLogService {
   String _getArchiveFilePath(String archiveId) {
     if (_archiveDirectory.isEmpty) {
       // Use Hive directory
-      final hiveDir = Hive.box(_activeLogBoxName).path;
+      final hiveDir = BoxAccess.I.boxUntyped(_activeLogBoxName).path;
       final baseDir = path.dirname(hiveDir!);
       return path.join(baseDir, 'audit_archives', '$archiveId.alog');
     }
@@ -517,4 +632,78 @@ AuditLogStats:
   Retention: ${retentionPolicy.activePeriod.inDays}d active, ${retentionPolicy.archivePeriod.inDays}d archive
 ''';
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TYPED AUDIT LOGGING EXTENSION
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Extension for typed audit logging using AuditEvent.
+///
+/// Provides a type-safe way to log audit events with standardized
+/// types, severities, and entity types.
+extension TypedAuditLogging on AuditLogService {
+  /// Log a typed audit event.
+  ///
+  /// Use this for standardized audit logging with canonical types.
+  /// Example:
+  /// ```dart
+  /// await AuditLogService.I.logEvent(AuditEvent.sosTrigger(
+  ///   userId: userId,
+  ///   sosId: sosId,
+  ///   location: 'Home',
+  /// ));
+  /// ```
+  Future<void> logEvent(dynamic event) async {
+    // Import is circular, so we use dynamic and duck typing
+    final type = event.type;
+    final action = type.action as String;
+    final severity = type.severity as String;
+    final entityType = type.defaultEntityType as String;
+    final userId = event.userId as String;
+    final entityId = event.entityId as String?;
+    final metadata = event.metadata as Map<String, dynamic>;
+    final deviceInfo = event.deviceInfo as String?;
+    final ipAddress = event.ipAddress as String?;
+    
+    await log(
+      userId: userId,
+      action: action,
+      entityType: entityType,
+      entityId: entityId,
+      metadata: metadata,
+      severity: severity,
+      ipAddress: ipAddress,
+      deviceInfo: deviceInfo,
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BUFFERED LOG ENTRY (Internal)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Internal class to hold buffered log entries before init.
+class _BufferedLogEntry {
+  final String userId;
+  final String action;
+  final String? entityType;
+  final String? entityId;
+  final Map<String, dynamic>? metadata;
+  final String severity;
+  final String? ipAddress;
+  final String? deviceInfo;
+  final DateTime bufferedAt;
+  
+  _BufferedLogEntry({
+    required this.userId,
+    required this.action,
+    this.entityType,
+    this.entityId,
+    this.metadata,
+    this.severity = 'info',
+    this.ipAddress,
+    this.deviceInfo,
+    required this.bufferedAt,
+  });
 }

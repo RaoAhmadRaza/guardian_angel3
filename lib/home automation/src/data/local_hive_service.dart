@@ -1,14 +1,33 @@
 import 'package:hive/hive.dart';
 import 'hive_adapters/room_model_hive.dart';
 import 'hive_adapters/device_model_hive.dart';
-import 'hive_adapters/pending_op_hive.dart';
+import 'package:guardian_angel_fyp/persistence/models/pending_op.dart';
+import 'package:guardian_angel_fyp/persistence/box_registry.dart';
+import 'package:guardian_angel_fyp/models/failed_op_model.dart';
 import 'encryption/secure_key_storage.dart';
 
+/// Home Automation Local Hive Service
+/// 
+/// PHASE 1 BLOCKER FIX: Unified box naming via BoxRegistry.
+/// All box names now come from BoxRegistry as the single source of truth.
 class LocalHiveService {
-  static const String roomBoxName = 'rooms_v1';
-  static const String deviceBoxName = 'devices_v1';
-  static const String pendingOpsBoxName = 'pending_ops_v1';
-  static const String failedOpsBoxName = 'failed_ops_v1';
+  // ═══════════════════════════════════════════════════════════════════════
+  // BOX NAMES - All from BoxRegistry (single source of truth)
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  /// Room box name - uses BoxRegistry canonical name
+  /// Currently uses legacy name for backward compatibility.
+  /// TODO: Migrate to BoxRegistry.homeAutomationRoomsBox after migration runs.
+  static const String roomBoxName = BoxRegistry.homeAutomationRoomsBoxLegacy;
+  
+  /// Device box name - uses BoxRegistry canonical name
+  /// Currently uses legacy name for backward compatibility.
+  /// TODO: Migrate to BoxRegistry.homeAutomationDevicesBox after migration runs.
+  static const String deviceBoxName = BoxRegistry.homeAutomationDevicesBoxLegacy;
+  
+  /// CANONICAL box name - must match BoxRegistry.pendingOpsBox
+  static const String pendingOpsBoxName = BoxRegistry.pendingOpsBox;
+  static const String failedOpsBoxName = BoxRegistry.homeAutomationFailedOpsBox;
 
   static Future<void> openAllBoxes() async {
     await Hive.openBox<RoomModelHive>(roomBoxName);

@@ -4,21 +4,63 @@ import '../persistence/box_registry.dart';
 import '../models/vitals_model.dart';
 import '../models/settings_model.dart';
 import '../services/telemetry_service.dart';
+import '../persistence/wrappers/box_accessor.dart';
 
 class TtlCompactionService {
   final int defaultRetentionDays;
   final int compactionSizeThresholdBytes; // trigger if > threshold
   final int lowActivityPendingThreshold;
+  final TelemetryService _telemetry;
 
   TtlCompactionService({
     this.defaultRetentionDays = 365,
     this.compactionSizeThresholdBytes = 512 * 1024,
     this.lowActivityPendingThreshold = 5,
-  });
+    TelemetryService? telemetry,
+  }) : _telemetry = telemetry ?? TelemetryService.I;
 
-  Box<VitalsModel> _vitals() => Hive.box<VitalsModel>(BoxRegistry.vitalsBox);
-  Box<SettingsModel> _settings() => Hive.box<SettingsModel>(BoxRegistry.settingsBox);
-  Box _pendingOps() => Hive.box(BoxRegistry.pendingOpsBox);
+  /// Static convenience method for bootstrap - run TTL purge and compaction if needed.
+  ///
+  /// Safe to call on every startup; will only compact if conditions are met.
+  /// Returns a summary of what was done.
+  static Future<Map<String, dynamic>> runIfNeeded({
+    int? retentionDays,
+    int? compactionThresholdBytes,
+  }) async {
+    final telemetry = TelemetryService.I;
+    
+    // Check if vitals box is open before attempting maintenance
+    if (!Hive.isBoxOpen(BoxRegistry.vitalsBox)) {
+      telemetry.increment('ttl_compaction.skipped.vitals_not_open');
+      return {'skipped': true, 'reason': 'vitals_box_not_open'};
+    }
+    
+    if (!Hive.isBoxOpen(BoxRegistry.settingsBox)) {
+      telemetry.increment('ttl_compaction.skipped.settings_not_open');
+      return {'skipped': true, 'reason': 'settings_box_not_open'};
+    }
+    
+    final service = TtlCompactionService(
+      defaultRetentionDays: retentionDays ?? 365,
+      compactionSizeThresholdBytes: compactionThresholdBytes ?? 512 * 1024,
+    );
+    
+    final sw = Stopwatch()..start();
+    final result = await service.runMaintenance();
+    sw.stop();
+    
+    telemetry.time('ttl_compaction.startup_duration_ms', () => sw.elapsed);
+    
+    if ((result['purged'] as int) > 0 || (result['compacted'] as bool)) {
+      print('[TtlCompactionService] Startup maintenance: purged ${result['purged']} records, compacted: ${result['compacted']} (${sw.elapsedMilliseconds}ms)');
+    }
+    
+    return result;
+  }
+
+  Box<VitalsModel> _vitals() => BoxAccess.I.vitals();
+  Box<SettingsModel> _settings() => BoxAccess.I.settings();
+  Box _pendingOps() => BoxAccess.I.pendingOps();
 
   int _settingsRetentionDays() {
     if (!_settings().isOpen || _settings().isEmpty) return defaultRetentionDays;
@@ -41,8 +83,8 @@ class TtlCompactionService {
     for (final k in toDelete) {
       await box.delete(k);
     }
-    TelemetryService.I.gauge('vitals.count', box.length);
-    TelemetryService.I.increment('vitals.purged.count', toDelete.length);
+    _telemetry.gauge('vitals.count', box.length);
+    _telemetry.increment('vitals.purged.count', toDelete.length);
     return toDelete.length;
   }
 
@@ -64,9 +106,9 @@ class TtlCompactionService {
     await _vitals().compact();
     sw.stop();
     final after = file.lengthSync();
-    TelemetryService.I.time('vitals.compact.duration_ms', () => sw.elapsed);
-    TelemetryService.I.gauge('vitals.compact.before_bytes', before);
-    TelemetryService.I.gauge('vitals.compact.after_bytes', after);
+    _telemetry.time('vitals.compact.duration_ms', () => sw.elapsed);
+    _telemetry.gauge('vitals.compact.before_bytes', before);
+    _telemetry.gauge('vitals.compact.after_bytes', after);
     return after < before;
   }
 

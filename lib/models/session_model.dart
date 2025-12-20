@@ -1,3 +1,11 @@
+/// Validation error for data integrity checks.
+class SessionValidationError implements Exception {
+  final String message;
+  SessionValidationError(this.message);
+  @override
+  String toString() => 'SessionValidationError: $message';
+}
+
 class SessionModel {
   final String id;
   final String userId;
@@ -16,6 +24,31 @@ class SessionModel {
     required this.createdAt,
     required this.updatedAt,
   });
+
+  /// Validates this session model.
+  /// Throws [SessionValidationError] if invalid.
+  /// Returns this instance for method chaining.
+  SessionModel validate() {
+    if (id.isEmpty) {
+      throw SessionValidationError('id cannot be empty');
+    }
+    if (userId.isEmpty) {
+      throw SessionValidationError('userId cannot be empty');
+    }
+    if (authToken.isEmpty) {
+      throw SessionValidationError('authToken cannot be empty');
+    }
+    if (expiresAt.isBefore(issuedAt)) {
+      throw SessionValidationError('expiresAt must be after issuedAt');
+    }
+    if (updatedAt.isBefore(createdAt)) {
+      throw SessionValidationError('updatedAt cannot be before createdAt');
+    }
+    return this;
+  }
+
+  /// Returns true if this session has expired.
+  bool get isExpired => DateTime.now().toUtc().isAfter(expiresAt);
 
   factory SessionModel.fromJson(Map<String, dynamic> json) => SessionModel(
         id: json['id'] as String,

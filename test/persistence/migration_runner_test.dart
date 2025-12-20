@@ -31,6 +31,8 @@ import 'package:guardian_angel_fyp/models/vitals_model.dart';
 import 'package:guardian_angel_fyp/persistence/adapters/room_adapter.dart';
 import 'package:guardian_angel_fyp/persistence/adapters/device_adapter.dart';
 import 'package:guardian_angel_fyp/persistence/adapters/user_profile_adapter.dart';
+import 'package:guardian_angel_fyp/home automation/src/data/models/room_model.dart';
+import 'package:guardian_angel_fyp/home automation/src/data/models/device_model.dart';
 import 'package:guardian_angel_fyp/persistence/adapters/session_adapter.dart';
 import 'package:guardian_angel_fyp/persistence/adapters/failed_op_adapter.dart';
 import 'package:guardian_angel_fyp/persistence/adapters/audit_log_adapter.dart';
@@ -64,6 +66,10 @@ void main() {
     await Hive.openBox(BoxRegistry.metaBox);
     await Hive.openBox<PendingOp>(BoxRegistry.pendingOpsBox);
     await Hive.openBox<VitalsModel>(BoxRegistry.vitalsBox);
+    // Required for migration 003 (add_room_index)
+    await Hive.openBox<RoomModel>(BoxRegistry.roomsBox);
+    // Required for migration 004 (device_lastseen_cleanup)
+    await Hive.openBox<DeviceModel>(BoxRegistry.devicesBox);
     
     // Step 4: Initialize meta store with schema version 0
     final meta = MetaStore(Hive.box(BoxRegistry.metaBox));
@@ -105,7 +111,7 @@ void main() {
       final updated = pending.get(op.id)!;
       expect(updated.idempotencyKey.isNotEmpty, isTrue);
       expect(updated.idempotencyKey, 'op1'); // Should use op.id
-      expect(meta.getSchemaVersion('core'), 2); // Both migrations applied
+      expect(meta.getSchemaVersion('core'), 4); // All 4 migrations applied (001-004)
     });
 
     test('migration 001 preserves existing idempotencyKey', () async {
@@ -244,7 +250,8 @@ void main() {
       // Run migrations on empty boxes - should not throw
       await runner.runAll();
       
-      expect(meta.getSchemaVersion('core'), 2);
+      // All 4 migrations run (001-004)
+      expect(meta.getSchemaVersion('core'), 4);
     });
 
     test('migrations handle multiple records correctly', () async {

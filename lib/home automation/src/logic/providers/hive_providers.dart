@@ -3,7 +3,7 @@ import 'package:hive/hive.dart';
 import '../../data/local_hive_service.dart';
 import '../../data/hive_adapters/room_model_hive.dart';
 import '../../data/hive_adapters/device_model_hive.dart';
-import '../../data/hive_adapters/pending_op_hive.dart';
+import 'package:guardian_angel_fyp/persistence/models/pending_op.dart';
 import '../../data/repositories/room_repository_hive.dart';
 import '../../data/repositories/device_repository_hive.dart';
 import '../../core/config/app_config_provider.dart';

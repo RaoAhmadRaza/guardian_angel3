@@ -5,6 +5,7 @@ import '../persistence/box_registry.dart';
 import '../models/failed_op_model.dart';
 import '../models/pending_op.dart';
 import '../persistence/index/pending_index.dart';
+import '../persistence/wrappers/box_accessor.dart';
 
 class FailedOpsService {
   final BoxRegistry registry;
@@ -22,8 +23,8 @@ class FailedOpsService {
     this.retentionDays = 30,
   });
 
-  Box<FailedOpModel> _failedBox() => Hive.box<FailedOpModel>(BoxRegistry.failedOpsBox);
-  Box<PendingOp> _pendingBox() => Hive.box<PendingOp>(BoxRegistry.pendingOpsBox);
+  Box<FailedOpModel> _failedBox() => BoxAccess.I.failedOps();
+  Box<PendingOp> _pendingBox() => BoxAccess.I.pendingOps();
 
   Duration _computeBackoff(int attempts) {
     final base = min(pow(2, attempts).toInt(), maxBackoffSeconds);

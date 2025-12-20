@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../automation/automation_providers.dart';
 import '../../automation/device_protocol.dart';
 import '../../automation/adapters/mqtt_driver.dart';
-import '../../data/hive_adapters/pending_op_hive.dart';
+import 'package:guardian_angel_fyp/persistence/models/pending_op.dart';
 import '../../data/hive_adapters/device_model_hive.dart';
 import '../../data/local_hive_service.dart';
 import 'package:guardian_angel_fyp/services/lock_service.dart';
@@ -158,8 +158,8 @@ class AutomationSyncService {
     final deviceId = (payload['deviceId'] as String?) ?? (payload['id'] as String?);
     if (deviceId == null) {
       // malformed; drop after a few attempts
-      op.attempts += 1;
-      if (op.attempts > 3) await pendingBox.delete(op.opId); else await pendingBox.put(op.opId, op);
+      final updatedOp = op.copyWith(attempts: op.attempts + 1);
+      if (updatedOp.attempts > 3) await pendingBox.delete(op.opId); else await pendingBox.put(op.opId, updatedOp);
       return;
     }
     String? action = payload['action'] as String?;
@@ -259,8 +259,8 @@ class AutomationSyncService {
       }
       await pendingBox.delete(op.opId);
     } catch (e) {
-      op.attempts = (op.attempts) + 1;
-      await pendingBox.put(op.opId, op);
+      final updatedOp = op.copyWith(attempts: op.attempts + 1);
+      await pendingBox.put(op.opId, updatedOp);
     }
   }
 

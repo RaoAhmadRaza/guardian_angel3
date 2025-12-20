@@ -1,44 +1,25 @@
-import 'package:hive/hive.dart';
+/// DEPRECATED: Use canonical PendingOp from persistence layer.
+///
+/// This file is deprecated and should NOT be used for new code.
+/// Import from 'package:guardian_angel_fyp/persistence/models/pending_op.dart' instead.
+///
+/// Migration Guide:
+/// 1. Replace: import '.../pending_op_hive.dart';
+///    With:    import 'package:guardian_angel_fyp/persistence/models/pending_op.dart';
+///
+/// 2. Replace: PendingOp(opId: x, entityId: y, entityType: z, ...)
+///    With:    PendingOp.forHomeAutomation(opId: x, entityId: y, entityType: z, ...)
+///
+/// 3. Use BoxRegistry.pendingOpsBox instead of kPendingOpsBoxName
+///
+/// TypeId 2 is DEPRECATED. Canonical TypeId is 11 (TypeIds.pendingOp).
+@Deprecated('Use package:guardian_angel_fyp/persistence/models/pending_op.dart instead')
+library;
 
-part 'pending_op_hive.g.dart';
+// Re-export from canonical location
+export 'package:guardian_angel_fyp/persistence/models/pending_op.dart';
 
-/// Box name for queued operations
+/// DEPRECATED box name constant.
+/// Use BoxRegistry.pendingOpsBox ('pending_ops_box') instead.
+@Deprecated('Use BoxRegistry.pendingOpsBox instead')
 const kPendingOpsBoxName = 'pending_ops_box';
-
-@HiveType(typeId: 2)
-class PendingOp {
-  @HiveField(0)
-  final String opId; // unique id for the operation
-
-  @HiveField(1)
-  final String entityId; // roomId or deviceId
-
-  @HiveField(2)
-  final String entityType; // 'room' | 'device'
-
-  @HiveField(3)
-  final String opType; // 'create' | 'update' | 'delete' | 'toggle'
-
-  @HiveField(4)
-  final Map<String, dynamic> payload; // serialized model or minimal changes
-
-  @HiveField(5)
-  final DateTime queuedAt;
-
-  @HiveField(6)
-  int attempts; // increment on retry
-
-  @HiveField(7)
-  DateTime? lastAttemptAt; // timestamp of last attempt for backoff/observability
-
-  PendingOp({
-    required this.opId,
-    required this.entityId,
-    required this.entityType,
-    required this.opType,
-    required this.payload,
-    DateTime? queuedAt,
-    this.attempts = 0,
-    this.lastAttemptAt,
-  }) : queuedAt = queuedAt ?? DateTime.now();
-}

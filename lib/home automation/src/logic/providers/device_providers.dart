@@ -3,10 +3,16 @@ import '../../data/models/device_model.dart';
 import '../../data/repositories/device_repository.dart';
 import '../controllers/devices_controller.dart';
 import 'room_providers.dart';
+import 'hive_providers.dart';
 
 /// Repository provider for devices.
+/// 
+/// PHASE 2: Backend is the only source of truth.
+/// ❌ OLD: return InMemoryDeviceRepository();
+/// ✅ NEW: return ref.watch(hiveDeviceRepositoryProvider);
 final deviceRepositoryProvider = Provider<DeviceRepository>((ref) {
-  return InMemoryDeviceRepository();
+  // Use Hive-backed repository - NO MORE IN-MEMORY!
+  return ref.watch(hiveDeviceRepositoryProvider);
 });
 
 /// Family provider: each room gets its own devices controller.

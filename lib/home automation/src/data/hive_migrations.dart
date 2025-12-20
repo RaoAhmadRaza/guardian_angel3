@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+import 'package:guardian_angel_fyp/persistence/box_registry.dart';
 import 'hive_adapters/room_model_hive.dart';
 import 'hive_adapters/device_model_hive.dart';
 
@@ -11,12 +12,15 @@ import 'hive_adapters/device_model_hive.dart';
 ///
 /// NOTE: These functions do not change which boxes the app uses at runtime.
 /// Update your box name usage (e.g., in LocalHiveService) when you actually flip to the new schema.
+/// 
+/// PHASE 1 BLOCKER FIX: All box names now reference BoxRegistry.
 class HiveMigrations {
-  static const _roomsV1 = 'rooms_v1';
-  static const _roomsV2 = 'rooms_v2';
+  // Use BoxRegistry as single source of truth
+  static const _roomsV1 = BoxRegistry.homeAutomationRoomsBoxLegacy;
+  static const _roomsV2 = BoxRegistry.homeAutomationRoomsBox;
 
-  static const _devicesV1 = 'devices_v1';
-  static const _devicesV2 = 'devices_v2';
+  static const _devicesV1 = BoxRegistry.homeAutomationDevicesBoxLegacy;
+  static const _devicesV2 = BoxRegistry.homeAutomationDevicesBox;
 
   /// Example migration: rooms_v1 -> rooms_v2
   /// Adds default values for newly introduced fields (e.g., iconPath).

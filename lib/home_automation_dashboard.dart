@@ -352,6 +352,7 @@ class HomeAutomationDashboard extends StatelessWidget {
           children: [
             _buildRoomCard(
               context,
+              roomId: 'living_room',
               icon: CupertinoIcons.house,
               label: 'Living Room',
               devices: '5 Devices',
@@ -360,6 +361,7 @@ class HomeAutomationDashboard extends StatelessWidget {
             const SizedBox(width: 12),
             _buildRoomCard(
               context,
+              roomId: 'kitchen',
               icon: CupertinoIcons.scissors,
               label: 'Kitchen',
               devices: '3 Devices',
@@ -368,6 +370,7 @@ class HomeAutomationDashboard extends StatelessWidget {
             const SizedBox(width: 12),
             _buildRoomCard(
               context,
+              roomId: 'bed_room',
               icon: CupertinoIcons.bed_double,
               label: 'Bed Room',
               devices: '3 Devices',
@@ -381,6 +384,7 @@ class HomeAutomationDashboard extends StatelessWidget {
 
   Widget _buildRoomCard(
     BuildContext context, {
+    required String roomId,
     required IconData icon,
     required String label,
     required String devices,
@@ -395,6 +399,7 @@ class HomeAutomationDashboard extends StatelessWidget {
             PageRouteBuilder(
               pageBuilder: (context, animation, secondaryAnimation) =>
                   RoomDetailsScreen(
+                roomId: roomId,
                 roomName: label,
                 roomIcon: icon,
                 roomColor: color,

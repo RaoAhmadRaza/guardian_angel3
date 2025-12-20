@@ -79,6 +79,14 @@ dependencies:
   collection: ^1.17.0
   encrypt: ^5.0.1
   
+  # Phase 3 - Reliability & Crash Recovery
+  synchronized: ^3.0.0
+  
+  # Phase 4 - Operationalization & Observability
+  # sentry_flutter temporarily disabled due to iOS CocoaPods build issues.
+  # To re-enable, restore the dependency and the import in production_metrics.dart
+  # sentry_flutter: ^7.0.0
+  
   # Development tools
   storybook_flutter: ^0.14.1
   # overlay_nav_bar removed
@@ -96,6 +104,10 @@ dev_dependencies:
   http_mock_adapter: ^0.6.1
   integration_test:
     sdk: flutter
+  flutter_driver:
+    sdk: flutter
+  shelf: ^1.4.0
+  shelf_router: ^1.1.4
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

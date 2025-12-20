@@ -3,6 +3,8 @@ import 'package:hive/hive.dart';
 import 'dart:io';
 import 'package:guardian_angel_fyp/persistence/audit/audit_service.dart';
 import 'package:guardian_angel_fyp/persistence/box_registry.dart';
+import 'package:guardian_angel_fyp/persistence/adapters/audit_log_adapter.dart';
+import 'package:guardian_angel_fyp/models/audit_log_record.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -10,7 +12,10 @@ void main() {
   setUpAll(() async {
     final dir = Directory.systemTemp.createTempSync();
     Hive.init(dir.path);
-    await Hive.openBox(BoxRegistry.auditLogsBox);
+    // Register adapter before opening typed box
+    Hive.registerAdapter(AuditLogRecordAdapter());
+    // Open with correct type to match BoxAccessor.auditLogs()
+    await Hive.openBox<AuditLogRecord>(BoxRegistry.auditLogsBox);
   });
 
   test('append and tail returns recent logs', () async {

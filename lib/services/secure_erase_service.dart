@@ -2,9 +2,23 @@ import 'dart:io';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive/hive.dart';
 import '../persistence/box_registry.dart';
+import '../persistence/wrappers/box_accessor.dart';
 import '../services/telemetry_service.dart';
 import '../services/audit_log_service.dart';
 import '../services/models/audit_log_entry.dart';
+
+// Shared instance management (avoids circular imports)
+SecureEraseService? _sharedSecureEraseInstance;
+
+/// Sets the shared SecureEraseService instance.
+void setSharedSecureEraseInstance(SecureEraseService instance) {
+  _sharedSecureEraseInstance = instance;
+}
+
+/// Gets or creates the shared SecureEraseService instance.
+SecureEraseService getSharedSecureEraseInstance() {
+  return _sharedSecureEraseInstance ??= SecureEraseService(telemetry: TelemetryService.I);
+}
 
 /// Service for secure erasure of all user data on account deletion
 /// 
@@ -14,10 +28,20 @@ import '../services/models/audit_log_entry.dart';
 /// - Verifies complete deletion
 /// - Logs audit events
 class SecureEraseService {
-  static final I = SecureEraseService._();
-  SecureEraseService._();
+  // ═══════════════════════════════════════════════════════════════════════
+  // SINGLETON (DEPRECATED - Use ServiceInstances or Riverpod provider)
+  // ═══════════════════════════════════════════════════════════════════════
+  /// Legacy singleton accessor - routes to shared instance.
+  @Deprecated('Use secureEraseServiceProvider or ServiceInstances.secureErase instead')
+  static SecureEraseService get I => getSharedSecureEraseInstance();
 
-  final _telemetry = TelemetryService.I;
+  // ═══════════════════════════════════════════════════════════════════════
+  // PROPER DI CONSTRUCTOR (Use this via Riverpod)
+  // ═══════════════════════════════════════════════════════════════════════
+  /// Creates a new SecureEraseService instance for dependency injection.
+  SecureEraseService({required TelemetryService telemetry}) : _telemetry = telemetry;
+
+  final TelemetryService _telemetry;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   // Secure storage key names (match HiveService)
@@ -131,7 +155,7 @@ class SecureEraseService {
     for (final boxName in BoxRegistry.allBoxes) {
       try {
         if (Hive.isBoxOpen(boxName)) {
-          await Hive.box(boxName).close();
+          await BoxAccess.I.boxUntyped(boxName).close();
           closedCount++;
         }
       } catch (e) {
@@ -153,7 +177,7 @@ class SecureEraseService {
     for (final boxName in additionalBoxes) {
       try {
         if (Hive.isBoxOpen(boxName)) {
-          await Hive.box(boxName).close();
+          await BoxAccess.I.boxUntyped(boxName).close();
           closedCount++;
         }
       } catch (e) {

@@ -1,12 +1,16 @@
 import 'package:hive/hive.dart';
 import '../../models/pending_op.dart';
 import '../box_registry.dart';
-import '../wrappers/hive_wrapper.dart';
+import '../wrappers/box_accessor.dart';
 import '../../services/telemetry_service.dart';
 
 /// FIFO index for pending operations backed by a lightweight index box that
 /// stores an ordered list of maps {id, createdAt}. Maintains monotonic UTC
 /// timestamps for deterministic processing order.
+/// 
+/// Note: Single-box writes are already atomic in Hive. This class only
+/// manages the index box - callers coordinate multi-box atomicity via
+/// [AtomicTransaction].
 class PendingIndex {
   final Box _indexBox; // stores key 'order' -> List<Map>
   final Box<PendingOp> _pendingBox;
@@ -14,8 +18,8 @@ class PendingIndex {
   PendingIndex._(this._indexBox, this._pendingBox);
 
   static Future<PendingIndex> create() async {
-    final index = Hive.box(BoxRegistry.pendingIndexBox);
-    final pending = Hive.box<PendingOp>(BoxRegistry.pendingOpsBox);
+    final index = BoxAccess.I.boxUntyped(BoxRegistry.pendingIndexBox);
+    final pending = BoxAccess.I.pendingOps();
     return PendingIndex._(index, pending);
   }
 
@@ -25,21 +29,21 @@ class PendingIndex {
     return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  /// Add an operation ID to the index.
+  /// Note: Single-box write is atomic. Caller coordinates multi-box atomicity.
   Future<void> enqueue(String opId, DateTime createdAtUtc) async {
-    await HiveWrapper.transactionalWrite(() async {
-      final idx = _currentIndex();
-      idx.add({'id': opId, 'createdAt': createdAtUtc.toUtc().toIso8601String()});
-      idx.sort((a, b) => (a['createdAt'] as String).compareTo(b['createdAt'] as String));
-      await _indexBox.put('order', idx);
-    });
+    final idx = _currentIndex();
+    idx.add({'id': opId, 'createdAt': createdAtUtc.toUtc().toIso8601String()});
+    idx.sort((a, b) => (a['createdAt'] as String).compareTo(b['createdAt'] as String));
+    await _indexBox.put('order', idx);
   }
 
+  /// Remove an operation ID from the index.
+  /// Note: Single-box write is atomic. Caller coordinates multi-box atomicity.
   Future<void> remove(String opId) async {
-    await HiveWrapper.transactionalWrite(() async {
-      final idx = _currentIndex();
-      idx.removeWhere((e) => e['id'] == opId);
-      await _indexBox.put('order', idx);
-    });
+    final idx = _currentIndex();
+    idx.removeWhere((e) => e['id'] == opId);
+    await _indexBox.put('order', idx);
   }
 
   /// Returns oldest N pending op IDs in FIFO order.

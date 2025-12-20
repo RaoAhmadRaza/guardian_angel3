@@ -1,0 +1,144 @@
+{
+  "description": "Pending operation that triggers rate limit (429) with Retry-After header",
+  "operation": {
+    "id": "deadbeef-dead-beef-dead-beefdeadbeef",
+    "idempotency_key": "cafebabe-cafe-babe-cafe-babecafebabe",
+    "trace_id": "f00dfeed-f00d-feed-f00d-feedf00dfeed",
+    "type": "CREATE_DEVICE",
+    "payload": {
+      "room_id": "987fcdeb-51a2-43f8-b6d5-3a2e1f4b8c9a",
+      "device_type": "sensor",
+      "model": "TempSensor-v2",
+      "mqtt_topic": "home/livingroom/temperature"
+    },
+    "created_at": "2025-11-22T12:10:00.000Z",
+    "attempts": 1,
+    "last_attempted_at": "2025-11-22T12:10:00.500Z",
+    "next_retry_at": "2025-11-22T12:11:00.000Z"
+  },
+  "expected_request": {
+    "method": "POST",
+    "url": "/api/v1/devices",
+    "headers": {
+      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+      "Idempotency-Key": "cafebabe-cafe-babe-cafe-babecafebabe",
+      "Content-Type": "application/json; charset=utf-8",
+      "X-App-Version": "1.2.3",
+      "X-Device-Id": "device-uuid-1234567890",
+      "Trace-Id": "f00dfeed-f00d-feed-f00d-feedf00dfeed"
+    },
+    "body": {
+      "meta": {
+        "trace_id": "f00dfeed-f00d-feed-f00d-feedf00dfeed",
+        "timestamp": "2025-11-22T12:10:00.000Z"
+      },
+      "payload": {
+        "room_id": "987fcdeb-51a2-43f8-b6d5-3a2e1f4b8c9a",
+        "device_type": "sensor",
+        "model": "TempSensor-v2",
+        "mqtt_topic": "home/livingroom/temperature"
+      }
+    }
+  },
+  "expected_response": {
+    "status_code": 429,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Request-Id": "req_5XjIcN2eE0P6xR9oO3tU",
+      "X-Rate-Limit-Limit": "100",
+      "X-Rate-Limit-Remaining": "0",
+      "X-Rate-Limit-Reset": "1732281660",
+      "Retry-After": "60"
+    },
+    "body": {
+      "meta": {
+        "trace_id": "f00dfeed-f00d-feed-f00d-feedf00dfeed",
+        "timestamp": "2025-11-22T12:10:00.567Z"
+      },
+      "error": {
+        "code": "RATE_LIMITED",
+        "message": "Too many requests. Please retry after 60 seconds.",
+        "details": {
+          "limit": 100,
+          "window": "1m",
+          "reset_at": "2025-11-22T12:11:00Z",
+          "retry_after_seconds": 60
+        }
+      }
+    }
+  },
+  "expected_outcome": {
+    "success": false,
+    "exception_type": "RateLimitException",
+    "retry_scheduled": true,
+    "retry_delay_ms": 60000,
+    "backoff_overridden": true,
+    "operation_remains_in_queue": true
+  },
+  "test_scenarios": [
+    {
+      "name": "Honor Retry-After header",
+      "description": "Client respects Retry-After value instead of exponential backoff",
+      "assertions": [
+        "RateLimitException thrown",
+        "retryAfterSeconds = 60",
+        "Next retry scheduled at current_time + 60s",
+        "Exponential backoff NOT used",
+        "Operation NOT moved to failed_ops"
+      ]
+    },
+    {
+      "name": "Retry after delay succeeds",
+      "description": "After waiting Retry-After duration, retry succeeds",
+      "setup": "First request returns 429, wait 60s, second request returns 201",
+      "assertions": [
+        "First request: 429 with Retry-After",
+        "Wait 60 seconds",
+        "Second request: 201 Created",
+        "Device created successfully"
+      ]
+    },
+    {
+      "name": "Multiple operations hit rate limit",
+      "description": "Cascade prevention with jitter",
+      "setup": "10 operations all hit rate limit simultaneously",
+      "assertions": [
+        "All operations respect Retry-After base delay (60s)",
+        "Additional jitter applied (0-5s)",
+        "Retries spread across 60-65s window",
+        "No thundering herd"
+      ]
+    },
+    {
+      "name": "Rate limit counter tracking",
+      "description": "Client tracks rate limit headers proactively",
+      "setup": "Multiple requests with decreasing X-Rate-Limit-Remaining",
+      "assertions": [
+        "Client observes X-Rate-Limit-Remaining",
+        "When remaining = 0, expect 429",
+        "Can throttle proactively"
+      ]
+    }
+  ],
+  "backoff_comparison": {
+    "exponential_backoff": {
+      "attempt_1": "1000ms (base)",
+      "attempt_2": "2000ms (2^1 * base)",
+      "total_time": "~31s over 5 attempts"
+    },
+    "retry_after_override": {
+      "attempt_1": "60000ms (Retry-After)",
+      "attempt_2": "60000ms (if still rate limited)",
+      "total_time": "60s per rate-limited attempt"
+    },
+    "conclusion": "Retry-After may be longer than exponential backoff, but MUST be respected per HTTP spec"
+  },
+  "notes": [
+    "Retry-After header is mandatory for 429 responses (RFC 6585)",
+    "Client MUST honor Retry-After value",
+    "Exponential backoff is overridden when Retry-After present",
+    "Additional jitter (0-5s) helps prevent cascade",
+    "Operation should NOT be moved to failed_ops (transient error)",
+    "Rate limits typically have per-user or per-IP scoping"
+  ]
+}

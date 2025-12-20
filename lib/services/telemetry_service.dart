@@ -1,5 +1,20 @@
 import 'dart:async';
 
+// Forward declaration for ServiceInstances (to avoid circular import)
+// The actual instance is managed in service_instances.dart
+TelemetryService? _sharedInstance;
+
+/// Sets the shared TelemetryService instance.
+/// Called by ServiceInstances during initialization.
+void setSharedTelemetryInstance(TelemetryService instance) {
+  _sharedInstance = instance;
+}
+
+/// Gets or creates the shared TelemetryService instance.
+TelemetryService getSharedTelemetryInstance() {
+  return _sharedInstance ??= TelemetryService();
+}
+
 class TelemetryMetricSummary {
   int count = 0;
   double sumMs = 0;
@@ -40,8 +55,30 @@ class TelemetryEvent {
 
 /// Simple in-app telemetry aggregator with pluggable sink.
 class TelemetryService {
-  static TelemetryService? _instance;
-  static TelemetryService get I => _instance ??= TelemetryService._internal();
+  // ═══════════════════════════════════════════════════════════════════════
+  // SINGLETON (DEPRECATED - Use ServiceInstances or Riverpod provider)
+  // ═══════════════════════════════════════════════════════════════════════
+  /// Legacy singleton accessor - routes to shared instance.
+  ///
+  /// **Migration Path:**
+  /// ```dart
+  /// // Old (deprecated):
+  /// TelemetryService.I.increment('event');
+  ///
+  /// // New (preferred - Riverpod):
+  /// ref.read(telemetryServiceProvider).increment('event');
+  ///
+  /// // Alternative (ServiceInstances for non-Riverpod code):
+  /// ServiceInstances.telemetry.increment('event');
+  /// ```
+  @Deprecated('Use telemetryServiceProvider or ServiceInstances.telemetry instead')
+  static TelemetryService get I => getSharedTelemetryInstance();
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // PROPER DI CONSTRUCTOR (Use this via Riverpod)
+  // ═══════════════════════════════════════════════════════════════════════
+  /// Creates a new TelemetryService instance for dependency injection.
+  TelemetryService({this.maxEvents = 200});
 
   final Map<String, num> _counters = {};
   final Map<String, num> _gauges = {};
@@ -49,8 +86,6 @@ class TelemetryService {
   final List<TelemetryEvent> _recentEvents = [];
   final int maxEvents;
   final StreamController<TelemetryEvent> _stream = StreamController.broadcast();
-
-  TelemetryService._internal({this.maxEvents = 200});
 
   Stream<TelemetryEvent> get eventsStream => _stream.stream;
 

@@ -1,72 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'colors.dart' as app_colors;
 import 'room_details_screen.dart';
+import 'providers/domain_providers.dart';
+import 'widgets/sync_status_banner.dart';
 
-class AllRoomsScreen extends StatefulWidget {
+/// AllRoomsScreen - PHASE 2 COMPLIANT
+///
+/// Data Flow:
+/// UI → roomListProvider → HomeAutomationRepository → BoxAccessor.rooms() → Hive
+///
+/// ❌ REMOVED: Hardcoded allRooms list
+/// ✅ ADDED: Provider-backed reactive data
+class AllRoomsScreen extends ConsumerStatefulWidget {
   final bool isDarkMode;
 
   const AllRoomsScreen({
-    Key? key,
+    super.key,
     required this.isDarkMode,
-  }) : super(key: key);
+  });
 
   @override
-  State<AllRoomsScreen> createState() => _AllRoomsScreenState();
+  ConsumerState<AllRoomsScreen> createState() => _AllRoomsScreenState();
 }
 
-class _AllRoomsScreenState extends State<AllRoomsScreen>
+class _AllRoomsScreenState extends ConsumerState<AllRoomsScreen>
     with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-
-  // All rooms data
-  final List<Map<String, dynamic>> allRooms = [
-    {
-      'name': 'Living Room',
-      'icon': CupertinoIcons.house,
-      'devices': '5 Devices',
-      'color': const Color(0xFF3B82F6),
-      'activeDevices': 3,
-    },
-    {
-      'name': 'Kitchen',
-      'icon': CupertinoIcons.scissors,
-      'devices': '3 Devices',
-      'color': const Color(0xFFEAB308),
-      'activeDevices': 1,
-    },
-    {
-      'name': 'Bed Room',
-      'icon': CupertinoIcons.bed_double,
-      'devices': '4 Devices',
-      'color': const Color(0xFF8B5CF6),
-      'activeDevices': 2,
-    },
-    {
-      'name': 'Bath Room',
-      'icon': CupertinoIcons.drop,
-      'devices': '3 Devices',
-      'color': const Color(0xFF10B981),
-      'activeDevices': 1,
-    },
-    {
-      'name': 'Guest Room',
-      'icon': CupertinoIcons.person_2,
-      'devices': '3 Devices',
-      'color': const Color(0xFFF59E0B),
-      'activeDevices': 0,
-    },
-    {
-      'name': 'Garage',
-      'icon': CupertinoIcons.car,
-      'devices': '2 Devices',
-      'color': const Color(0xFF6B7280),
-      'activeDevices': 1,
-    },
-  ];
 
   @override
   void initState() {
@@ -107,6 +71,10 @@ class _AllRoomsScreenState extends State<AllRoomsScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Watch rooms from provider - reactive!
+    final roomsAsync = ref.watch(roomListProvider);
+    final automationState = ref.watch(automationStateProvider);
+
     return Scaffold(
       backgroundColor:
           widget.isDarkMode ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
@@ -117,9 +85,29 @@ class _AllRoomsScreenState extends State<AllRoomsScreen>
             position: _slideAnimation,
             child: Column(
               children: [
+                // Sync status banner - STEP 2.6
+                const SyncStatusBanner(),
                 _buildHeader(),
                 Expanded(
-                  child: _buildRoomsGrid(),
+                  child: roomsAsync.when(
+                    data: (rooms) => _buildRoomsContent(rooms, automationState),
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                          const SizedBox(height: 16),
+                          Text('Error loading rooms: $e'),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () => ref.invalidate(roomListProvider),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -193,11 +181,15 @@ class _AllRoomsScreenState extends State<AllRoomsScreen>
     );
   }
 
-  Widget _buildRoomsGrid() {
+  Widget _buildRoomsContent(List<dynamic> rooms, AsyncValue<AutomationState> automationAsync) {
+    final autoState = automationAsync.valueOrNull;
+    final totalDevices = autoState?.totalDevices ?? 0;
+    final activeDevices = autoState?.activeDevices ?? 0;
+    
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       children: [
-        // Summary section
+        // Summary section - NOW USES PROVIDER DATA
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(20),
@@ -231,12 +223,11 @@ class _AllRoomsScreenState extends State<AllRoomsScreen>
               const SizedBox(height: 12),
               Row(
                 children: [
-                  _buildStat('Rooms', '${allRooms.length}', Colors.blue),
+                  _buildStat('Rooms', '${rooms.length}', Colors.blue),
                   const SizedBox(width: 24),
-                  _buildStat(
-                      'Total Devices', '${_getTotalDevices()}', Colors.green),
+                  _buildStat('Total Devices', '$totalDevices', Colors.green),
                   const SizedBox(width: 24),
-                  _buildStat('Active', '${_getActiveDevices()}', Colors.orange),
+                  _buildStat('Active', '$activeDevices', Colors.orange),
                 ],
               ),
             ],
@@ -253,23 +244,58 @@ class _AllRoomsScreenState extends State<AllRoomsScreen>
           ),
         ),
         const SizedBox(height: 16),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 1.1,
-          ),
-          itemCount: allRooms.length,
-          itemBuilder: (context, index) {
-            final room = allRooms[index];
-            return _buildRoomGridCard(room);
-          },
-        ),
+        rooms.isEmpty 
+            ? _buildEmptyState()
+            : GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 1.1,
+                ),
+                itemCount: rooms.length,
+                itemBuilder: (context, index) {
+                  final room = rooms[index];
+                  return _buildRoomGridCardFromModel(room);
+                },
+              ),
         const SizedBox(height: 100), // Bottom padding
       ],
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            CupertinoIcons.house,
+            size: 64,
+            color: widget.isDarkMode ? Colors.white38 : Colors.grey,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No Rooms Yet',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: widget.isDarkMode ? Colors.white : const Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Add your first room to get started',
+            style: TextStyle(
+              fontSize: 14,
+              color: widget.isDarkMode ? Colors.white60 : Colors.grey,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -299,7 +325,9 @@ class _AllRoomsScreenState extends State<AllRoomsScreen>
     );
   }
 
-  Widget _buildRoomGridCard(Map<String, dynamic> room) {
+  /// @deprecated Use _buildRoomGridCardFromModel instead
+  /// This method is kept temporarily for reference but should not be used.
+  Widget _buildRoomGridCard_DEPRECATED(Map<String, dynamic> room) {
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
@@ -308,6 +336,7 @@ class _AllRoomsScreenState extends State<AllRoomsScreen>
           PageRouteBuilder(
             pageBuilder: (context, animation, secondaryAnimation) =>
                 RoomDetailsScreen(
+              roomId: room['id'] ?? '',
               roomName: room['name'],
               roomIcon: room['icon'],
               roomColor: room['color'],
@@ -423,23 +452,134 @@ class _AllRoomsScreenState extends State<AllRoomsScreen>
     );
   }
 
-  int _getTotalDevices() {
-    // Calculate total devices from all rooms
-    int total = 0;
-    for (var room in allRooms) {
-      String deviceStr = room['devices'];
-      int devices = int.parse(deviceStr.split(' ')[0]);
-      total += devices;
-    }
-    return total;
+  /// Build room card from RoomModel (provider-backed data)
+  Widget _buildRoomGridCardFromModel(dynamic room) {
+    // Get room properties with defaults
+    final String id = room.id ?? '';
+    final String name = room.name ?? 'Room';
+    final String iconId = room.iconId ?? 'house';
+    final int colorValue = room.color ?? 0xFF3B82F6;
+    final Color roomColor = Color(colorValue);
+    final IconData icon = _iconFromId(iconId);
+
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        Navigator.push(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                RoomDetailsScreen(
+              roomId: id,
+              roomName: name,
+              roomIcon: icon,
+              roomColor: roomColor,
+              isDarkMode: widget.isDarkMode,
+            ),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+              const begin = Offset(1.0, 0.0);
+              const end = Offset.zero;
+              const curve = Curves.easeInOutCubic;
+
+              var tween = Tween(begin: begin, end: end).chain(
+                CurveTween(curve: curve),
+              );
+
+              return SlideTransition(
+                position: animation.drive(tween),
+                child: child,
+              );
+            },
+            transitionDuration: const Duration(milliseconds: 300),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: widget.isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: widget.isDarkMode
+                  ? Colors.black.withOpacity(0.2)
+                  : const Color(0xFF475569).withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Icon
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: roomColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: roomColor,
+                    size: 24,
+                  ),
+                ),
+              ],
+            ),
+
+            // Room info
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: widget.isDarkMode
+                        ? Colors.white
+                        : const Color(0xFF0F172A),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  int _getActiveDevices() {
-    // Calculate total active devices
-    int total = 0;
-    for (var room in allRooms) {
-      total += room['activeDevices'] as int;
+  /// Convert icon ID to IconData
+  IconData _iconFromId(String iconId) {
+    switch (iconId.toLowerCase()) {
+      case 'house':
+      case 'living':
+      case 'sofa':
+        return CupertinoIcons.house;
+      case 'kitchen':
+      case 'utensils':
+        return CupertinoIcons.scissors;
+      case 'bed':
+      case 'bedroom':
+        return CupertinoIcons.bed_double;
+      case 'bath':
+      case 'bathroom':
+      case 'drop':
+        return CupertinoIcons.drop;
+      case 'guest':
+      case 'person':
+        return CupertinoIcons.person_2;
+      case 'garage':
+      case 'car':
+        return CupertinoIcons.car;
+      default:
+        return CupertinoIcons.house;
     }
-    return total;
   }
 }

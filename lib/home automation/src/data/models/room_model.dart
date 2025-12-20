@@ -1,3 +1,11 @@
+/// Validation error for RoomModel data integrity checks.
+class RoomValidationError implements Exception {
+  final String message;
+  RoomValidationError(this.message);
+  @override
+  String toString() => 'RoomValidationError: $message';
+}
+
 class RoomModel {
   final String id;
   final String name;
@@ -15,6 +23,31 @@ class RoomModel {
     DateTime? updatedAt,
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
+
+  /// Validates this room model.
+  /// Throws [RoomValidationError] if invalid.
+  /// Returns this instance for method chaining.
+  RoomModel validate() {
+    if (id.isEmpty) {
+      throw RoomValidationError('id cannot be empty');
+    }
+    if (name.isEmpty) {
+      throw RoomValidationError('name cannot be empty');
+    }
+    if (name.length > 50) {
+      throw RoomValidationError('name too long (max 50 characters)');
+    }
+    if (iconId.isEmpty) {
+      throw RoomValidationError('iconId cannot be empty');
+    }
+    if (color < 0) {
+      throw RoomValidationError('color must be non-negative');
+    }
+    if (updatedAt.isBefore(createdAt)) {
+      throw RoomValidationError('updatedAt cannot be before createdAt');
+    }
+    return this;
+  }
 
   RoomModel copyWith({
     String? id,

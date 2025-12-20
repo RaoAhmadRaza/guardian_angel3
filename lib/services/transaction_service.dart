@@ -3,6 +3,7 @@ import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
 import 'models/transaction_record.dart';
 import 'telemetry_service.dart';
+import '../persistence/wrappers/box_accessor.dart';
 
 /// TransactionService provides atomic operations across multiple Hive boxes.
 /// 
@@ -16,8 +17,13 @@ class TransactionService {
   static const String _boxName = 'transaction_log';
   static final _uuid = Uuid();
   
+  final TelemetryService _telemetry;
   Box<TransactionRecord>? _box;
   TransactionRecord? _currentTransaction;
+  
+  /// Creates a TransactionService with optional injected TelemetryService.
+  TransactionService({TelemetryService? telemetry})
+      : _telemetry = telemetry ?? TelemetryService.I;
 
   /// Initialize the transaction service and recover incomplete transactions.
   Future<void> init() async {
@@ -48,7 +54,7 @@ class TransactionService {
     final txId = 'tx_${DateTime.now().millisecondsSinceEpoch}_${_uuid.v4().substring(0, 8)}';
     _currentTransaction = TransactionRecord.pending(txId);
     
-    TelemetryService.I.increment('transaction.begun');
+    _telemetry.increment('transaction.begun');
     return txId;
   }
 
@@ -108,14 +114,14 @@ class TransactionService {
       await _box!.put(_currentTransaction!.transactionId, _currentTransaction!);
 
       stopwatch.stop();
-      TelemetryService.I.gauge('transaction.duration_ms', stopwatch.elapsedMilliseconds);
-      TelemetryService.I.increment('transaction.committed');
+      _telemetry.gauge('transaction.duration_ms', stopwatch.elapsedMilliseconds);
+      _telemetry.increment('transaction.committed');
     } catch (e) {
       // Mark transaction as failed
       _currentTransaction!.markFailed(e.toString());
       await _box!.put(_currentTransaction!.transactionId, _currentTransaction!);
 
-      TelemetryService.I.increment('transaction.commit_failed');
+      _telemetry.increment('transaction.commit_failed');
       rethrow;
     } finally {
       _currentTransaction = null;
@@ -132,7 +138,7 @@ class TransactionService {
     await _box!.put(_currentTransaction!.transactionId, _currentTransaction!);
     _currentTransaction = null;
 
-    TelemetryService.I.increment('transaction.rollbacks');
+    _telemetry.increment('transaction.rollbacks');
   }
 
   /// Apply a transaction's changes to target boxes.
@@ -142,7 +148,7 @@ class TransactionService {
       final boxName = boxEntry.key;
       final changes = boxEntry.value;
 
-      final box = Hive.isBoxOpen(boxName) ? Hive.box(boxName) : await Hive.openBox(boxName);
+      final box = Hive.isBoxOpen(boxName) ? BoxAccess.I.boxUntyped(boxName) : await Hive.openBox(boxName);
       for (final change in changes.entries) {
         await box.put(change.key, change.value);
       }
@@ -150,7 +156,7 @@ class TransactionService {
 
     // Apply pending operation
     if (tx.pendingOp != null) {
-      final pendingBox = Hive.isBoxOpen('pending_ops_v1') ? Hive.box('pending_ops_v1') : await Hive.openBox('pending_ops_v1');
+      final pendingBox = Hive.isBoxOpen('pending_ops_v1') ? BoxAccess.I.boxUntyped('pending_ops_v1') : await Hive.openBox('pending_ops_v1');
       final opId = tx.pendingOp!['opId'] as String;
       await pendingBox.put(opId, tx.pendingOp);
     }
@@ -160,7 +166,7 @@ class TransactionService {
       final indexBoxName = indexEntry.key;
       final opIds = indexEntry.value;
 
-      final indexBox = Hive.isBoxOpen(indexBoxName) ? Hive.box(indexBoxName) : await Hive.openBox(indexBoxName);
+      final indexBox = Hive.isBoxOpen(indexBoxName) ? BoxAccess.I.boxUntyped(indexBoxName) : await Hive.openBox(indexBoxName);
       final existingIndex = indexBox.get('opIds', defaultValue: <String>[]) ?? <String>[];
       existingIndex.addAll(opIds);
       await indexBox.put('opIds', existingIndex);
@@ -182,20 +188,20 @@ class TransactionService {
           await _box!.put(tx.transactionId, tx);
           recoveredCount++;
 
-          TelemetryService.I.increment('transaction.recovery.applied');
+          _telemetry.increment('transaction.recovery.applied');
         } catch (e) {
           tx.markFailed('Recovery failed: $e');
           await _box!.put(tx.transactionId, tx);
 
-          TelemetryService.I.increment('transaction.recovery.failed');
+          _telemetry.increment('transaction.recovery.failed');
         }
       }
     }
 
     stopwatch.stop();
     if (recoveredCount > 0) {
-      TelemetryService.I.gauge('transaction.recovery.duration_ms', stopwatch.elapsedMilliseconds);
-      TelemetryService.I.gauge('transaction.recovery.incomplete_found', recoveredCount);
+      _telemetry.gauge('transaction.recovery.duration_ms', stopwatch.elapsedMilliseconds);
+      _telemetry.gauge('transaction.recovery.incomplete_found', recoveredCount);
       print('[TransactionService] Recovered $recoveredCount incomplete transactions in ${stopwatch.elapsedMilliseconds}ms');
     }
   }
@@ -216,7 +222,7 @@ class TransactionService {
     }
 
     if (toPurge.isNotEmpty) {
-      TelemetryService.I.gauge('transaction.purged_count', toPurge.length);
+      _telemetry.gauge('transaction.purged_count', toPurge.length);
       print('[TransactionService] Purged ${toPurge.length} old transactions');
     }
   }

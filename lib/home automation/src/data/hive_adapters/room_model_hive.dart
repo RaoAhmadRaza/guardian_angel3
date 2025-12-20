@@ -1,9 +1,12 @@
 import 'package:hive/hive.dart';
+import 'package:guardian_angel_fyp/persistence/box_registry.dart';
 
 part 'room_model_hive.g.dart';
 
-/// Box name for rooms
-const kRoomsBoxName = 'rooms_box';
+/// @deprecated Use BoxRegistry.homeAutomationRoomsBoxLegacy or LocalHiveService.roomBoxName instead.
+/// This constant is kept for backward compatibility only.
+@Deprecated('Use BoxRegistry.homeAutomationRoomsBoxLegacy instead')
+const kRoomsBoxName = BoxRegistry.homeAutomationRoomsBoxLegacy;
 
 @HiveType(typeId: 0)
 class RoomModelHive {

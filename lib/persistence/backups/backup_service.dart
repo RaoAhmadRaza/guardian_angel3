@@ -7,6 +7,7 @@ import 'package:hive/hive.dart';
 import '../../services/telemetry_service.dart';
 import '../audit/audit_service.dart';
 import '../../security/key_derivation.dart';
+import '../wrappers/box_accessor.dart';
 
 class BackupService {
   /// Export selected boxes into encrypted tarball at [destinationPath].
@@ -23,7 +24,7 @@ class BackupService {
 
     // Serialize box contents as JSON lines per box.
     for (final name in boxNames) {
-      final box = Hive.box(name);
+      final box = BoxAccess.I.boxUntyped(name);
       final records = <Map<String, dynamic>>[];
       for (final k in box.keys) {
         records.add({'key': k, 'value': box.get(k)});
@@ -73,7 +74,7 @@ class BackupService {
     final encoder = TarFileEncoder();
     encoder.open(destinationPath);
     for (final name in boxNames) {
-      final box = Hive.box(name);
+      final box = BoxAccess.I.boxUntyped(name);
       final records = <Map<String, dynamic>>[];
       for (final k in box.keys) {
         records.add({'key': k, 'value': box.get(k)});
@@ -198,11 +199,11 @@ class BackupService {
       }
       if (f.name.endsWith('.json')) {
         final boxName = f.name.replaceAll('.json', '');
-        if (!overwriteExisting && Hive.isBoxOpen(boxName) && Hive.box(boxName).isNotEmpty) {
+        if (!overwriteExisting && Hive.isBoxOpen(boxName) && BoxAccess.I.boxUntyped(boxName).isNotEmpty) {
           continue;
         }
         final records = jsonDecode(utf8.decode(f.content)) as List<dynamic>;
-        final box = Hive.box(boxName);
+        final box = BoxAccess.I.boxUntyped(boxName);
         for (final rec in records) {
           final map = rec as Map<String, dynamic>;
           await box.put(map['key'], map['value']);
@@ -263,12 +264,12 @@ class BackupService {
       }
       if (f.name.endsWith('.json')) {
         final boxName = f.name.replaceAll('.json', '');
-        if (!overwriteExisting && Hive.isBoxOpen(boxName) && Hive.box(boxName).isNotEmpty) {
+        if (!overwriteExisting && Hive.isBoxOpen(boxName) && BoxAccess.I.boxUntyped(boxName).isNotEmpty) {
           // Skip existing box to avoid overwrite.
           continue;
         }
         final records = jsonDecode(utf8.decode(f.content)) as List<dynamic>;
-        final box = Hive.box(boxName);
+        final box = BoxAccess.I.boxUntyped(boxName);
         for (final rec in records) {
           final map = rec as Map<String, dynamic>;
           await box.put(map['key'], map['value']);
