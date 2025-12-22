@@ -9,7 +9,8 @@ import 'dart:ui';
 import 'theme/app_theme.dart' as theme;
 
 import 'services/session_service.dart';
-import 'chat_screen_new.dart';
+// Previous chat implementation preserved in chat_screen_new.dart
+import 'screens/patient_chat_screen.dart';
 import 'diagnostic_screen.dart';
 import 'home automation/navigation/drawer_wrapper.dart';
 import 'home automation/main.dart' show HomeAutomationScreen;
@@ -930,7 +931,8 @@ class _NextScreenState extends State<NextScreen> {
 
   /// Build Chat Page
   Widget _buildChatPage(bool isDarkMode) {
-    return ChatScreenNew();
+    // Previous implementation: ChatScreenNew() - preserved in chat_screen_new.dart
+    return const PatientChatScreen();
   }
 
   /// Build Home Automation Page (integrated from module)
