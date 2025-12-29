@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'peace_of_mind/peace_of_mind_state.dart';
+import 'peace_of_mind/peace_of_mind_data_provider.dart';
+
 class PeaceOfMindScreen extends StatefulWidget {
   const PeaceOfMindScreen({super.key});
 
@@ -14,10 +17,10 @@ class PeaceOfMindScreen extends StatefulWidget {
 }
 
 class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProviderStateMixin {
-  // State
-  double _moodValue = 50.0;
-  bool _isPlayingAudio = false;
-  bool _isReflecting = false;
+  // State - loaded from provider
+  PeaceOfMindState _state = PeaceOfMindState.initial();
+  double _moodValue = 50.0; // Local slider value for smooth interaction
+  bool _isLoading = true;
   
   // Card Drag State
   double _dragY = 0.0;
@@ -26,6 +29,9 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
   late AnimationController _blobController;
   late AnimationController _breatheController;
   late AnimationController _liquidController;
+
+  // Data provider
+  final _dataProvider = PeaceOfMindDataProvider.instance;
 
   @override
   void initState() {
@@ -45,6 +51,51 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
       vsync: this,
       duration: const Duration(seconds: 8),
     )..repeat();
+
+    _loadInitialState();
+  }
+
+  Future<void> _loadInitialState() async {
+    try {
+      final loadedState = await _dataProvider.loadInitialState();
+      if (mounted) {
+        setState(() {
+          _state = loadedState;
+          _moodValue = loadedState.moodSliderValue;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      // On error, use initial state
+      if (mounted) {
+        setState(() {
+          _state = PeaceOfMindState.initial();
+          _moodValue = 50.0;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _onMoodChanged(double value) {
+    setState(() {
+      _moodValue = value;
+      _state = _state.copyWith(mood: MoodLevel.fromSliderValue(value));
+    });
+    // Persist mood change
+    _dataProvider.saveMood(value);
+  }
+
+  void _onReflectStart() {
+    setState(() {
+      _state = _state.copyWith(isRecordingReflection: true);
+    });
+  }
+
+  void _onReflectEnd() {
+    setState(() {
+      _state = _state.copyWith(isRecordingReflection: false);
+    });
   }
 
   @override
@@ -189,7 +240,10 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
 
             // Soundscape Pill
             GestureDetector(
-              onTap: () => setState(() => _isPlayingAudio = !_isPlayingAudio),
+              onTap: _state.hasSoundscape ? () {
+                // Toggle play state only if soundscape is selected
+                // Note: Actual audio playback would be implemented here
+              } : null,
               child: Container(
                 padding: const EdgeInsets.only(left: 6, right: 16, top: 6, bottom: 6),
                 decoration: BoxDecoration(
@@ -208,7 +262,7 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        _isPlayingAudio ? CupertinoIcons.cloud_rain : CupertinoIcons.play_fill,
+                        _state.isPlayingSound ? CupertinoIcons.cloud_rain : CupertinoIcons.play_fill,
                         size: 14,
                         color: Colors.teal.shade800,
                       ),
@@ -228,7 +282,7 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
                           ),
                         ),
                         Text(
-                          "Rain on Leaves",
+                          _state.soundscapeDisplayName,
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -237,7 +291,7 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
                         ),
                       ],
                     ),
-                    if (_isPlayingAudio) ...[
+                    if (_state.isPlayingSound) ...[
                       const SizedBox(width: 8),
                       SizedBox(
                         height: 12,
@@ -334,12 +388,14 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
                         ),
                         const SizedBox(height: 20),
                         Text(
-                          "What is one small thing that made you smile today?",
+                          _state.reflectionDisplayText,
                           textAlign: TextAlign.center,
                           style: GoogleFonts.playfairDisplay( // Serif font
-                            fontSize: 30,
+                            fontSize: _state.hasPrompt ? 30 : 24,
                             height: 1.2,
-                            color: Colors.grey.shade800,
+                            color: _state.hasPrompt 
+                                ? Colors.grey.shade800 
+                                : Colors.grey.shade500,
                           ),
                         ),
                         const SizedBox(height: 28),
@@ -447,7 +503,7 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
                         value: _moodValue,
                         min: 0,
                         max: 100,
-                        onChanged: (val) => setState(() => _moodValue = val),
+                        onChanged: _onMoodChanged,
                       ),
                     ),
                   ),
@@ -482,7 +538,7 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
                 ),
 
                 // Liquid Blob (Active State)
-                if (_isReflecting)
+                if (_state.isRecordingReflection)
                   AnimatedBuilder(
                     animation: _liquidController,
                     builder: (context, child) {
@@ -515,23 +571,23 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
 
                 // Physical Button
                 GestureDetector(
-                  onTapDown: (_) => setState(() => _isReflecting = true),
-                  onTapUp: (_) => setState(() => _isReflecting = false),
-                  onTapCancel: () => setState(() => _isReflecting = false),
+                  onTapDown: (_) => _onReflectStart(),
+                  onTapUp: (_) => _onReflectEnd(),
+                  onTapCancel: () => _onReflectEnd(),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 500),
                     width: 80,
                     height: 80,
                     decoration: BoxDecoration(
-                      color: _isReflecting 
+                      color: _state.isRecordingReflection 
                           ? Colors.white.withOpacity(0.2) 
                           : const Color(0xFFF2F2F2).withOpacity(0.8),
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: _isReflecting ? Colors.white.withOpacity(0.5) : Colors.white.withOpacity(0.2),
+                        color: _state.isRecordingReflection ? Colors.white.withOpacity(0.5) : Colors.white.withOpacity(0.2),
                       ),
                       boxShadow: [
-                        if (!_isReflecting)
+                        if (!_state.isRecordingReflection)
                           BoxShadow(
                             color: Colors.black.withOpacity(0.05),
                             blurRadius: 10,
@@ -543,7 +599,7 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
                       child: Icon(
                         CupertinoIcons.mic,
                         size: 32,
-                        color: _isReflecting ? Colors.grey.shade800 : Colors.grey.shade600,
+                        color: _state.isRecordingReflection ? Colors.grey.shade800 : Colors.grey.shade600,
                       ),
                     ),
                   ),
@@ -554,7 +610,7 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
             const SizedBox(height: 24),
             AnimatedOpacity(
               duration: const Duration(milliseconds: 500),
-              opacity: _isReflecting ? 0.0 : 1.0,
+              opacity: _state.isRecordingReflection ? 0.0 : 1.0,
               child: Text(
                 "Hold to reflect",
                 style: GoogleFonts.inter(

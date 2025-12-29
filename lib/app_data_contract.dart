@@ -40,6 +40,7 @@ enum DataFlowDomain {
   emergency,
   audit,
   userProfile,
+  relationships,
 }
 
 /// Maps domains to their canonical box names.
@@ -53,6 +54,7 @@ const Map<DataFlowDomain, String> domainBoxMapping = {
   DataFlowDomain.emergency: 'emergency_ops_box',
   DataFlowDomain.audit: 'audit_logs_box',
   DataFlowDomain.userProfile: 'user_profile_box',
+  DataFlowDomain.relationships: 'relationships_box',
 };
 
 /// Contract verification helper.
@@ -88,6 +90,8 @@ class DataFlowContract {
         return 'UI → auditLogProvider → AuditRepository → BoxAccessor.auditLogs() → Hive';
       case DataFlowDomain.userProfile:
         return 'UI → userProfileProvider → UserProfileRepository → BoxAccessor.userProfile() → Hive';
+      case DataFlowDomain.relationships:
+        return 'UI → relationshipProvider → RelationshipRepository → BoxAccessor.relationships() → Hive';
     }
   }
 }

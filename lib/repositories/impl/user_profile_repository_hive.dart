@@ -85,17 +85,23 @@ class UserProfileRepositoryHive implements UserProfileRepository {
     String? displayName,
     String? email,
     String? role,
+    String? gender,
+    int? age,
+    String? address,
+    String? medicalHistory,
   }) async {
     final current = await getCurrent();
     if (current == null) return;
 
-    // Manually create updated profile since model may not have copyWith
-    final updated = UserProfileModel(
-      id: current.id,
-      role: role ?? current.role,
-      displayName: displayName ?? current.displayName,
-      email: email ?? current.email,
-      createdAt: current.createdAt,
+    // Use copyWith for clean, immutable updates
+    final updated = current.copyWith(
+      role: role,
+      displayName: displayName,
+      email: email,
+      gender: gender,
+      age: age,
+      address: address,
+      medicalHistory: medicalHistory,
       updatedAt: DateTime.now(),
     );
     await save(updated);
@@ -129,5 +135,53 @@ class UserProfileRepositoryHive implements UserProfileRepository {
       boxName: BoxRegistry.userProfileBox,
     );
     if (result.isFailure) throw result.error!;
+  }
+
+  @override
+  Future<UserProfileModel> upsertProfile(UserProfileModel profile) async {
+    // Step 1: Validate the model (throws on failure)
+    profile.validate();
+    
+    // Step 2: Check if profile exists
+    final existing = await getById(profile.id);
+    
+    // Step 3: Create or update
+    final UserProfileModel profileToSave;
+    if (existing != null) {
+      // Update existing - preserve createdAt and existing data, update updatedAt
+      // Only overwrite fields if the new profile has non-null values
+      profileToSave = UserProfileModel(
+        id: profile.id,
+        role: profile.role,
+        displayName: profile.displayName,
+        email: profile.email ?? existing.email,
+        gender: profile.gender ?? existing.gender,
+        age: profile.age ?? existing.age,
+        address: profile.address ?? existing.address,
+        medicalHistory: profile.medicalHistory ?? existing.medicalHistory,
+        createdAt: existing.createdAt, // Preserve original creation time
+        updatedAt: DateTime.now().toUtc(),
+      );
+    } else {
+      // New profile - ensure timestamps are set
+      profileToSave = UserProfileModel(
+        id: profile.id,
+        role: profile.role,
+        displayName: profile.displayName,
+        email: profile.email,
+        gender: profile.gender,
+        age: profile.age,
+        address: profile.address,
+        medicalHistory: profile.medicalHistory,
+        createdAt: profile.createdAt,
+        updatedAt: DateTime.now().toUtc(),
+      );
+    }
+    
+    // Step 4: Persist to Hive (throws on failure)
+    await save(profileToSave);
+    
+    // Step 5: Return the saved profile
+    return profileToSave;
   }
 }

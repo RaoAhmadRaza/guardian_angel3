@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'patient_sos/patient_sos_state.dart';
+import 'patient_sos/patient_sos_data_provider.dart';
+
 class PatientSOSScreen extends StatefulWidget {
   const PatientSOSScreen({super.key});
 
@@ -15,11 +18,10 @@ class PatientSOSScreen extends StatefulWidget {
 }
 
 class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProviderStateMixin {
-  // State
-  int _timerSeconds = 0;
-  int _statusStep = 0; // 0: Sending, 1: Notified, 2: Services
-  bool _medicalIdSent = false;
-  List<String> _transcript = [];
+  // Data provider for SOS state
+  late final PatientSosDataProvider _dataProvider;
+  
+  // Local UI state (cancel confirmation popup, slider)
   bool _showCancelConfirmation = false;
   
   // Slider State
@@ -27,65 +29,31 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
   bool _isDragging = false;
   final double _thumbSize = 52.0;
   
-  Timer? _timer;
-  Timer? _statusTimer1;
-  Timer? _statusTimer2;
-  Timer? _statusTimer3;
-  Timer? _transcriptTimer1;
-  Timer? _transcriptTimer2;
+  // Stream subscription
+  StreamSubscription<PatientSosState>? _stateSubscription;
 
   @override
   void initState() {
     super.initState();
-    _startSequence();
-  }
-
-  void _startSequence() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _timerSeconds++;
-      });
+    _dataProvider = PatientSosDataProvider.instance;
+    
+    // Listen to state changes
+    _stateSubscription = _dataProvider.stateStream.listen((_) {
+      if (mounted) setState(() {});
     });
-
-    // Simulate Status Progression
-    _statusTimer1 = Timer(const Duration(milliseconds: 2500), () {
-      if (mounted) setState(() => _statusStep = 1);
-    });
-
-    _statusTimer2 = Timer(const Duration(milliseconds: 4000), () {
-      if (mounted) setState(() => _medicalIdSent = true);
-    });
-
-    _statusTimer3 = Timer(const Duration(milliseconds: 8000), () {
-      if (mounted) setState(() => _statusStep = 2);
-    });
-
-    // Simulate Transcription
-    _transcriptTimer1 = Timer(const Duration(milliseconds: 2000), () {
-      if (mounted) setState(() => _transcript.add("I've fallen..."));
-    });
-
-    _transcriptTimer2 = Timer(const Duration(milliseconds: 5000), () {
-      if (mounted) setState(() => _transcript.add("My leg hurts."));
-    });
+    
+    // Start the SOS session
+    _dataProvider.startSosSession();
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _statusTimer1?.cancel();
-    _statusTimer2?.cancel();
-    _statusTimer3?.cancel();
-    _transcriptTimer1?.cancel();
-    _transcriptTimer2?.cancel();
+    _stateSubscription?.cancel();
     super.dispose();
   }
 
-  String _formatTime(int seconds) {
-    final mins = (seconds / 60).floor();
-    final secs = seconds % 60;
-    return '$mins:${secs.toString().padLeft(2, '0')}';
-  }
+  /// Get current SOS state from provider
+  PatientSosState get _state => _dataProvider.state;
 
   void _handleDragUpdate(DragUpdateDetails details, double maxWidth) {
     if (_showCancelConfirmation) return;
@@ -201,7 +169,7 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
                         child: Row(
                           children: [
                             Text(
-                              _formatTime(_timerSeconds),
+                              _state.elapsedDisplay,
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 12,
                                 color: Colors.grey.shade400,
@@ -272,8 +240,7 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
 
                       // Status Text
                       Text(
-                        _statusStep == 0 ? "Contacting Caregiver..." :
-                        _statusStep == 1 ? "Sarah Notified" : "Emergency Services",
+                        _state.mainStatusText,
                         style: GoogleFonts.inter(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -286,13 +253,13 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            _statusStep < 2 ? CupertinoIcons.waveform_path_ecg : Icons.medical_services_outlined,
+                            _state.progressStep < 2 ? CupertinoIcons.waveform_path_ecg : Icons.medical_services_outlined,
                             color: Colors.red.shade400,
                             size: 14,
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            _statusStep < 2 ? "Transmitting vitals..." : "Connecting line...",
+                            _state.subStatusText,
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
@@ -307,7 +274,7 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [0, 1, 2].map((step) {
-                          final isActive = _statusStep >= step;
+                          final isActive = _state.progressStep >= step;
                           return AnimatedContainer(
                             duration: const Duration(milliseconds: 700),
                             margin: const EdgeInsets.symmetric(horizontal: 6),
@@ -372,7 +339,7 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
                                         Padding(
                                           padding: const EdgeInsets.only(left: 70.0,),
                                           child: Text(
-                                            "112",
+                                            _state.heartRateDisplay,
                                             style: GoogleFonts.inter(
                                               fontSize: 22,
                                               fontWeight: FontWeight.bold,
@@ -395,16 +362,18 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
                                       ],
                                     ),
                                   ),
-                                  Positioned(
+                                  // Heart waveform - only show when we have real heart rate data
+                                  if (_state.showHeartWaveform)
+                                    Positioned(
               
-                                    bottom: 0,
-                                    left: 0,
-                                    right: 0,
-                                    height: 20,
-                                    child: CustomPaint(
-                                      painter: HeartbeatPainter(),
+                                      bottom: 0,
+                                      left: 0,
+                                      right: 0,
+                                      height: 20,
+                                      child: CustomPaint(
+                                        painter: HeartbeatPainter(),
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -527,7 +496,7 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            "124 Maple Ave",
+                                            _state.locationDisplay,
                                             style: GoogleFonts.inter(
                                               fontSize: 12,
                                               fontWeight: FontWeight.w600,
@@ -569,34 +538,53 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
                               child: const Icon(CupertinoIcons.mic_fill, color: Colors.white, size: 20),
                             ),
                             const SizedBox(width: 16),
-                            // Waveform Bars
-                            SizedBox(
-                              height: 24,
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: List.generate(12, (index) {
-                                  return Container(
-                                    width: 4,
-                                    margin: const EdgeInsets.symmetric(horizontal: 1),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.shade400,
-                                      borderRadius: BorderRadius.circular(100),
-                                    ),
-                                  ).animate(
-                                    onPlay: (c) => c.repeat(reverse: true),
-                                    delay: (index * 50).ms,
-                                  ).scaleY(
-                                    begin: 0.2, 
-                                    end: 1.0, 
-                                    duration: (500 + math.Random().nextInt(500)).ms,
-                                  ).fade(begin: 0.6, end: 1.0);
-                                }),
+                            // Waveform Bars - only animate if recording
+                            if (_state.showMicWaveform)
+                              SizedBox(
+                                height: 24,
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: List.generate(12, (index) {
+                                    return Container(
+                                      width: 4,
+                                      margin: const EdgeInsets.symmetric(horizontal: 1),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.shade400,
+                                        borderRadius: BorderRadius.circular(100),
+                                      ),
+                                    ).animate(
+                                      onPlay: (c) => c.repeat(reverse: true),
+                                      delay: (index * 50).ms,
+                                    ).scaleY(
+                                      begin: 0.2, 
+                                      end: 1.0, 
+                                      duration: (500 + math.Random().nextInt(500)).ms,
+                                    ).fade(begin: 0.6, end: 1.0);
+                                  }),
+                                ),
                               ),
-                            ),
+                            if (!_state.showMicWaveform)
+                              SizedBox(
+                                height: 24,
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: List.generate(12, (index) {
+                                    return Container(
+                                      width: 4,
+                                      height: 6,
+                                      margin: const EdgeInsets.symmetric(horizontal: 1),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.shade400.withOpacity(0.3),
+                                        borderRadius: BorderRadius.circular(100),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              ),
                             const SizedBox(width: 16),
                             Expanded(
                               child: Text(
-                                _transcript.isNotEmpty ? '"${_transcript.last}"' : "Listening...",
+                                _state.transcriptDisplay,
                                 style: GoogleFonts.inter(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
@@ -606,14 +594,14 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
                                 textAlign: TextAlign.right,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                              ).animate(key: ValueKey(_transcript.length)).fadeIn(),
+                              ).animate(key: ValueKey(_state.transcript.length)).fadeIn(),
                             ),
                           ],
                         ),
                       ),
                       
-                      // Medical ID Badge
-                      if (_medicalIdSent)
+                      // Medical ID Badge - only show when actually shared
+                      if (_state.medicalIdShared)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),
                           child: Container(
@@ -853,6 +841,8 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
                               Expanded(
                                 child: GestureDetector(
                                   onTap: () {
+                                    // Cancel the SOS session through the provider
+                                    _dataProvider.cancelSosSession();
                                     Navigator.of(context).pop();
                                   },
                                   child: Container(

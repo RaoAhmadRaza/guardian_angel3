@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'colors.dart';
@@ -6,6 +7,13 @@ import 'widgets.dart';
 import 'providers/theme_provider.dart';
 import 'login_screen.dart';
 import 'otp_verification_screen.dart';
+import 'firebase/auth/google_auth_provider.dart';
+import 'firebase/auth/apple_auth_provider.dart';
+import 'user_selection_screen.dart';
+import 'onboarding/services/onboarding_local_service.dart';
+import 'services/session_service.dart';
+import 'next_screen.dart';
+import 'caregiver_main_screen.dart';
 
 class SignUP extends StatefulWidget {
   const SignUP({super.key});
@@ -17,38 +25,195 @@ class SignUP extends StatefulWidget {
 class _SignUPState extends State<SignUP> {
   String selectedCountryCode = '+92';
   final TextEditingController phoneController = TextEditingController();
-  final TextEditingController nameController = TextEditingController();
-  final TextEditingController emailController = TextEditingController();
   bool isLoading = false;
   bool agreeToTerms = false;
+  bool isGoogleLoading = false;
+  bool isAppleLoading = false;
+
+  Future<void> _handleGoogleSignUp() async {
+    setState(() => isGoogleLoading = true);
+    
+    try {
+      final result = await GoogleAuthProviderImpl.instance.signInWithGoogle();
+      
+      if (!mounted) return;
+      
+      if (result.success && result.user != null) {
+        // STEP 1: Save auth basics to Local User Base Table (FIRST)
+        final saveResult = await _saveUserBaseLocally(result.user!);
+        if (!saveResult) {
+          _showError('Failed to save user data locally');
+          return;
+        }
+        
+        // Successfully signed up with Google
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Welcome, ${result.user!.displayName ?? result.user!.email}!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        
+        // Check if user has already completed onboarding
+        final uid = result.user!.uid;
+        final onboardingState = OnboardingLocalService.instance.getOnboardingState(uid);
+        debugPrint('[SignUp] Onboarding state for $uid: $onboardingState');
+        
+        if (onboardingState == OnboardingState.caregiverComplete) {
+          // User already completed caregiver onboarding - go to caregiver home
+          await SessionService.instance.startSession(userType: 'caregiver');
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CaregiverMainScreen(),
+            ),
+          );
+        } else if (onboardingState == OnboardingState.patientComplete) {
+          // User already completed patient onboarding - go to patient home
+          await SessionService.instance.startSession(userType: 'patient');
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const NextScreen(),
+            ),
+          );
+        } else {
+          // User needs to complete onboarding - go to Role Selection Screen (Step 2)
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const UserSelectionScreen(),
+            ),
+          );
+        }
+      } else if (result.errorCode != 'cancelled') {
+        _showError(result.errorMessage ?? 'Google sign-up failed');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('An error occurred during sign-up');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isGoogleLoading = false);
+      }
+    }
+  }
+
+  Future<void> _handleAppleSignUp() async {
+    setState(() => isAppleLoading = true);
+    
+    try {
+      final result = await AppleAuthProviderImpl.instance.signInWithApple();
+      
+      if (!mounted) return;
+      
+      if (result.success && result.user != null) {
+        // STEP 1: Save auth basics to Local User Base Table (FIRST)
+        final saveResult = await _saveUserBaseLocally(result.user!);
+        if (!saveResult) {
+          _showError('Failed to save user data locally');
+          return;
+        }
+        
+        // Successfully signed up with Apple
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Welcome, ${result.user!.displayName ?? result.user!.email ?? 'User'}!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        
+        // Check if user has already completed onboarding
+        final uid = result.user!.uid;
+        final onboardingState = OnboardingLocalService.instance.getOnboardingState(uid);
+        debugPrint('[SignUp] Onboarding state for $uid: $onboardingState');
+        
+        if (onboardingState == OnboardingState.caregiverComplete) {
+          // User already completed caregiver onboarding - go to caregiver home
+          await SessionService.instance.startSession(userType: 'caregiver');
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CaregiverMainScreen(),
+            ),
+          );
+        } else if (onboardingState == OnboardingState.patientComplete) {
+          // User already completed patient onboarding - go to patient home
+          await SessionService.instance.startSession(userType: 'patient');
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const NextScreen(),
+            ),
+          );
+        } else {
+          // User needs to complete onboarding - go to Role Selection Screen (Step 2)
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const UserSelectionScreen(),
+            ),
+          );
+        }
+      } else if (result.errorCode != 'cancelled') {
+        _showError(result.errorMessage ?? 'Apple sign-up failed');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('An error occurred during sign-up');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isAppleLoading = false);
+      }
+    }
+  }
+
+  /// STEP 1: Saves auth basics to Local User Base Table (OFFLINE-FIRST).
+  /// This is the first step in the onboarding flow.
+  /// Returns true on success, false on failure.
+  Future<bool> _saveUserBaseLocally(dynamic user) async {
+    try {
+      final uid = user.uid as String?;
+      if (uid == null || uid.isEmpty) {
+        debugPrint('[SignUp] ERROR: User UID is null or empty');
+        return false;
+      }
+
+      await OnboardingLocalService.instance.saveUserBase(
+        uid: uid,
+        email: user.email as String?,
+        fullName: user.displayName as String?,
+        profileImageUrl: user.photoURL as String?,
+      );
+      
+      debugPrint('[SignUp] Step 1 complete: User base saved locally for $uid');
+      return true;
+    } catch (e) {
+      debugPrint('[SignUp] Step 1 FAILED: $e');
+      return false;
+    }
+  }
 
   bool _isValidPhoneNumber(String phone) {
     // Remove any non-digit characters for validation
     String cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
 
-    // Check if it's exactly 10 digits
-    return cleanPhone.length == 10 && RegExp(r'^\d{10}$').hasMatch(cleanPhone);
+    // Check if it has at least 1 digit
+    return cleanPhone.isNotEmpty;
   }
 
   void _createAccount() {
     // Validate required fields
-    if (nameController.text.trim().isEmpty) {
-      _showError('Please enter your full name');
-      return;
-    }
-
-    if (emailController.text.trim().isEmpty) {
-      _showError('Please enter your email address');
-      return;
-    }
-
-    if (!emailController.text.contains('@')) {
-      _showError('Please enter a valid email address');
-      return;
-    }
-
     if (!_isValidPhoneNumber(phoneController.text)) {
-      _showError('Please enter a valid 10-digit phone number');
+      _showError('Please enter a valid phone number');
       return;
     }
 
@@ -58,11 +223,13 @@ class _SignUPState extends State<SignUP> {
     }
 
     // Navigate to OTP verification
+    // Format phone number in E.164 format (no spaces)
+    final cleanPhone = phoneController.text.replaceAll(RegExp(r'[^\d]'), '');
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => OTPVerificationScreen(
-          phoneNumber: '$selectedCountryCode ${phoneController.text}',
+          phoneNumber: '$selectedCountryCode$cleanPhone',
           isFromSignup: true,
         ),
       ),
@@ -352,11 +519,9 @@ class _SignUPState extends State<SignUP> {
 
                   // Social signup buttons
                   SocialLoginButton(
-                    text: 'Continue with Google',
+                    text: isGoogleLoading ? 'Signing up...' : 'Continue with Google',
                     imagePath: 'images/google-logo.png',
-                    onPressed: () {
-                      // Handle Google signup
-                    },
+                    onPressed: isGoogleLoading ? () {} : () => _handleGoogleSignUp(),
                   ).animate().slideX(
                         delay: 700.ms,
                         duration: 600.ms,
@@ -366,12 +531,10 @@ class _SignUPState extends State<SignUP> {
                   const SizedBox(height: 16),
 
                   SocialLoginButton(
-                    text: 'Continue with Apple',
+                    text: isAppleLoading ? 'Signing up...' : 'Continue with Apple',
                     imagePath:
                         'images/apple-logo.png', // You'll need to add this
-                    onPressed: () {
-                      // Handle Apple signup
-                    },
+                    onPressed: isAppleLoading ? () {} : () => _handleAppleSignUp(),
                   ).animate().slideX(
                         delay: 800.ms,
                         duration: 600.ms,
@@ -419,32 +582,6 @@ class _SignUPState extends State<SignUP> {
                       ),
 
                   const SizedBox(height: 32),
-
-                  // Form fields
-                  CustomTextField(
-                    hint: 'Full Name',
-                    prefixIcon: Icons.person_outline,
-                    controller: nameController,
-                  ).animate().slideY(
-                        delay: 1000.ms,
-                        duration: 600.ms,
-                        begin: 0.5,
-                      ),
-
-                  const SizedBox(height: 20),
-
-                  CustomTextField(
-                    hint: 'Email Address',
-                    prefixIcon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
-                    controller: emailController,
-                  ).animate().slideY(
-                        delay: 1100.ms,
-                        duration: 600.ms,
-                        begin: 0.5,
-                      ),
-
-                  const SizedBox(height: 20),
 
                   // Phone number input
                   Container(
@@ -711,8 +848,7 @@ class _SignUPState extends State<SignUP> {
   @override
   void dispose() {
     phoneController.dispose();
-    nameController.dispose();
-    emailController.dispose();
+   
     super.dispose();
   }
 }

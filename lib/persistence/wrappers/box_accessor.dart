@@ -32,6 +32,9 @@ import '../../models/vitals_model.dart';
 import '../../models/settings_model.dart';
 import '../../models/device_model.dart';
 import '../../models/audit_log_record.dart';
+import '../../relationships/models/relationship_model.dart';
+import '../../chat/models/chat_thread_model.dart';
+import '../../chat/models/chat_message_model.dart';
 import '../../services/telemetry_service.dart';
 
 /// Riverpod provider for BoxAccessor
@@ -145,6 +148,27 @@ class BoxAccessor {
     return Hive.box(BoxRegistry.uiPreferencesBox);
   }
 
+  /// Access relationships box.
+  Box<RelationshipModel> relationships() {
+    _trackAccess(BoxRegistry.relationshipsBox);
+    _assertOpen(BoxRegistry.relationshipsBox);
+    return Hive.box<RelationshipModel>(BoxRegistry.relationshipsBox);
+  }
+
+  /// Access chat threads box.
+  Box<ChatThreadModel> chatThreads() {
+    _trackAccess(BoxRegistry.chatThreadsBox);
+    _assertOpen(BoxRegistry.chatThreadsBox);
+    return Hive.box<ChatThreadModel>(BoxRegistry.chatThreadsBox);
+  }
+
+  /// Access chat messages box.
+  Box<ChatMessageModel> chatMessages() {
+    _trackAccess(BoxRegistry.chatMessagesBox);
+    _assertOpen(BoxRegistry.chatMessagesBox);
+    return Hive.box<ChatMessageModel>(BoxRegistry.chatMessagesBox);
+  }
+
   /// Access emergency ops box.
   Box<PendingOp> emergencyOps() {
     _trackAccess(BoxRegistry.emergencyOpsBox);
@@ -199,6 +223,12 @@ class BoxAccessor {
         return Hive.box<SettingsModel>(boxName);
       case BoxRegistry.auditLogsBox:
         return Hive.box<AuditLogRecord>(boxName);
+      case BoxRegistry.relationshipsBox:
+        return Hive.box<RelationshipModel>(boxName);
+      case BoxRegistry.chatThreadsBox:
+        return Hive.box<ChatThreadModel>(boxName);
+      case BoxRegistry.chatMessagesBox:
+        return Hive.box<ChatMessageModel>(boxName);
       default:
         return Hive.box(boxName);
     }

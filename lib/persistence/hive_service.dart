@@ -13,12 +13,31 @@ import 'adapters/failed_op_adapter.dart';
 import 'adapters/audit_log_adapter.dart';
 import 'adapters/settings_adapter.dart';
 import 'adapters/assets_cache_adapter.dart';
+// Onboarding adapters
+import 'adapters/user_base_adapter.dart';
+import 'adapters/caregiver_user_adapter.dart';
+import 'adapters/caregiver_details_adapter.dart';
+import 'adapters/patient_user_adapter.dart';
+import 'adapters/patient_details_adapter.dart';
+import 'adapters/relationship_adapter.dart';
+// Chat adapters
+import 'adapters/chat_adapter.dart';
 import '../models/vitals_model.dart';
 import '../models/room_model.dart';
 import '../models/pending_op.dart';
 import '../models/failed_op_model.dart';
 import '../models/audit_log_record.dart';
 import '../models/settings_model.dart';
+// Onboarding models
+import '../onboarding/models/user_base_model.dart';
+import '../onboarding/models/caregiver_user_model.dart';
+import '../onboarding/models/caregiver_details_model.dart';
+import '../onboarding/models/patient_user_model.dart';
+import '../onboarding/models/patient_details_model.dart';
+import '../relationships/models/relationship_model.dart';
+// Chat models
+import '../chat/models/chat_thread_model.dart';
+import '../chat/models/chat_message_model.dart';
 // Additional adapters required by schema validation
 import '../models/sync_failure.dart';
 import '../services/models/transaction_record.dart';
@@ -107,6 +126,42 @@ class HiveService {
     }
     if (!Hive.isAdapterRegistered(TypeIds.auditLogArchive)) {
       Hive.registerAdapter(AuditLogArchiveAdapter());
+    }
+    // Onboarding adapters (40-49)
+    if (!Hive.isAdapterRegistered(TypeIds.userBase)) {
+      Hive.registerAdapter(UserBaseAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.caregiverUser)) {
+      Hive.registerAdapter(CaregiverUserAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.caregiverDetails)) {
+      Hive.registerAdapter(CaregiverDetailsAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.patientUser)) {
+      Hive.registerAdapter(PatientUserAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.patientDetails)) {
+      Hive.registerAdapter(PatientDetailsAdapter());
+    }
+    // Relationship adapters (45-46)
+    if (!Hive.isAdapterRegistered(TypeIds.relationship)) {
+      Hive.registerAdapter(RelationshipAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.relationshipStatus)) {
+      Hive.registerAdapter(RelationshipStatusAdapter());
+    }
+    // Chat adapters (47-50)
+    if (!Hive.isAdapterRegistered(TypeIds.chatThread)) {
+      Hive.registerAdapter(ChatThreadAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.chatMessage)) {
+      Hive.registerAdapter(ChatMessageAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.chatMessageType)) {
+      Hive.registerAdapter(ChatMessageTypeAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.chatMessageLocalStatus)) {
+      Hive.registerAdapter(ChatMessageLocalStatusAdapter());
     }
 
     final key = await _getOrCreateKey();
@@ -309,6 +364,20 @@ class HiveService {
     await _openBoxSafely<SettingsModel>(BoxRegistry.settingsBox, cipher: cipher);
     await _openBoxSafely<dynamic>(BoxRegistry.metaBox, cipher: null);
     await _openBoxSafely<dynamic>(BoxRegistry.pendingIndexBox, cipher: null);
+    
+    // Onboarding boxes (encrypted - contains PII)
+    await _openBoxSafely<UserBaseModel>(BoxRegistry.userBaseBox, cipher: cipher);
+    await _openBoxSafely<CaregiverUserModel>(BoxRegistry.caregiverUserBox, cipher: cipher);
+    await _openBoxSafely<CaregiverDetailsModel>(BoxRegistry.caregiverDetailsBox, cipher: cipher);
+    await _openBoxSafely<PatientUserModel>(BoxRegistry.patientUserBox, cipher: cipher);
+    await _openBoxSafely<PatientDetailsModel>(BoxRegistry.patientDetailsBox, cipher: cipher);
+    
+    // Relationships box (encrypted - contains PII)
+    await _openBoxSafely<RelationshipModel>(BoxRegistry.relationshipsBox, cipher: cipher);
+    
+    // Chat boxes (encrypted - contains conversation content)
+    await _openBoxSafely<ChatThreadModel>(BoxRegistry.chatThreadsBox, cipher: cipher);
+    await _openBoxSafely<ChatMessageModel>(BoxRegistry.chatMessagesBox, cipher: cipher);
     
     sw.stop();
     _telemetry.time('hive.open.duration_ms', () => sw.elapsed);

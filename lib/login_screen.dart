@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'colors.dart';
@@ -7,6 +8,12 @@ import 'providers/theme_provider.dart';
 import 'signup.dart';
 import 'user_selection_screen.dart';
 import 'otp_verification_screen.dart';
+import 'firebase/auth/google_auth_provider.dart';
+import 'firebase/auth/apple_auth_provider.dart';
+import 'onboarding/services/onboarding_local_service.dart';
+import 'services/session_service.dart';
+import 'next_screen.dart';
+import 'caregiver_main_screen.dart';
 
 class TimeLuxLoginScreen extends StatefulWidget {
   const TimeLuxLoginScreen({super.key});
@@ -19,11 +26,185 @@ class _TimeLuxLoginScreenState extends State<TimeLuxLoginScreen> {
   String selectedCountryCode = '+92';
   final TextEditingController phoneController = TextEditingController();
   bool isLoading = false;
+  bool isGoogleLoading = false;
+  bool isAppleLoading = false;
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => isGoogleLoading = true);
+    
+    try {
+      final result = await GoogleAuthProviderImpl.instance.signInWithGoogle();
+      
+      if (!mounted) return;
+      
+      if (result.success && result.user != null) {
+        // STEP 1: Save auth basics to Local User Base Table (FIRST)
+        final saveResult = await _saveUserBaseLocally(result.user!);
+        if (!saveResult) {
+          _showError('Failed to save user data locally');
+          return;
+        }
+        
+        // Successfully signed in with Google
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Welcome, ${result.user!.displayName ?? result.user!.email}!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        
+        // Check if user has already completed onboarding
+        final uid = result.user!.uid;
+        final onboardingState = OnboardingLocalService.instance.getOnboardingState(uid);
+        debugPrint('[LoginScreen] Onboarding state for $uid: $onboardingState');
+        
+        if (onboardingState == OnboardingState.caregiverComplete) {
+          // User already completed caregiver onboarding - go to caregiver home
+          await SessionService.instance.startSession(userType: 'caregiver');
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CaregiverMainScreen(),
+            ),
+          );
+        } else if (onboardingState == OnboardingState.patientComplete) {
+          // User already completed patient onboarding - go to patient home
+          await SessionService.instance.startSession(userType: 'patient');
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const NextScreen(),
+            ),
+          );
+        } else {
+          // User needs to complete onboarding - go to Role Selection Screen (Step 2)
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const UserSelectionScreen(),
+            ),
+          );
+        }
+      } else if (result.errorCode != 'cancelled') {
+        _showError(result.errorMessage ?? 'Google sign-in failed');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('An error occurred during sign-in');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isGoogleLoading = false);
+      }
+    }
+  }
+
+  Future<void> _handleAppleSignIn() async {
+    setState(() => isAppleLoading = true);
+    
+    try {
+      final result = await AppleAuthProviderImpl.instance.signInWithApple();
+      
+      if (!mounted) return;
+      
+      if (result.success && result.user != null) {
+        // STEP 1: Save auth basics to Local User Base Table (FIRST)
+        final saveResult = await _saveUserBaseLocally(result.user!);
+        if (!saveResult) {
+          _showError('Failed to save user data locally');
+          return;
+        }
+        
+        // Successfully signed in with Apple
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Welcome, ${result.user!.displayName ?? result.user!.email ?? 'User'}!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        
+        // Check if user has already completed onboarding
+        final uid = result.user!.uid;
+        final onboardingState = OnboardingLocalService.instance.getOnboardingState(uid);
+        debugPrint('[LoginScreen] Onboarding state for $uid: $onboardingState');
+        
+        if (onboardingState == OnboardingState.caregiverComplete) {
+          // User already completed caregiver onboarding - go to caregiver home
+          await SessionService.instance.startSession(userType: 'caregiver');
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CaregiverMainScreen(),
+            ),
+          );
+        } else if (onboardingState == OnboardingState.patientComplete) {
+          // User already completed patient onboarding - go to patient home
+          await SessionService.instance.startSession(userType: 'patient');
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const NextScreen(),
+            ),
+          );
+        } else {
+          // User needs to complete onboarding - go to Role Selection Screen (Step 2)
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const UserSelectionScreen(),
+            ),
+          );
+        }
+      } else if (result.errorCode != 'cancelled') {
+        _showError(result.errorMessage ?? 'Apple sign-in failed');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('An error occurred during sign-in');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isAppleLoading = false);
+      }
+    }
+  }
+
+  /// STEP 1: Saves auth basics to Local User Base Table (OFFLINE-FIRST).
+  /// This is the first step in the onboarding flow.
+  /// Returns true on success, false on failure.
+  Future<bool> _saveUserBaseLocally(dynamic user) async {
+    try {
+      final uid = user.uid as String?;
+      if (uid == null || uid.isEmpty) {
+        debugPrint('[LoginScreen] ERROR: User UID is null or empty');
+        return false;
+      }
+
+      await OnboardingLocalService.instance.saveUserBase(
+        uid: uid,
+        email: user.email as String?,
+        fullName: user.displayName as String?,
+        profileImageUrl: user.photoURL as String?,
+      );
+      
+      debugPrint('[LoginScreen] Step 1 complete: User base saved locally for $uid');
+      return true;
+    } catch (e) {
+      debugPrint('[LoginScreen] Step 1 FAILED: $e');
+      return false;
+    }
+  }
 
   bool _isValidPhoneNumber(String phone) {
-    // Remove any whitespace and check if it's exactly 10 digits
+    // Remove any whitespace and check if it has at least 1 digit
     final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '');
-    return RegExp(r'^\d{10}$').hasMatch(cleanPhone);
+    return cleanPhone.isNotEmpty && RegExp(r'^\d+$').hasMatch(cleanPhone);
   }
 
   void _showError(String message) {
@@ -46,7 +227,7 @@ class _TimeLuxLoginScreenState extends State<TimeLuxLoginScreen> {
     }
 
     if (!_isValidPhoneNumber(phone)) {
-      _showError('Please enter a valid 10-digit phone number');
+      _showError('Please enter a valid phone number');
       return;
     }
 
@@ -338,11 +519,9 @@ class _TimeLuxLoginScreenState extends State<TimeLuxLoginScreen> {
 
                   // Social login buttons
                   SocialLoginButton(
-                    text: 'Continue with Google',
+                    text: isGoogleLoading ? 'Signing in...' : 'Continue with Google',
                     imagePath: 'images/google-logo.png',
-                    onPressed: () {
-                      // Handle Google login
-                    },
+                    onPressed: isGoogleLoading ? () {} : () => _handleGoogleSignIn(),
                   ).animate().slideX(
                         delay: 700.ms,
                         duration: 600.ms,
@@ -352,12 +531,10 @@ class _TimeLuxLoginScreenState extends State<TimeLuxLoginScreen> {
                   const SizedBox(height: 16),
 
                   SocialLoginButton(
-                    text: 'Continue with Apple',
+                    text: isAppleLoading ? 'Signing in...' : 'Continue with Apple',
                     imagePath:
                         'images/apple-logo.png', // You'll need to add this
-                    onPressed: () {
-                      // Handle Apple login
-                    },
+                    onPressed: isAppleLoading ? () {} : () => _handleAppleSignIn(),
                   ).animate().slideX(
                         delay: 800.ms,
                         duration: 600.ms,

@@ -35,6 +35,51 @@ class BoxRegistry {
   static const transactionJournalBox = 'transaction_journal_box';
 
   // ═══════════════════════════════════════════════════════════════════════
+  // ONBOARDING & USER TABLE BOX NAMES (authoritative)
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  /// User base data (email, fullName, profileImageUrl) - auth basics
+  static const userBaseBox = 'user_base_box';
+  
+  /// Caregiver user data (role assignment)
+  static const caregiverUserBox = 'caregiver_user_box';
+  
+  /// Caregiver details data (full caregiver profile)
+  static const caregiverDetailsBox = 'caregiver_details_box';
+  
+  /// Patient user data (role assignment + age)
+  static const patientUserBox = 'patient_user_box';
+  
+  /// Patient details data (full patient profile)
+  static const patientDetailsBox = 'patient_details_box';
+  
+  /// Relationship data (patient-caregiver links)
+  static const relationshipsBox = 'relationships_box';
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CHAT SYSTEM BOX NAMES (authoritative)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  /// Chat threads box (ChatThreadModel) - one thread per relationship
+  /// Contains: thread metadata, last message preview, unread counts
+  /// Encrypted: YES (contains conversation metadata)
+  static const chatThreadsBox = 'chat_threads_box';
+  
+  /// Chat messages box (ChatMessageModel) - all messages keyed by threadId+messageId
+  /// Contains: actual message content, timestamps, delivery status
+  /// Encrypted: YES (contains PII - conversation content)
+  /// 
+  /// BOX STRATEGY JUSTIFICATION:
+  /// We use a SINGLE chat_messages_box with composite keys (threadId:messageId)
+  /// instead of per-thread boxes because:
+  /// 1. Simpler lifecycle management - no dynamic box creation/deletion
+  /// 2. Easier backup/restore - single box to handle
+  /// 3. Consistent with existing project patterns (rooms, vitals, etc.)
+  /// 4. Query pattern: messages are typically loaded by thread, which is 
+  ///    efficiently handled via filtering on composite key prefix
+  static const chatMessagesBox = 'chat_messages_box';
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // HOME AUTOMATION BOX NAMES (authoritative)
   // These use different Hive models (RoomModelHive, DeviceModelHive)
   // ═══════════════════════════════════════════════════════════════════════
@@ -73,6 +118,16 @@ class BoxRegistry {
     emergencyOpsBox,
     safetyStateBox,
     transactionJournalBox,
+    // Onboarding & User table boxes
+    userBaseBox,
+    caregiverUserBox,
+    caregiverDetailsBox,
+    patientUserBox,
+    patientDetailsBox,
+    relationshipsBox,
+    // Chat system boxes
+    chatThreadsBox,
+    chatMessagesBox,
     // Home automation boxes
     homeAutomationRoomsBox,
     homeAutomationDevicesBox,

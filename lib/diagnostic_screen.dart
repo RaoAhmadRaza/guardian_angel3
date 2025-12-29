@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:async';
-import 'dart:math' as math;
 import 'dart:ui';
+import 'dart:math' as math;
 import 'theme/app_theme.dart' as theme;
 import 'providers/theme_provider.dart';
+import 'screens/diagnostic/diagnostic_state.dart';
+import 'screens/diagnostic/diagnostic_data_provider.dart';
 
 class DiagnosticScreen extends StatefulWidget {
   const DiagnosticScreen({super.key});
@@ -17,152 +18,92 @@ class DiagnosticScreen extends StatefulWidget {
 
 class _DiagnosticScreenState extends State<DiagnosticScreen>
     with TickerProviderStateMixin {
-  // Heartbeat monitoring data
-  int _currentHeartRate = 82;
-  List<double> _ecgData = [];
-  List<int> _rrIntervals = [851, 841, 871, 881];
-  Timer? _heartbeatTimer;
+  // Screen state from data provider
+  DiagnosticState _state = DiagnosticState.initial();
+  bool _isLoading = true;
 
-  // Animation controllers
-  late AnimationController _ecgAnimationController;
-  late AnimationController _pulseAnimationController;
+  // Animation controllers (only for UI transitions, NOT data simulation)
   late AnimationController _aiAnalysisController;
+  late AnimationController _pulseAnimationController;
+  late AnimationController _ecgAnimationController;
   late AnimationController _rhythmPulseController;
 
-  // Health status and AI analysis
-  String _heartRhythm = "Normal Sinus Rhythm";
-  String _aiAnalysisStatus = "Analyzing...";
-  bool _isStressDetected = false;
-  double _aiConfidence = 0.95;
+  // UI state
   bool _isAIContainerExpanded = false;
   bool _hasExpandedOnce = false;
-
-  // ECG Lead configuration
-  String _selectedLead = "Lead II";
-
-  // AI Confidence breakdown
-  Map<String, double> _confidenceBreakdown = {
-    'rhythm': 0.92,
-    'variability': 0.89,
-    'pattern': 0.94,
-    'overall': 0.95,
-  };
-
-  // Alert system
-  bool _showEmergencyActions = false;
+  
+  // Lead selection (UI only)
+  final String _selectedLead = 'Lead II';
 
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
-    _startHeartbeatSimulation();
-    _generateECGData();
+    _loadDiagnosticData();
   }
 
   @override
   void dispose() {
-    _heartbeatTimer?.cancel();
-    _ecgAnimationController.dispose();
-    _pulseAnimationController.dispose();
     _aiAnalysisController.dispose();
+    _pulseAnimationController.dispose();
+    _ecgAnimationController.dispose();
     _rhythmPulseController.dispose();
     super.dispose();
   }
 
   void _initializeAnimations() {
-    _ecgAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
-      vsync: this,
-    )..repeat();
-
-    _pulseAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    )..repeat(reverse: true);
-
+    // Only UI transition animations - NOT data simulation
     _aiAnalysisController = AnimationController(
       duration: const Duration(milliseconds: 2000),
       vsync: this,
-    )..repeat();
-
-    _rhythmPulseController = AnimationController(
-      duration: const Duration(milliseconds: 800),
+    );
+    
+    _pulseAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
       vsync: this,
-    )..repeat(reverse: true);
+    );
+    
+    _ecgAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
+    
+    _rhythmPulseController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    );
+    
+    // Only start animations if we have data
+    // Animations will be started when data arrives
   }
 
-  void _startHeartbeatSimulation() {
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+  /// Load diagnostic data from local sources
+  Future<void> _loadDiagnosticData() async {
+    try {
+      final state = await DiagnosticDataProvider.instance.loadInitialState();
       if (mounted) {
         setState(() {
-          // Simulate realistic heartbeat variations
-          _currentHeartRate = 78 + (math.Random().nextInt(10));
-          _rrIntervals = [
-            845 + math.Random().nextInt(20),
-            835 + math.Random().nextInt(15),
-            865 + math.Random().nextInt(25),
-            875 + math.Random().nextInt(20),
-          ];
-
-          // AI Analysis and Rhythm Detection
-          _performAIAnalysis();
+          _state = state;
+          _isLoading = false;
         });
       }
-    });
-  }
-
-  void _performAIAnalysis() {
-    // Simulate AI analysis based on heart rate and R-R intervals
-    final variability = _calculateRRVariability();
-
-    // Reset alert state
-    _showEmergencyActions = false;
-
-    if (_currentHeartRate > 100) {
-      _heartRhythm = "Sinus Tachycardia";
-      _aiAnalysisStatus = "Elevated heart rate detected";
-      _isStressDetected = true;
-      _aiConfidence = 0.92;
-
-      // Check for critical threshold
-      if (_currentHeartRate > 120) {
-        _showEmergencyActions = true;
+    } catch (e) {
+      debugPrint('[DiagnosticScreen] Error loading data: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
-    } else if (_currentHeartRate < 60) {
-      _heartRhythm = "Sinus Bradycardia";
-      _aiAnalysisStatus = "Low heart rate detected";
-      _isStressDetected = false;
-      _aiConfidence = 0.88;
-
-      // Check for critical threshold
-      if (_currentHeartRate < 50) {
-        _showEmergencyActions = true;
-      }
-    } else if (variability > 50) {
-      _heartRhythm = "Possible Arrhythmia";
-      _aiAnalysisStatus = "Irregular rhythm pattern";
-      _isStressDetected = true;
-      _aiConfidence = 0.85;
-      _showEmergencyActions = true; // Arrhythmia always triggers alert
-    } else {
-      _heartRhythm = "Normal Sinus Rhythm";
-      _aiAnalysisStatus = "Healthy rhythm pattern";
-      _isStressDetected = false;
-      _aiConfidence = 0.96;
     }
-
-    // Update confidence breakdown based on analysis
-    _confidenceBreakdown = {
-      'rhythm': _aiConfidence,
-      'variability': math.max(0.75, 1.0 - (variability / 100)),
-      'pattern':
-          _currentHeartRate >= 60 && _currentHeartRate <= 100 ? 0.95 : 0.80,
-      'overall': _aiConfidence,
-    };
   }
 
   // AI Analysis Showcase Container with Expandable Design
   Widget _buildAIShowcaseContainer(bool isDarkMode) {
+    // Get display values from state
+    final rhythmDisplay = _state.heartRhythm ?? 'Not analyzed yet';
+    final confidenceDisplay = _state.aiConfidenceDisplay;
+    final statusDisplay = _state.aiStatusMessage ?? 'No data available for analysis';
+    
     return AnimatedContainer(
       duration: const Duration(milliseconds: 800),
       curve: Curves.easeInOutCubic,
@@ -227,8 +168,8 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                         Icons.psychology_rounded,
                         size: 24,
                         color: isDarkMode
-                            ? Colors.white.withOpacity(0.7)
-                            : const Color(0xFF475569),
+                            ? Colors.white.withOpacity(_state.hasAIAnalysis ? 0.7 : 0.4)
+                            : const Color(0xFF475569).withOpacity(_state.hasAIAnalysis ? 1.0 : 0.5),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -247,7 +188,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                             ),
                           ),
                           Text(
-                            _heartRhythm,
+                            rhythmDisplay,
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
@@ -266,11 +207,10 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                           _isAIContainerExpanded = !_isAIContainerExpanded;
                           if (_isAIContainerExpanded && !_hasExpandedOnce) {
                             _hasExpandedOnce = true;
-                            // Start one-time animation for expanded content
                             _aiAnalysisController.reset();
                             _aiAnalysisController.forward();
                           } else if (!_isAIContainerExpanded) {
-                            _hasExpandedOnce = false; // Reset for next time
+                            _hasExpandedOnce = false;
                           }
                         });
                         HapticFeedback.lightImpact();
@@ -329,8 +269,8 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                               Icons.verified_user,
                               size: 20,
                               color: isDarkMode
-                                  ? Colors.white.withOpacity(0.7)
-                                  : const Color(0xFF475569),
+                                  ? Colors.white.withOpacity(_state.hasAIAnalysis ? 0.7 : 0.4)
+                                  : const Color(0xFF475569).withOpacity(_state.hasAIAnalysis ? 1.0 : 0.5),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -338,7 +278,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Confidence: ${(_aiConfidence * 100).toInt()}%',
+                                    'Confidence: $confidenceDisplay',
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
@@ -348,7 +288,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                                     ),
                                   ),
                                   Text(
-                                    _aiAnalysisStatus,
+                                    statusDisplay,
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: isDarkMode
@@ -382,6 +322,12 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
   }
 
   Widget _buildExpandedAIContent(bool isDarkMode) {
+    // Get confidence breakdown from state or use zeros
+    final rhythmConf = _state.confidenceBreakdown?.rhythm ?? 0.0;
+    final variabilityConf = _state.confidenceBreakdown?.variability ?? 0.0;
+    final patternConf = _state.confidenceBreakdown?.pattern ?? 0.0;
+    final statusDisplay = _state.aiStatusMessage ?? 'No data available for analysis';
+    
     return AnimatedBuilder(
       animation: _aiAnalysisController,
       builder: (context, child) {
@@ -399,19 +345,16 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
             ),
             const SizedBox(height: 12),
 
-            // Confidence Bars with Animation
-            _buildAnimatedConfidenceBar('Rhythm Detection',
-                _confidenceBreakdown['rhythm']!, isDarkMode),
+            // Confidence Bars - show 0% if no data
+            _buildAnimatedConfidenceBar('Rhythm Detection', rhythmConf, isDarkMode),
             const SizedBox(height: 8),
-            _buildAnimatedConfidenceBar('Variability',
-                _confidenceBreakdown['variability']!, isDarkMode),
+            _buildAnimatedConfidenceBar('Variability', variabilityConf, isDarkMode),
             const SizedBox(height: 8),
-            _buildAnimatedConfidenceBar(
-                'Pattern Match', _confidenceBreakdown['pattern']!, isDarkMode),
+            _buildAnimatedConfidenceBar('Pattern Match', patternConf, isDarkMode),
 
             const SizedBox(height: 20),
 
-            // AI Status with Pulse Animation
+            // AI Status
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -422,40 +365,21 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
               ),
               child: Row(
                 children: [
-                  AnimatedContainer(
-                    duration: Duration(milliseconds: 800),
+                  Container(
                     width: 12,
                     height: 12,
                     decoration: BoxDecoration(
                       color: (isDarkMode
                               ? Colors.white.withOpacity(0.7)
                               : const Color(0xFF475569))
-                          .withOpacity(_hasExpandedOnce &&
-                                  _aiAnalysisController.status ==
-                                      AnimationStatus.forward
-                              ? 0.5 + 0.5 * _aiAnalysisController.value
-                              : 1.0),
+                          .withOpacity(_state.hasAIAnalysis ? 1.0 : 0.3),
                       shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: (isDarkMode
-                                  ? Colors.white.withOpacity(0.3)
-                                  : const Color(0xFF475569))
-                              .withOpacity(0.3),
-                          blurRadius: _hasExpandedOnce &&
-                                  _aiAnalysisController.status ==
-                                      AnimationStatus.forward
-                              ? 8 + 4 * _aiAnalysisController.value
-                              : 8,
-                          spreadRadius: 2,
-                        ),
-                      ],
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      _aiAnalysisStatus,
+                      statusDisplay,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -474,7 +398,12 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
             Center(
               child: GestureDetector(
                 onTap: () {
-                  _showAIExplanation();
+                  // Show info dialog if no data
+                  if (!_state.hasAIAnalysis) {
+                    _showNoDataDialog();
+                  } else {
+                    _showAIExplanation();
+                  }
                   HapticFeedback.mediumImpact();
                 },
                 child: Container(
@@ -484,8 +413,8 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                     gradient: LinearGradient(
                       colors: isDarkMode
                           ? [
-                              Colors.white.withOpacity(0.1),
-                              Colors.white.withOpacity(0.05)
+                              Colors.white.withOpacity(_state.hasAIAnalysis ? 0.1 : 0.05),
+                              Colors.white.withOpacity(_state.hasAIAnalysis ? 0.05 : 0.02)
                             ]
                           : [const Color(0xFFF5F5F7), const Color(0xFFE0E0E2)],
                     ),
@@ -503,7 +432,9 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                   child: Text(
                     'Detailed Analysis',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: _state.hasAIAnalysis 
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.5),
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
@@ -517,12 +448,49 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
     );
   }
 
+  /// Show dialog explaining no data is available
+  void _showNoDataDialog() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'No Data Available',
+          style: TextStyle(
+            color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Text(
+          'Connect a heart monitoring device to start receiving diagnostic data and AI analysis.',
+          style: TextStyle(
+            color: isDarkMode ? Colors.white.withOpacity(0.8) : const Color(0xFF475569),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'OK',
+              style: TextStyle(
+                color: isDarkMode ? Colors.white : const Color(0xFF475569),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAnimatedConfidenceBar(
       String label, double confidence, bool isDarkMode) {
     return AnimatedBuilder(
       animation: _aiAnalysisController,
       builder: (context, child) {
-        // Use full confidence value if animation is complete or not expanded
+        // Use confidence value (will be 0 if no data)
         final animatedConfidence = _hasExpandedOnce &&
                 _aiAnalysisController.status == AnimationStatus.forward
             ? confidence * _aiAnalysisController.value
@@ -565,7 +533,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
               ),
               child: FractionallySizedBox(
                 alignment: Alignment.centerLeft,
-                widthFactor: animatedConfidence,
+                widthFactor: animatedConfidence.clamp(0.0, 1.0),
                 child: Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -588,6 +556,12 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
   }
 
   void _showAIExplanation() {
+    // Don't show if no data
+    if (!_state.hasAIAnalysis) {
+      _showNoDataDialog();
+      return;
+    }
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -598,6 +572,10 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
 
   Widget _buildAIExplanationModal() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final rhythmConf = _state.confidenceBreakdown?.rhythm ?? 0.0;
+    final variabilityConf = _state.confidenceBreakdown?.variability ?? 0.0;
+    final patternConf = _state.confidenceBreakdown?.pattern ?? 0.0;
+    final rhythmDisplay = _state.heartRhythm ?? 'Unknown';
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.6,
@@ -681,8 +659,8 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                 children: [
                   _buildExplanationCard(
                     'Rhythm Analysis',
-                    'Examined heart rhythm patterns for regularity and consistency. Your rhythm shows $_heartRhythm characteristics.',
-                    _confidenceBreakdown['rhythm']!,
+                    'Examined heart rhythm patterns for regularity and consistency. Your rhythm shows $rhythmDisplay characteristics.',
+                    rhythmConf,
                     Icons.favorite,
                     isDarkMode,
                   ),
@@ -690,15 +668,15 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                   _buildExplanationCard(
                     'R-R Variability',
                     'Analyzed intervals between heartbeats. Healthy variation indicates good autonomic function.',
-                    _confidenceBreakdown['variability']!,
+                    variabilityConf,
                     Icons.show_chart,
                     isDarkMode,
                   ),
                   const SizedBox(height: 16),
                   _buildExplanationCard(
                     'Pattern Recognition',
-                    'AI detected ECG patterns and compared with medical standards. All patterns appear within normal ranges.',
-                    _confidenceBreakdown['pattern']!,
+                    'AI detected ECG patterns and compared with medical standards.',
+                    patternConf,
                     Icons.pattern,
                     isDarkMode,
                   ),
@@ -775,10 +753,18 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
   }
 
   Color _getHealthStatusColor() {
-    if (_heartRhythm.contains("Arrhythmia") || _isStressDetected) {
+    // For first-time users with no data, return neutral color
+    if (!_state.hasAIAnalysis) {
+      return const Color(0xFF94A3B8); // Neutral gray
+    }
+    
+    final rhythm = _state.heartRhythm ?? '';
+    final isStressDetected = _state.isStressDetected ?? false;
+    
+    if (rhythm.contains("Arrhythmia") || isStressDetected) {
       return const Color(0xFFFFBE0B); // Warning yellow
-    } else if (_heartRhythm.contains("Tachycardia") ||
-        _heartRhythm.contains("Bradycardia")) {
+    } else if (rhythm.contains("Tachycardia") ||
+        rhythm.contains("Bradycardia")) {
       return const Color(0xFFD97706); // Orange for mild concern
     } else {
       return const Color(0xFF059669); // Green for normal
@@ -786,50 +772,18 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
   }
 
   double _calculateRRVariability() {
-    if (_rrIntervals.length < 2) return 0;
+    final intervals = _state.rrIntervals;
+    if (intervals == null || intervals.length < 2) return 0;
 
     double sum = 0;
-    for (int i = 1; i < _rrIntervals.length; i++) {
-      sum += (_rrIntervals[i] - _rrIntervals[i - 1]).abs();
+    for (int i = 1; i < intervals.length; i++) {
+      sum += (intervals[i] - intervals[i - 1]).abs();
     }
-    return sum / (_rrIntervals.length - 1);
+    return sum / (intervals.length - 1);
   }
 
-  void _generateECGData() {
-    // Generate realistic ECG wave pattern with variability
-    _ecgData = List.generate(100, (index) {
-      double t = index / 20.0;
-
-      // Add realistic noise and variability
-      double baseNoise =
-          (math.Random().nextDouble() - 0.5) * 0.03; // ±1.5% noise
-      double amplitudeVariability =
-          0.85 + (math.Random().nextDouble() * 0.3); // 0.85-1.15x
-      double durationVariability =
-          1.0 + (math.Random().nextDouble() * 0.15 - 0.075); // ±7.5%
-
-      // Simulate P-QRS-T complex with variability
-      if (index % 25 < 5) {
-        // P wave with slight variations
-        return (0.1 *
-                math.sin(t * 2 * math.pi * durationVariability) *
-                amplitudeVariability +
-            baseNoise);
-      } else if (index % 25 < 15) {
-        // QRS complex with more pronounced variability
-        return (0.8 *
-                math.sin(t * 4 * math.pi * durationVariability) *
-                amplitudeVariability +
-            baseNoise);
-      } else {
-        // T wave with gentle variations
-        return (0.2 *
-                math.sin(t * math.pi * durationVariability) *
-                amplitudeVariability +
-            baseNoise);
-      }
-    });
-  }
+  // NOTE: ECG data generation removed - should come from real device data
+  // Empty ECG data will show "Connect a device" message
 
   @override
   Widget build(BuildContext context) {
@@ -905,23 +859,26 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                       // Results Summary Card
                       _buildResultsCard(isDarkMode),
 
-                      // Emergency Actions (shown only when in alert state)
-                      if (_showEmergencyActions) ...[
+                      // Emergency Actions (shown only when in critical alert state from REAL data)
+                      // For first-time users with no data, this will never show
+                      if (_state.hasCriticalAlert) ...[
                         const SizedBox(height: 16),
                         _buildEmergencyActionsCard(isDarkMode),
                       ],
 
                       const SizedBox(height: 24),
 
-                      // Original diagnostic cards
+                      // Original diagnostic cards - use state data or "No data" for first-time users
                       _buildDiagnosticCard(
                         isDarkMode: isDarkMode,
                         icon: CupertinoIcons.waveform,
                         title: 'Blood Pressure',
-                        subtitle: 'Systolic and diastolic readings',
-                        status: 'Optimal',
+                        subtitle: _state.bloodPressure != null
+                            ? '${_state.bloodPressure!.systolic}/${_state.bloodPressure!.diastolic} mmHg'
+                            : 'No reading available',
+                        status: _state.bloodPressure?.status ?? 'No data',
                         statusColor:
-                            const Color(0xFF475569), // Changed from Colors.blue
+                            const Color(0xFF475569),
                       ),
 
                       const SizedBox(height: 16),
@@ -930,10 +887,11 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                         isDarkMode: isDarkMode,
                         icon: CupertinoIcons.thermometer,
                         title: 'Body Temperature',
-                        subtitle: 'Core temperature monitoring',
-                        status: 'Normal',
-                        statusColor: const Color(
-                            0xFF475569), // Changed from Colors.green
+                        subtitle: _state.temperature != null
+                            ? '${_state.temperature!.value.toStringAsFixed(1)}°${_state.temperature!.unit}'
+                            : 'No reading available',
+                        status: _state.temperature?.status ?? 'No data',
+                        statusColor: const Color(0xFF475569),
                       ),
 
                       const SizedBox(height: 16),
@@ -942,10 +900,11 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                         isDarkMode: isDarkMode,
                         icon: CupertinoIcons.moon_zzz_fill,
                         title: 'Sleep Quality',
-                        subtitle: 'Sleep patterns and quality analysis',
-                        status: 'Good',
-                        statusColor: const Color(
-                            0xFF475569), // Changed from Colors.purple
+                        subtitle: _state.sleep != null
+                            ? '${_state.sleep!.hoursSlept.toStringAsFixed(1)} hours'
+                            : 'No data available',
+                        status: _state.sleep?.quality ?? 'No data',
+                        statusColor: const Color(0xFF475569),
                       ),
 
                       const SizedBox(height: 32),
@@ -964,9 +923,12 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                       _buildActionButton(
                         isDarkMode: isDarkMode,
                         title: 'View History',
-                        subtitle: 'Previous diagnostic reports',
+                        subtitle: _state.hasDiagnosticHistory 
+                            ? 'Previous diagnostic reports'
+                            : 'No diagnostic history available',
                         icon: CupertinoIcons.doc_text_fill,
                         isPrimary: false,
+                        isEnabled: _state.hasDiagnosticHistory,
                       ),
 
                       const SizedBox(height: 80),
@@ -1093,6 +1055,10 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
 
   // Enhanced Heartbeat Card with ECG visualization
   Widget _buildHeartbeatCard(bool isDarkMode) {
+    final hasHeartData = _state.heartRate != null;
+    final heartRateDisplay = _state.heartRate?.toString() ?? '--';
+    final targetBpmDisplay = _state.targetHeartRate?.toString() ?? '--';
+    
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -1124,21 +1090,29 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                       : const Color(0xFFF5F5F7),
                   shape: BoxShape.circle,
                 ),
-                child: AnimatedBuilder(
-                  animation: _pulseAnimationController,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: 1.0 + (_pulseAnimationController.value * 0.1),
-                      child: Icon(
-                        CupertinoIcons.heart_fill,
+                child: hasHeartData
+                    ? AnimatedBuilder(
+                        animation: _pulseAnimationController,
+                        builder: (context, child) {
+                          return Transform.scale(
+                            scale: 1.0 + (_pulseAnimationController.value * 0.1),
+                            child: Icon(
+                              CupertinoIcons.heart_fill,
+                              color: isDarkMode
+                                  ? Colors.white.withOpacity(0.7)
+                                  : const Color(0xFF475569),
+                              size: 24,
+                            ),
+                          );
+                        },
+                      )
+                    : Icon(
+                        CupertinoIcons.heart,
                         color: isDarkMode
-                            ? Colors.white.withOpacity(0.7)
-                            : const Color(0xFF475569),
+                            ? Colors.white.withOpacity(0.4)
+                            : const Color(0xFF94A3B8),
                         size: 24,
                       ),
-                    );
-                  },
-                ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -1195,11 +1169,13 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '$_currentHeartRate',
+                heartRateDisplay,
                 style: TextStyle(
                   fontSize: 56,
                   fontWeight: FontWeight.w700,
-                  color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                  color: isDarkMode 
+                      ? (hasHeartData ? Colors.white : Colors.white.withOpacity(0.4))
+                      : (hasHeartData ? const Color(0xFF0F172A) : const Color(0xFF94A3B8)),
                   height: 1.0,
                 ),
               ),
@@ -1229,7 +1205,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '80 bpm',
+                  '$targetBpmDisplay bpm',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -1244,18 +1220,54 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
 
           const SizedBox(height: 24),
 
-          // ECG Wave visualization
-          Container(
-            height: 120,
-            width: double.infinity,
-            child: CustomPaint(
-              painter: ECGPainter(
-                data: _ecgData,
-                animationValue: _ecgAnimationController.value,
-                isDarkMode: isDarkMode,
+          // ECG Wave visualization or empty state
+          if (hasHeartData && _state.ecgSamples != null && _state.ecgSamples!.isNotEmpty)
+            Container(
+              height: 120,
+              width: double.infinity,
+              child: CustomPaint(
+                painter: ECGPainter(
+                  data: _state.ecgSamples!,
+                  animationValue: _ecgAnimationController.value,
+                  isDarkMode: isDarkMode,
+                ),
+              ),
+            )
+          else
+            Container(
+              height: 120,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: isDarkMode
+                    ? Colors.white.withOpacity(0.05)
+                    : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      CupertinoIcons.waveform_path,
+                      color: isDarkMode
+                          ? Colors.white.withOpacity(0.3)
+                          : const Color(0xFF94A3B8),
+                      size: 32,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Connect a device to view heart activity',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDarkMode
+                            ? Colors.white.withOpacity(0.5)
+                            : const Color(0xFF94A3B8),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -1263,6 +1275,10 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
 
   // R-R Interval Analysis Card
   Widget _buildRRIntervalCard(bool isDarkMode) {
+    final hasRRData = _state.rrIntervals != null && _state.rrIntervals!.isNotEmpty;
+    final rrDisplay = hasRRData ? '${_state.rrIntervals!.first} ms' : '-- ms';
+    final rrProgress = hasRRData ? 0.7 : 0.0; // Use actual calculation when data exists
+    
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -1297,8 +1313,8 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                 child: Icon(
                   CupertinoIcons.waveform_path_ecg,
                   color: isDarkMode
-                      ? Colors.white.withOpacity(0.7)
-                      : const Color(0xFF475569),
+                      ? Colors.white.withOpacity(hasRRData ? 0.7 : 0.4)
+                      : (hasRRData ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
                   size: 24,
                 ),
               ),
@@ -1308,12 +1324,13 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${_rrIntervals.first} ms',
+                      rrDisplay,
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
-                        color:
-                            isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                        color: isDarkMode 
+                            ? (hasRRData ? Colors.white : Colors.white.withOpacity(0.4))
+                            : (hasRRData ? const Color(0xFF0F172A) : const Color(0xFF94A3B8)),
                       ),
                     ),
                     Text(
@@ -1353,7 +1370,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
             ),
             child: FractionallySizedBox(
               alignment: Alignment.centerLeft,
-              widthFactor: 0.7,
+              widthFactor: rrProgress,
               child: Container(
                 decoration: BoxDecoration(
                   color: isDarkMode
@@ -1367,22 +1384,36 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
 
           const SizedBox(height: 20),
 
-          // Interval values
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: _rrIntervals.map((interval) {
-              return Text(
-                '${interval}ms',
+          // Interval values or empty state
+          if (hasRRData)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: _state.rrIntervals!.map((interval) {
+                return Text(
+                  '${interval}ms',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.8)
+                        : const Color(0xFF475569),
+                  ),
+                );
+              }).toList(),
+            )
+          else
+            Center(
+              child: Text(
+                'No interval data available',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                   color: isDarkMode
-                      ? Colors.white.withOpacity(0.8)
-                      : const Color(0xFF475569),
+                      ? Colors.white.withOpacity(0.5)
+                      : const Color(0xFF94A3B8),
                 ),
-              );
-            }).toList(),
-          ),
+              ),
+            ),
         ],
       ),
     );
@@ -1390,6 +1421,15 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
 
   // Results Summary Card (Simplified)
   Widget _buildResultsCard(bool isDarkMode) {
+    final hasAIAnalysis = _state.hasAIAnalysis;
+    final rhythmDisplay = _state.heartRhythm ?? 'Not analyzed yet';
+    final statusDisplay = hasAIAnalysis 
+        ? _state.aiAnalysisStatus ?? 'Analysis complete' 
+        : 'No data to analyze';
+    final confidenceDisplay = hasAIAnalysis 
+        ? '${((_state.aiConfidence ?? 0) * 100).toInt()}%' 
+        : '--%';
+    
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -1446,22 +1486,34 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
           // Simplified content
           Row(
             children: [
-              // Status dot
-              AnimatedBuilder(
-                animation: _rhythmPulseController,
-                builder: (context, child) {
-                  return Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: _getHealthStatusColor().withOpacity(
-                        0.4 + 0.6 * _rhythmPulseController.value,
+              // Status dot - only animate when we have data
+              if (hasAIAnalysis)
+                AnimatedBuilder(
+                  animation: _rhythmPulseController,
+                  builder: (context, child) {
+                    return Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _getHealthStatusColor().withOpacity(
+                          0.4 + 0.6 * _rhythmPulseController.value,
+                        ),
+                        shape: BoxShape.circle,
                       ),
-                      shape: BoxShape.circle,
-                    ),
-                  );
-                },
-              ),
+                    );
+                  },
+                )
+              else
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.3)
+                        : const Color(0xFF94A3B8),
+                    shape: BoxShape.circle,
+                  ),
+                ),
               const SizedBox(width: 12),
 
               // Heart rhythm text
@@ -1470,17 +1522,18 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _heartRhythm,
+                      rhythmDisplay,
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color:
-                            isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                        color: isDarkMode 
+                            ? (hasAIAnalysis ? Colors.white : Colors.white.withOpacity(0.5))
+                            : (hasAIAnalysis ? const Color(0xFF0F172A) : const Color(0xFF94A3B8)),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _aiAnalysisStatus,
+                      statusDisplay,
                       style: TextStyle(
                         fontSize: 14,
                         color: isDarkMode
@@ -1509,13 +1562,13 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                   ),
                 ),
                 child: Text(
-                  '${(_aiConfidence * 100).toInt()}%',
+                  confidenceDisplay,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                     color: isDarkMode
-                        ? Colors.white.withOpacity(0.8)
-                        : const Color(0xFF475569),
+                        ? Colors.white.withOpacity(hasAIAnalysis ? 0.8 : 0.4)
+                        : (hasAIAnalysis ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
                   ),
                 ),
               ),
@@ -1811,116 +1864,122 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
     required String subtitle,
     required IconData icon,
     required bool isPrimary,
+    bool isEnabled = true,
   }) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: isPrimary
-            ? (isDarkMode
-                ? Colors.white.withOpacity(0.1)
-                : const Color(0xFFF5F5F7))
-            : (isDarkMode ? const Color(0xFF2A2A2A) : Colors.white),
-        borderRadius: BorderRadius.circular(20),
-        border: isPrimary
-            ? Border.all(
-                color: isDarkMode
-                    ? Colors.white.withOpacity(0.2)
-                    : const Color(0xFFE0E0E2),
-                width: 1,
-              )
-            : null,
-        boxShadow: [
-          BoxShadow(
-            color: isDarkMode
-                ? Colors.black.withOpacity(0.3)
-                : const Color(0xFF475569).withOpacity(0.15),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
+    final effectiveOpacity = isEnabled ? 1.0 : 0.5;
+    
+    return Opacity(
+      opacity: effectiveOpacity,
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: isPrimary
+              ? (isDarkMode
+                  ? Colors.white.withOpacity(0.1)
+                  : const Color(0xFFF5F5F7))
+              : (isDarkMode ? const Color(0xFF2A2A2A) : Colors.white),
           borderRadius: BorderRadius.circular(20),
-          onTap: () {
-            HapticFeedback.lightImpact();
-            // Action button logic
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: isPrimary
-                        ? Colors.white.withOpacity(0.1)
-                        : (isDarkMode
-                            ? Colors.white.withOpacity(0.1)
-                            : const Color(0xFFF5F5F7)),
-                    shape: BoxShape.circle,
+          border: isPrimary
+              ? Border.all(
+                  color: isDarkMode
+                      ? Colors.white.withOpacity(0.2)
+                      : const Color(0xFFE0E0E2),
+                  width: 1,
+                )
+              : null,
+          boxShadow: [
+            BoxShadow(
+              color: isDarkMode
+                  ? Colors.black.withOpacity(0.3)
+                  : const Color(0xFF475569).withOpacity(0.15),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: isEnabled ? () {
+              HapticFeedback.lightImpact();
+              // Action button logic
+            } : null,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: isPrimary
+                          ? Colors.white.withOpacity(0.1)
+                          : (isDarkMode
+                              ? Colors.white.withOpacity(0.1)
+                              : const Color(0xFFF5F5F7)),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      icon,
+                      color: isPrimary
+                          ? (isDarkMode
+                              ? Colors.white.withOpacity(0.8)
+                              : const Color(0xFF475569))
+                          : (isDarkMode
+                              ? Colors.white.withOpacity(0.8)
+                              : const Color(0xFF475569)),
+                      size: 24,
+                    ),
                   ),
-                  child: Icon(
-                    icon,
-                    color: isPrimary
-                        ? (isDarkMode
-                            ? Colors.white.withOpacity(0.8)
-                            : const Color(0xFF475569))
-                        : (isDarkMode
-                            ? Colors.white.withOpacity(0.8)
-                            : const Color(0xFF475569)),
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: isPrimary
-                              ? (isDarkMode
-                                  ? Colors.white
-                                  : const Color(0xFF0F172A))
-                              : (isDarkMode
-                                  ? Colors.white
-                                  : const Color(0xFF0F172A)),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: isPrimary
+                                ? (isDarkMode
+                                    ? Colors.white
+                                    : const Color(0xFF0F172A))
+                                : (isDarkMode
+                                    ? Colors.white
+                                    : const Color(0xFF0F172A)),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
-                          color: isPrimary
-                              ? (isDarkMode
-                                  ? Colors.white.withOpacity(0.7)
-                                  : const Color(0xFF475569))
-                              : (isDarkMode
-                                  ? Colors.white.withOpacity(0.7)
-                                  : const Color(0xFF475569)),
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            color: isPrimary
+                                ? (isDarkMode
+                                    ? Colors.white.withOpacity(0.7)
+                                    : const Color(0xFF475569))
+                                : (isDarkMode
+                                    ? Colors.white.withOpacity(0.7)
+                                    : const Color(0xFF475569)),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                Icon(
-                  CupertinoIcons.chevron_right,
-                  color: isPrimary
-                      ? Colors.white.withOpacity(0.8)
-                      : (isDarkMode
-                          ? Colors.white.withOpacity(0.5)
-                          : const Color(0xFF475569).withOpacity(0.5)),
-                  size: 20,
-                ),
-              ],
+                  Icon(
+                    CupertinoIcons.chevron_right,
+                    color: isPrimary
+                        ? Colors.white.withOpacity(0.8)
+                        : (isDarkMode
+                            ? Colors.white.withOpacity(0.5)
+                            : const Color(0xFF475569).withOpacity(0.5)),
+                    size: 20,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

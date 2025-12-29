@@ -32,6 +32,7 @@ import '../services/audit_log_service.dart';
 import '../home automation/main.dart' as ha_boot;
 import 'local_backend_bootstrap.dart';
 import 'fatal_startup_error.dart';
+import '../firebase/firebase_initializer.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // BOOTSTRAP STATE
@@ -46,6 +47,7 @@ enum BootstrapPhase {
   localBackend,
   auditService,
   homeAutomation,
+  firebase,
   completed,
   failed,
 }
@@ -87,6 +89,8 @@ class BootstrapState {
         return 'Initializing audit service...';
       case BootstrapPhase.homeAutomation:
         return 'Starting home automation...';
+      case BootstrapPhase.firebase:
+        return 'Initializing Firebase...';
       case BootstrapPhase.completed:
         return 'Ready (${durationMs}ms)';
       case BootstrapPhase.failed:
@@ -293,7 +297,27 @@ Future<void> bootstrapApp({
     }
     
     // ═════════════════════════════════════════════════════════════════════
-    // PHASE 7: Production Guardrails Startup Check
+    // PHASE 7: Firebase Initialization (Non-blocking)
+    // ═════════════════════════════════════════════════════════════════════
+    bootstrapState.phase = BootstrapPhase.firebase;
+    _bufferAuditEvent('bootstrap.phase.firebase.started');
+    
+    try {
+      await FirebaseInitializer.initialize();
+      bootstrapState.completedSteps.add('FirebaseInitializer.initialize()');
+      _bufferAuditEvent('bootstrap.phase.firebase.completed');
+    } catch (e, stackTrace) {
+      // Firebase failure is non-fatal - app can work offline/without Firebase
+      if (kDebugMode) {
+        print('[Bootstrap] WARNING: Firebase init failed: $e');
+        print(stackTrace);
+      }
+      TelemetryService.I.increment('bootstrap.firebase.init_failed');
+      bootstrapState.completedSteps.add('FirebaseInitializer.initialize() [FAILED - continuing]');
+    }
+    
+    // ═════════════════════════════════════════════════════════════════════
+    // PHASE 8: Production Guardrails Startup Check
     // ═════════════════════════════════════════════════════════════════════
     try {
       final guardrailResult = await ProductionGuardrails.I.runStartupCheck();

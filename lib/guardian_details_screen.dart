@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'colors.dart';
 import 'providers/theme_provider.dart';
 import 'caregiver_main_screen.dart';
 import 'services/session_service.dart';
+import 'onboarding/services/onboarding_local_service.dart';
+import 'onboarding/services/onboarding_firestore_service.dart';
+import 'relationships/services/relationship_service.dart';
+import 'relationships/repositories/relationship_repository.dart';
 
 class GuardianDetailsScreen extends StatefulWidget {
   const GuardianDetailsScreen({super.key});
@@ -19,8 +25,14 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController relationController = TextEditingController();
   final TextEditingController patientNameController = TextEditingController();
+  final TextEditingController inviteCodeController = TextEditingController();
 
   final _formKey = GlobalKey<FormState>();
+  
+  // Relationship state
+  bool _isValidatingInvite = false;
+  String? _inviteError;
+  String? _linkedPatientId;
 
   @override
   void dispose() {
@@ -29,6 +41,7 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
     emailController.dispose();
     relationController.dispose();
     patientNameController.dispose();
+    inviteCodeController.dispose();
     super.dispose();
   }
 
@@ -313,6 +326,13 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
                             ).animate().slideX(
                                 begin: -0.3, duration: 600.ms, delay: 1000.ms),
 
+                            SizedBox(height: fieldSpacing),
+
+                            // Invite Code Field (Optional but recommended)
+                            _buildInviteCodeField(isTablet: isTablet, isDarkMode: isDarkMode)
+                                .animate()
+                                .slideX(begin: -0.3, duration: 600.ms, delay: 1050.ms),
+
                             SizedBox(height: isTablet ? 40 : 32),
 
                             // Continue Button - GradientButton style following color scheme
@@ -348,17 +368,72 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
                               child: TextButton(
                                 onPressed: () async {
                                   if (_formKey.currentState!.validate()) {
-                                    // Handle form submission
-                                    debugPrint(
-                                        'Guardian Name: ${nameController.text}');
-                                    debugPrint(
-                                        'Phone: ${phoneController.text}');
-                                    debugPrint(
-                                        'Email: ${emailController.text}');
-                                    debugPrint(
-                                        'Relation: ${relationController.text}');
-                                    debugPrint(
-                                        'Patient Name: ${patientNameController.text}');
+                                    // Get current user ID
+                                    final uid = FirebaseAuth.instance.currentUser?.uid;
+                                    if (uid == null || uid.isEmpty) {
+                                      debugPrint('[GuardianDetailsScreen] ERROR: No authenticated user');
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Authentication error. Please sign in again.'),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    // STEP 4A: Save Caregiver Details to Local Table (OFFLINE-FIRST)
+                                    try {
+                                      await OnboardingLocalService.instance.saveCaregiverDetails(
+                                        uid: uid,
+                                        caregiverName: nameController.text.trim(),
+                                        phoneNumber: phoneController.text.trim(),
+                                        emailAddress: emailController.text.trim(),
+                                        relationToPatient: relationController.text.trim(),
+                                        patientName: patientNameController.text.trim(),
+                                      );
+                                      debugPrint('[GuardianDetailsScreen] Step 4A: Caregiver details saved locally');
+                                    } catch (e) {
+                                      debugPrint('[GuardianDetailsScreen] Step 4A FAILED: $e');
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Failed to save details. Please try again.'),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    // STEP 5A: Mirror to Firestore (NON-BLOCKING)
+                                    // Fire-and-forget - errors logged but don't block navigation
+                                    OnboardingFirestoreService.instance.mirrorCaregiverToFirestore(uid).then((_) {
+                                      debugPrint('[GuardianDetailsScreen] Step 5A: Caregiver data mirrored to Firestore');
+                                    }).catchError((e) {
+                                      debugPrint('[GuardianDetailsScreen] Step 5A Firestore mirror failed (will retry): $e');
+                                    });
+
+                                    // STEP 6A: Accept relationship invite (if code provided)
+                                    final inviteCode = inviteCodeController.text.trim().toUpperCase();
+                                    if (inviteCode.isNotEmpty) {
+                                      final result = await RelationshipService.instance.acceptInvite(
+                                        inviteCode: inviteCode,
+                                        caregiverId: uid,
+                                      );
+                                      
+                                      if (!result.success) {
+                                        debugPrint('[GuardianDetailsScreen] Step 6A: Invite acceptance failed: ${result.errorMessage}');
+                                        // Show error but continue - caregiver can link later
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text(_getInviteErrorMessage(result.errorCode)),
+                                              backgroundColor: Colors.orange,
+                                            ),
+                                          );
+                                        }
+                                      } else {
+                                        debugPrint('[GuardianDetailsScreen] Step 6A: Relationship linked successfully');
+                                      }
+                                    }
 
                                     // Start caregiver session
                                     await SessionService.instance
@@ -570,5 +645,194 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
         ),
       ],
     );
+  }
+
+  /// Builds the invite code input field with validation feedback.
+  Widget _buildInviteCodeField({required bool isTablet, required bool isDarkMode}) {
+    final labelFontSize = isTablet ? 16.0 : 14.0;
+    final inputFontSize = isTablet ? 18.0 : 16.0;
+    final iconSize = isTablet ? 24.0 : 22.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Label with optional indicator
+        Padding(
+          padding: EdgeInsets.only(
+            left: 4.0,
+            bottom: isTablet ? 8.0 : 6.0,
+          ),
+          child: Row(
+            children: [
+              Text(
+                'Invite Code',
+                style: GoogleFonts.inter(
+                  fontSize: labelFontSize,
+                  fontWeight: FontWeight.w600,
+                  color: isDarkMode
+                      ? AppTheme.secondaryText
+                      : AppTheme.lightSecondaryText,
+                  letterSpacing: 0.1,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDarkMode 
+                      ? Colors.blue.withOpacity(0.2) 
+                      : Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'Optional',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? Colors.blue.shade300 : Colors.blue.shade600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Helper text
+        Padding(
+          padding: EdgeInsets.only(
+            left: 4.0,
+            bottom: isTablet ? 10.0 : 8.0,
+          ),
+          child: Text(
+            'Enter the code shared by your patient to link accounts',
+            style: GoogleFonts.inter(
+              fontSize: isTablet ? 13.0 : 12.0,
+              fontWeight: FontWeight.w400,
+              color: isDarkMode
+                  ? AppTheme.tertiaryText
+                  : AppTheme.lightTertiaryText,
+            ),
+          ),
+        ),
+        // Input field
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Theme.of(context).shadowColor.withValues(alpha: 0.1),
+                blurRadius: isDarkMode ? 12 : 8,
+                offset: Offset(0, isDarkMode ? 4 : 2),
+              ),
+            ],
+          ),
+          child: TextFormField(
+            controller: inviteCodeController,
+            textCapitalization: TextCapitalization.characters,
+            style: GoogleFonts.inter(
+              fontSize: inputFontSize,
+              fontWeight: FontWeight.w500,
+              color: isDarkMode ? AppTheme.primaryText : AppTheme.lightPrimaryText,
+              letterSpacing: 2.0,
+            ),
+            decoration: InputDecoration(
+              hintText: 'ABC-123',
+              hintStyle: GoogleFonts.inter(
+                fontSize: inputFontSize,
+                fontWeight: FontWeight.w400,
+                color: isDarkMode
+                    ? AppTheme.placeholderText
+                    : AppTheme.lightPlaceholderText,
+                letterSpacing: 2.0,
+              ),
+              prefixIcon: Icon(
+                Icons.link_rounded,
+                size: iconSize,
+                color: isDarkMode
+                    ? AppTheme.tertiaryText
+                    : AppTheme.lightTertiaryText,
+              ),
+              suffixIcon: _isValidatingInvite
+                  ? Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            isDarkMode ? Colors.white70 : Colors.grey,
+                          ),
+                        ),
+                      ),
+                    )
+                  : (_linkedPatientId != null
+                      ? Icon(Icons.check_circle, color: Colors.green, size: iconSize)
+                      : null),
+              errorText: _inviteError,
+              filled: true,
+              fillColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: isDarkMode ? AppTheme.borderColor : AppTheme.lightBorderColor,
+                  width: 1,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: _linkedPatientId != null 
+                      ? Colors.green.withOpacity(0.5)
+                      : (isDarkMode ? AppTheme.borderColor : AppTheme.lightBorderColor),
+                  width: _linkedPatientId != null ? 2 : 1,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: isDarkMode ? AppTheme.primaryText : const Color(0xFF64748B),
+                  width: 2,
+                ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: Colors.red,
+                  width: 2,
+                ),
+              ),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: isTablet ? 20 : 16,
+                vertical: isTablet ? 18 : 16,
+              ),
+            ),
+            onChanged: (value) {
+              // Clear any previous error when user types
+              if (_inviteError != null) {
+                setState(() {
+                  _inviteError = null;
+                });
+              }
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Returns user-friendly error message for invite error codes.
+  String _getInviteErrorMessage(String? errorCode) {
+    switch (errorCode) {
+      case RelationshipErrorCodes.invalidInviteCode:
+        return 'Invalid invite code. Please check and try again.';
+      case RelationshipErrorCodes.inviteAlreadyUsed:
+        return 'This invite code has already been used.';
+      case RelationshipErrorCodes.caregiverAlreadyLinked:
+        return 'You are already linked to another patient.';
+      case RelationshipErrorCodes.relationshipRevoked:
+        return 'This invite has been revoked by the patient.';
+      default:
+        return 'Could not verify invite code. You can link later from settings.';
+    }
   }
 }

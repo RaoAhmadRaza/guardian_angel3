@@ -3,10 +3,42 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'providers/theme_provider.dart';
 import 'services/session_service.dart';
+import 'services/demo_mode_service.dart';
 import 'main.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _isDemoMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDemoModeState();
+  }
+
+  Future<void> _loadDemoModeState() async {
+    await DemoModeService.instance.initialize();
+    if (mounted) {
+      setState(() {
+        _isDemoMode = DemoModeService.instance.isEnabled;
+      });
+    }
+  }
+
+  Future<void> _toggleDemoMode() async {
+    await DemoModeService.instance.toggleDemoMode();
+    if (mounted) {
+      setState(() {
+        _isDemoMode = DemoModeService.instance.isEnabled;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -203,6 +235,8 @@ class SettingsScreen extends StatelessWidget {
               ),
               _buildSettingsDivider(isDarkMode),
               _buildDarkModeToggleItem(isDarkMode),
+              _buildSettingsDivider(isDarkMode),
+              _buildDemoModeToggleItem(isDarkMode),
             ],
           ),
         ),
@@ -344,6 +378,80 @@ class SettingsScreen extends StatelessWidget {
               child: AnimatedAlign(
                 duration: const Duration(milliseconds: 300),
                 alignment: isDarkMode ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  margin: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDemoModeToggleItem(bool isDarkMode) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Icon(
+            Icons.science_outlined,
+            color: _isDemoMode ? const Color(0xFFF59E0B) : (isDarkMode ? Colors.white : const Color(0xFF2A2A2A)),
+            size: 20,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Demo Mode',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _isDemoMode ? 'Showing sample data' : 'Show real data only',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDarkMode ? Colors.white.withOpacity(0.5) : const Color(0xFF475569).withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () async {
+              HapticFeedback.lightImpact();
+              await _toggleDemoMode();
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: 52,
+              height: 28,
+              decoration: BoxDecoration(
+                color: _isDemoMode ? const Color(0xFFF59E0B) : const Color(0xFF475569).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 300),
+                alignment: _isDemoMode ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
                   width: 24,
                   height: 24,

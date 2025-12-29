@@ -29,6 +29,10 @@ abstract class UserProfileRepository {
     String? displayName,
     String? email,
     String? role,
+    String? gender,
+    int? age,
+    String? address,
+    String? medicalHistory,
   });
 
   /// Delete a profile.
@@ -36,4 +40,14 @@ abstract class UserProfileRepository {
 
   /// Clear current profile (logout).
   Future<void> clearCurrent();
+
+  /// Upsert (create or update) a user profile.
+  /// 
+  /// This method:
+  /// - Validates the model
+  /// - Saves it in the local Hive box
+  /// - Returns the saved profile
+  /// 
+  /// Throws on validation or persistence failure.
+  Future<UserProfileModel> upsertProfile(UserProfileModel profile);
 }

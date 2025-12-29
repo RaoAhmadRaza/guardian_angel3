@@ -7,6 +7,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:guardian_angel_fyp/screens/community_feed_screen.dart';
 
+import 'community/community_discovery_state.dart';
+import 'community/community_discovery_data_provider.dart';
+
 class CommunityDiscoveryScreen extends StatefulWidget {
   const CommunityDiscoveryScreen({super.key});
 
@@ -15,71 +18,91 @@ class CommunityDiscoveryScreen extends StatefulWidget {
 }
 
 class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
-  int _timeLeft = 15730; // Start with ~4h 22m
-  late Timer _timer;
+  // Production state management
+  CommunityDiscoveryState _state = CommunityDiscoveryState.initial();
+  final CommunityDiscoveryDataProvider _dataProvider = CommunityDiscoveryDataProvider.instance;
+  
+  // Timer for countdown (only runs if event exists)
+  Timer? _countdownTimer;
 
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        if (_timeLeft > 0) {
-          _timeLeft--;
+    _loadInitialState();
+  }
+
+  Future<void> _loadInitialState() async {
+    try {
+      final loadedState = await _dataProvider.loadInitialState();
+      if (mounted) {
+        setState(() {
+          _state = loadedState;
+        });
+        // Start countdown timer only if there's a real upcoming event
+        _startCountdownIfNeeded();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _state = CommunityDiscoveryState(
+            isLoading: false,
+          );
+        });
+      }
+    }
+  }
+
+  void _startCountdownIfNeeded() {
+    _countdownTimer?.cancel();
+    if (_state.hasUpcomingEvent) {
+      _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (mounted && _state.hasUpcomingEvent) {
+          setState(() {}); // Trigger rebuild for countdown
+        } else {
+          timer.cancel();
         }
       });
-    });
+    }
   }
 
   @override
   void dispose() {
-    _timer.cancel();
+    _countdownTimer?.cancel();
     super.dispose();
   }
 
-  String _formatCountdown(int seconds) {
-    final h = (seconds ~/ 3600).toString().padLeft(2, '0');
-    final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, '0');
-    final s = (seconds % 60).toString().padLeft(2, '0');
-    return '$h h : $m m : $s s';
-  }
-
-  void _navigateToFeed(String name, String? image) {
+  /// Navigate to community feed - only with real data, no mock messages
+  void _navigateToFeed(CommunityGroup community) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => CommunityFeedScreen(
           session: ChatSession(
-            id: '1',
-            name: name,
-            coverImage: image,
-            goalProgress: 65,
-            dailyPrompt: "How is your heart feeling today?",
-            messages: [
-              Message(
-                id: '1',
-                text: "Just finished my morning meditation. Feeling so much lighter! 🧘‍♀️✨",
-                sender: 'other',
-                timestamp: DateTime.now().subtract(const Duration(minutes: 45)),
-                imageUrl: "https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&q=80&w=600",
-              ),
-              Message(
-                id: '2',
-                text: "That's wonderful! I'm about to start my walk.",
-                sender: 'user',
-                timestamp: DateTime.now().subtract(const Duration(minutes: 30)),
-              ),
-              Message(
-                id: '3',
-                text: "Remember to stay hydrated! It's warm today.",
-                sender: 'other',
-                timestamp: DateTime.now().subtract(const Duration(minutes: 28)),
-              ),
-              Message(
-                id: '4',
-                text: "Will do! Thanks for the reminder ❤️",
-                sender: 'user',
-                timestamp: DateTime.now().subtract(const Duration(minutes: 25)),
-              ),
-            ],
+            id: community.id,
+            name: community.name,
+            coverImage: community.imageUrl,
+            goalProgress: 0, // Will be loaded from real data
+            dailyPrompt: '', // Will be loaded from real data
+            messages: [], // Empty - real messages loaded by feed screen
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Navigate to featured community feed
+  void _navigateToFeaturedFeed() {
+    if (_state.featured == null) return;
+    final featured = _state.featured!;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => CommunityFeedScreen(
+          session: ChatSession(
+            id: featured.id,
+            name: featured.name,
+            coverImage: featured.imageUrl,
+            goalProgress: 0,
+            dailyPrompt: featured.prompt,
+            messages: [], // Empty - real messages loaded by feed screen
           ),
         ),
       ),
@@ -101,12 +124,16 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildStoriesRail(),
-                      const SizedBox(height: 24),
-                      _buildHeroCarousel(),
-                      const SizedBox(height: 24),
+                      // Stories rail - only show if stories exist
+                      if (_state.hasStories) _buildStoriesRail(),
+                      if (_state.hasStories) const SizedBox(height: 24),
+                      // Hero carousel - only show if featured exists
+                      if (_state.hasFeatured) _buildHeroCarousel(),
+                      if (_state.hasFeatured) const SizedBox(height: 24),
+                      // Filter pills always visible (static UI labels)
                       _buildFilterPills(),
                       const SizedBox(height: 24),
+                      // Masonry grid - shows communities or empty state
                       _buildMasonryGrid(),
                       const SizedBox(height: 32),
                       _buildFooterNote(),
@@ -199,13 +226,9 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
   }
 
   Widget _buildStoriesRail() {
-    final stories = [
-      {'name': 'Dr. Emily', 'img': 'https://images.unsplash.com/photo-1559839734-2b71ea860632?w=120&h=120&fit=crop', 'isNew': true},
-      {'name': 'Moderator', 'img': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&h=120&fit=crop', 'isNew': true},
-      {'name': 'Highlights', 'img': 'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?w=120&h=120&fit=crop', 'isNew': false},
-      {'name': 'Tips', 'img': 'https://images.unsplash.com/photo-1544367563-12123d8966cd?w=120&h=120&fit=crop', 'isNew': false},
-      {'name': 'Events', 'img': 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=120&h=120&fit=crop', 'isNew': false},
-    ];
+    // Use real stories from state - no hardcoded data
+    final stories = _state.stories;
+    if (stories.isEmpty) return const SizedBox.shrink();
 
     return SizedBox(
       height: 95,
@@ -216,7 +239,7 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
         separatorBuilder: (_, __) => const SizedBox(width: 20),
         itemBuilder: (context, index) {
           final story = stories[index];
-          final isNew = story['isNew'] as bool;
+          final isNew = story.isNew;
           return Column(
             children: [
               Container(
@@ -240,18 +263,21 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(100),
-                    child: Image.network(
-                      story['img'] as String,
-                      width: 56,
-                      height: 56,
-                      fit: BoxFit.cover,
-                    ),
+                    child: story.imageUrl != null
+                        ? Image.network(
+                            story.imageUrl!,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _buildStoryPlaceholder(),
+                          )
+                        : _buildStoryPlaceholder(),
                   ),
                 ),
               ),
               const SizedBox(height: 6),
               Text(
-                story['name'] as String,
+                story.name,
                 style: GoogleFonts.inter(
                   fontSize: 11,
                   fontWeight: isNew ? FontWeight.w600 : FontWeight.w500,
@@ -265,7 +291,20 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
     );
   }
 
+  Widget _buildStoryPlaceholder() {
+    return Container(
+      width: 56,
+      height: 56,
+      color: Colors.grey.shade200,
+      child: Icon(CupertinoIcons.person_fill, color: Colors.grey.shade400, size: 24),
+    );
+  }
+
   Widget _buildHeroCarousel() {
+    // Only render if featured community exists
+    final featured = _state.featured;
+    if (featured == null) return const SizedBox.shrink();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -284,7 +323,7 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
             ),
           ),
           _ScaleButton(
-            onTap: () => _navigateToFeed("Daily Gratitude", "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=800"),
+            onTap: _navigateToFeaturedFeed,
             child: Container(
               height: 300, // Aspect 4/3 approx
               decoration: BoxDecoration(
@@ -302,11 +341,15 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // Background Image
-                    Image.network(
-                      "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=800",
-                      fit: BoxFit.cover,
-                    ),
+                    // Background Image (or placeholder)
+                    if (featured.imageUrl != null)
+                      Image.network(
+                        featured.imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(color: Colors.amber.shade200),
+                      )
+                    else
+                      Container(color: Colors.amber.shade200),
                     // Gradient Overlay
                     Container(
                       decoration: BoxDecoration(
@@ -322,7 +365,7 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
                     ),
                     // Content
                     Padding(
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -354,28 +397,30 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
                                   ],
                                 ),
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(100),
-                                  border: Border.all(color: Colors.white.withOpacity(0.1)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(CupertinoIcons.person_2_fill, color: Colors.white.withOpacity(0.8), size: 12),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      "24 Online",
-                                      style: GoogleFonts.inter(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
+                              // Only show online count if > 0
+                              if (featured.onlineCount > 0)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(100),
+                                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(CupertinoIcons.person_2_fill, color: Colors.white.withOpacity(0.8), size: 12),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        "${featured.onlineCount} Online",
+                                        style: GoogleFonts.inter(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
                             ],
                           ),
                           
@@ -395,7 +440,7 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
                               ),
                               const SizedBox(height: 12),
                               Text(
-                                "Daily Gratitude",
+                                featured.name,
                                 style: GoogleFonts.inter(
                                   fontSize: 30,
                                   fontWeight: FontWeight.bold,
@@ -405,18 +450,22 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                "\"What made you smile this morning?\"",
+                                "\"${featured.prompt}\"",
                                 style: GoogleFonts.inter(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   color: const Color(0xFFFFF7ED), // orange-50
                                 ),
                               ),
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 16),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  _buildAvatarPile(18),
+                                  // Only show avatar pile if there are members
+                                  if (featured.onlineCount > 0)
+                                    _buildAvatarPile(featured.onlineCount)
+                                  else
+                                    const SizedBox.shrink(),
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                     decoration: BoxDecoration(
@@ -457,7 +506,8 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
   }
 
   Widget _buildFilterPills() {
-    final filters = ['All', 'Active Now', 'Quiet', 'Reading', 'Outdoors', 'Wellness'];
+    // Use filters from state (static labels are acceptable)
+    final filters = _state.availableFilters;
     return SizedBox(
       height: 36,
       child: ListView.separated(
@@ -491,57 +541,241 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
   }
 
   Widget _buildMasonryGrid() {
+    // Show empty state if no communities and no event
+    if (!_state.hasCommunities && !_state.hasUpcomingEvent) {
+      return _buildEmptyState();
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         children: [
-          // 1. Upcoming Event (Full Width)
-          _ScaleButton(
-            onTap: () => _navigateToFeed("Weekly Reflection", "https://images.unsplash.com/photo-1544367563-12123d8965cd?auto=format&fit=crop&q=80&w=800"),
-            child: _buildUpcomingEventCard(),
-          ),
-          const SizedBox(height: 16),
+          // 1. Upcoming Event (Full Width) - only if exists
+          if (_state.hasUpcomingEvent) ...[
+            _ScaleButton(
+              onTap: () {
+                // TODO: Navigate to event detail when implemented
+                // Event data available: _state.upcomingEvent!
+              },
+              child: _buildUpcomingEventCard(),
+            ),
+            const SizedBox(height: 16),
+          ],
           
-          // 2. Grid Columns
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Left Column
-              Expanded(
-                child: Column(
-                  children: [
-                    _ScaleButton(
-                      onTap: () => _navigateToFeed("Morning Walks", "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&q=80&w=400"),
-                      child: _buildMorningWalksCard(),
-                    ),
-                    const SizedBox(height: 16),
-                    _ScaleButton(
-                      onTap: () => _navigateToFeed("Book Club", null),
-                      child: _buildBookClubCard(),
-                    ),
-                  ],
-                ),
+          // 2. Community Cards from state
+          if (_state.hasCommunities) _buildCommunityCards(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                shape: BoxShape.circle,
               ),
-              const SizedBox(width: 16),
-              // Right Column
-              Expanded(
-                child: Column(
-                  children: [
-                    _ScaleButton(
-                      onTap: () => _navigateToFeed("Prayer Circle", "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&q=80&w=400"),
-                      child: _buildPrayerCircleCard(),
-                    ),
-                  ],
-                ),
+              child: Icon(CupertinoIcons.person_2, color: Colors.grey.shade400, size: 32),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "No Communities Yet",
+              style: GoogleFonts.inter(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade900,
               ),
-            ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Communities will appear here when available",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: Colors.grey.shade500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCommunityCards() {
+    final communities = _state.communities;
+    if (communities.isEmpty) return const SizedBox.shrink();
+
+    // Build cards based on available communities
+    // Use masonry layout similar to original
+    return Column(
+      children: [
+        for (int i = 0; i < communities.length; i += 2)
+          Padding(
+            padding: EdgeInsets.only(bottom: i + 2 < communities.length ? 16 : 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Left Column
+                Expanded(
+                  child: _ScaleButton(
+                    onTap: () => _navigateToFeed(communities[i]),
+                    child: _buildCommunityCard(communities[i]),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Right Column
+                Expanded(
+                  child: i + 1 < communities.length
+                      ? _ScaleButton(
+                          onTap: () => _navigateToFeed(communities[i + 1]),
+                          child: _buildCommunityCard(communities[i + 1]),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildCommunityCard(CommunityGroup community) {
+    final hasImage = community.imageUrl != null;
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Image or icon
+          if (hasImage)
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: Image.network(
+                      community.imageUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: Colors.grey.shade200,
+                        child: Icon(CupertinoIcons.photo, color: Colors.grey.shade400),
+                      ),
+                    ),
+                  ),
+                ),
+                // Live badge only if actually live
+                if (community.isLive)
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(100),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                            ),
+                          ).animate(onPlay: (c) => c.repeat()).fade(duration: 1000.ms),
+                          const SizedBox(width: 6),
+                          Text(
+                            community.latestActivity ?? "Active",
+                            style: GoogleFonts.inter(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            )
+          else
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(CupertinoIcons.person_2_fill, color: Colors.blue.shade600, size: 20),
+            ),
+          const SizedBox(height: 12),
+          Text(
+            community.name,
+            style: GoogleFonts.inter(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade900,
+              height: 1.1,
+            ),
+          ),
+          if (community.subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              community.subtitle!,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: Colors.grey.shade500,
+              ),
+            ),
+          ],
+          // Only show avatar pile if members exist
+          if (community.memberCount > 0) ...[
+            const SizedBox(height: 12),
+            _buildAvatarPile(community.memberCount),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildUpcomingEventCard() {
+    // Only render if event exists
+    final event = _state.upcomingEvent;
+    if (event == null) return const SizedBox.shrink();
+
     return Container(
       height: 100,
       padding: const EdgeInsets.all(4),
@@ -574,7 +808,7 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
           
           Row(
             children: [
-              // Date Box
+              // Date Box - from real event data
               Container(
                 width: 48,
                 height: 48,
@@ -588,7 +822,7 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      "SUN",
+                      event.dayAbbreviation,
                       style: GoogleFonts.inter(
                         fontSize: 8,
                         fontWeight: FontWeight.bold,
@@ -596,7 +830,7 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
                       ),
                     ),
                     Text(
-                      "24",
+                      event.dayNumber,
                       style: GoogleFonts.inter(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -627,7 +861,7 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      "Weekly Reflection",
+                      event.title,
                       style: GoogleFonts.inter(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -638,32 +872,37 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.4),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.white.withOpacity(0.05)),
-                          ),
-                          child: Text(
-                            _formatCountdown(_timeLeft),
-                            style: GoogleFonts.robotoMono(
-                              fontSize: 11,
-                              color: Colors.grey.shade400,
+                        // Real countdown from event start time
+                        if (event.countdownDisplay != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.4),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.white.withOpacity(0.05)),
+                            ),
+                            child: Text(
+                              event.countdownDisplay!,
+                              style: GoogleFonts.robotoMono(
+                                fontSize: 11,
+                                color: Colors.grey.shade400,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            "with Dr. Chen",
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              color: Colors.grey.shade500,
+                        // Host - only if real
+                        if (event.host != null) ...[
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              "with ${event.host}",
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: Colors.grey.shade500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ],
@@ -689,339 +928,20 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
     );
   }
 
-  Widget _buildMorningWalksCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Image Container
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.network(
-                        "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&q=80&w=400",
-                        fit: BoxFit.cover,
-                      ),
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, Colors.black.withOpacity(0.4)],
-                            stops: const [0.6, 1.0],
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 8,
-                        left: 8,
-                        child: const Icon(CupertinoIcons.photo, color: Colors.white, size: 16),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              // Live Badge
-              Positioned(
-                top: 12,
-                right: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.9),
-                    borderRadius: BorderRadius.circular(100),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Colors.green,
-                          shape: BoxShape.circle,
-                        ),
-                      ).animate(onPlay: (c) => c.repeat()).fade(duration: 1000.ms),
-                      const SizedBox(width: 6),
-                      Text(
-                        "Sarah posted",
-                        style: GoogleFonts.inter(
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            "Morning Walks",
-            style: GoogleFonts.inter(
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey.shade900,
-              height: 1.1,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            "Share your views",
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              color: Colors.grey.shade500,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildAvatarPile(9),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBookClubCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(CupertinoIcons.book_fill, color: Colors.blue.shade600, size: 20),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            "Book Club",
-            style: GoogleFonts.inter(
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey.shade900,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            "Reading \"The Alchemist\"",
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              color: Colors.grey.shade500,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              "Ch. 4 Discussion",
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPrayerCircleCard() {
-    return Container(
-      height: 280, // Taller to match column height roughly
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Background Image
-            Image.network(
-              "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&q=80&w=400",
-              fit: BoxFit.cover,
-            ),
-            // Gradient Overlay
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.1),
-                    Colors.transparent,
-                    Colors.black.withOpacity(0.8),
-                  ],
-                  stops: const [0.0, 0.4, 1.0],
-                ),
-              ),
-            ),
-            
-            // Live Badge
-            Positioned(
-              top: 16,
-              left: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF43F5E).withOpacity(0.9), // rose-500
-                  borderRadius: BorderRadius.circular(100),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 4,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const Icon(CupertinoIcons.bolt_fill, color: Colors.white, size: 12),
-                    const SizedBox(width: 4),
-                    Text(
-                      "Live Now",
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            
-            // Bottom Content
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white.withOpacity(0.2)),
-                      ),
-                      child: const Icon(CupertinoIcons.heart_fill, color: Colors.white, size: 20),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      "Prayer Circle",
-                      style: GoogleFonts.inter(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        height: 1.1,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Join 8 others in silent reflection.",
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        color: Colors.white.withOpacity(0.8),
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _buildAvatarPile(5),
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(CupertinoIcons.arrow_right, color: Color(0xFFE11D48), size: 16), // rose-600
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-
-
+  /// Avatar pile - shows placeholder avatars with count
+  /// In production, these would be real member avatars from the community
   Widget _buildAvatarPile(int count) {
-    final avatars = [
-      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=64&h=64&fit=crop&crop=faces",
-      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=64&h=64&fit=crop&crop=faces",
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=64&h=64&fit=crop&crop=faces",
-    ];
+    // Show placeholder avatars (no fake Unsplash images)
+    final displayCount = count > 3 ? 3 : count;
+    final remaining = count > 3 ? count - 3 : 0;
 
     return SizedBox(
       height: 24,
-      width: 24.0 * 3 + 10, // Approx width
+      width: (displayCount + (remaining > 0 ? 1 : 0)) * 14.0 + 10,
       child: Stack(
         children: [
-          for (int i = 0; i < avatars.length; i++)
+          // Placeholder avatar circles
+          for (int i = 0; i < displayCount; i++)
             Positioned(
               left: i * 14.0,
               child: Container(
@@ -1029,36 +949,36 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
                 height: 24,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
+                  color: Colors.grey.shade200,
                   border: Border.all(color: Colors.white, width: 1.5),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(100),
-                  child: Image.network(avatars[i], fit: BoxFit.cover),
-                ),
+                child: Icon(CupertinoIcons.person_fill, color: Colors.grey.shade400, size: 12),
               ),
             ),
-          Positioned(
-            left: 3 * 14.0,
-            child: Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 1.5),
-              ),
-              child: Center(
-                child: Text(
-                  "+$count",
-                  style: GoogleFonts.inter(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade500,
+          // Count badge
+          if (remaining > 0)
+            Positioned(
+              left: displayCount * 14.0,
+              child: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1.5),
+                ),
+                child: Center(
+                  child: Text(
+                    "+$remaining",
+                    style: GoogleFonts.inter(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade500,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );

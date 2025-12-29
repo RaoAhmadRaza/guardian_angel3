@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'patient_chat_screen.dart'; // For ChatSession and ViewType
+import 'medication/medication_state.dart';
+import 'medication/medication_data_provider.dart';
 
 class MedicationScreen extends StatefulWidget {
   final ChatSession session;
@@ -22,50 +24,63 @@ class MedicationScreen extends StatefulWidget {
 class _MedicationScreenState extends State<MedicationScreen> {
   final ScrollController _scrollController = ScrollController();
   
-  // Mock Data for Medication
-  late List<ChatMessage> _messages;
-  bool _doseTaken = false;
-  bool _isCardFlipped = false;
+  // Production state management
+  late MedicationDataProvider _dataProvider;
+  MedicationState? _state;
+  bool _isLoading = true;
+  
+  // Local UI state for slider (not persisted)
   double _sliderValue = 0.0;
   bool _isDragging = false;
 
   @override
   void initState() {
     super.initState();
-    _messages = [
-      ChatMessage(
-        id: '1',
-        text: "Good morning! Here is your medication schedule for today.",
-        sender: 'system',
-        timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-      ),
-      ChatMessage(
-        id: '2',
-        text: "",
-        sender: 'system',
-        timestamp: DateTime.now(),
-        medication: MedicationReminder(
-          name: "Lisinopril",
-          dosage: "10mg",
-          context: "With food",
-          nextDose: NextDose(time: "2:00 PM", name: "Afternoon Dose"),
-          inventory: Inventory(remaining: 12, total: 30, status: 'ok'),
-          doctorNotes: "Take with a full glass of water. Monitor blood pressure daily.",
-          sideEffects: ["Dizziness", "Headache", "Cough"],
-          pillColor: Colors.blue.shade100,
-        ),
-      ),
-    ];
+    _dataProvider = MedicationDataProvider(sessionName: widget.session.name);
+    
+    // Listen to state changes from provider
+    _dataProvider.addListener(_onProviderStateChanged);
+    
+    _loadState();
+  }
+  
+  void _onProviderStateChanged() {
+    if (mounted) {
+      setState(() {
+        _state = _dataProvider.state;
+      });
+    }
+  }
+  
+  Future<void> _loadState() async {
+    try {
+      final state = await _dataProvider.loadInitialState();
+      if (mounted) {
+        setState(() {
+          _state = state;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _state = MedicationState.empty(sessionName: widget.session.name);
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
+    _dataProvider.removeListener(_onProviderStateChanged);
     _scrollController.dispose();
+    _dataProvider.dispose();
     super.dispose();
   }
 
   void _handleDragUpdate(DragUpdateDetails details, double maxWidth) {
-    if (_doseTaken) return;
+    if (_state == null || !_state!.isSlideEnabled) return;
     setState(() {
       _isDragging = true;
       _sliderValue += details.delta.dx;
@@ -73,8 +88,8 @@ class _MedicationScreenState extends State<MedicationScreen> {
     });
 
     if (_sliderValue >= maxWidth - 56) { // Threshold
+      _dataProvider.markDoseTaken();
       setState(() {
-        _doseTaken = true;
         _isDragging = false;
         _sliderValue = maxWidth - 48;
       });
@@ -82,12 +97,11 @@ class _MedicationScreenState extends State<MedicationScreen> {
   }
 
   void _handleDragEnd(DragEndDetails details) {
-    if (!_doseTaken) {
-      setState(() {
-        _isDragging = false;
-        _sliderValue = 0.0;
-      });
-    }
+    if (_state == null || _state!.isDoseTaken) return;
+    setState(() {
+      _isDragging = false;
+      _sliderValue = 0.0;
+    });
   }
 
   @override
@@ -101,20 +115,19 @@ class _MedicationScreenState extends State<MedicationScreen> {
               // Header
               _buildHeader(),
 
-              // Messages
+              // Content Area - shows empty state or medication card
               Expanded(
-                child: ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.only(top: 20, bottom: 100, left: 16, right: 16),
-                  itemCount: _messages.length,
-                  itemBuilder: (context, index) {
-                    final msg = _messages[index];
-                    if (msg.medication != null) {
-                      return _buildMedicationCard(msg);
-                    }
-                    return _buildSystemMessage(msg);
-                  },
-                ),
+                child: _isLoading 
+                    ? const Center(child: CircularProgressIndicator())
+                    : _state?.hasMedication == true
+                        ? ListView(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.only(top: 20, bottom: 100, left: 16, right: 16),
+                            children: [
+                              _buildMedicationCard(),
+                            ],
+                          )
+                        : _buildEmptyState(),
               ),
             ],
           ),
@@ -181,7 +194,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                             width: 32,
                             height: 32,
                             child: CircularProgressIndicator(
-                              value: _doseTaken ? 1.0 : 0.8, // Mock progress
+                              value: _state?.adherenceRingValue ?? 0.0,
                               strokeWidth: 3,
                               color: const Color(0xFF10B981),
                               backgroundColor: Colors.grey.shade200,
@@ -207,32 +220,33 @@ class _MedicationScreenState extends State<MedicationScreen> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          // Streak Flame
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.shade50,
-                              borderRadius: BorderRadius.circular(100),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(CupertinoIcons.flame_fill, size: 10, color: Colors.orange.shade500),
-                                const SizedBox(width: 2),
-                                Text(
-                                  "12 Day Streak",
-                                  style: GoogleFonts.inter(
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.orange.shade600,
+                          // Streak Flame - only show if streak > 0
+                          if (_state?.showStreakBadge == true)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(100),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(CupertinoIcons.flame_fill, size: 10, color: Colors.orange.shade500),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    _state!.progress.streakDisplayText,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.orange.shade600,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
                         ],
                       ),
                       Text(
-                        _doseTaken ? "All meds taken today" : "80% for today",
+                        _state?.headerProgressText ?? 'No medications added yet',
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           color: Colors.grey.shade500,
@@ -258,32 +272,55 @@ class _MedicationScreenState extends State<MedicationScreen> {
     );
   }
 
-  Widget _buildSystemMessage(ChatMessage msg) {
+  /// Empty state when no medications are assigned
+  Widget _buildEmptyState() {
     return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 16),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.9),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.grey.shade200),
-        ),
-        child: Text(
-          msg.text,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.inter(
-            fontSize: 15,
-            height: 1.5,
-            color: Colors.grey.shade800,
-          ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                CupertinoIcons.capsule,
+                size: 40,
+                color: Colors.grey.shade400,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No Medications Yet',
+              style: GoogleFonts.inter(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              MedicationState.emptyStateMessage,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 15,
+                height: 1.5,
+                color: Colors.grey.shade500,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildMedicationCard(ChatMessage msg) {
-    final med = msg.medication!;
+  Widget _buildMedicationCard() {
+    if (_state?.medication == null) return const SizedBox.shrink();
+    final med = _state!.medication!;
     
     return Center(
       child: Container(
@@ -291,7 +328,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
         width: 340,
         height: 400, // Fixed height for flip
         child: TweenAnimationBuilder(
-          tween: Tween<double>(begin: 0, end: _isCardFlipped ? 180 : 0),
+          tween: Tween<double>(begin: 0, end: (_state?.isCardFlipped ?? false) ? 180 : 0),
           duration: const Duration(milliseconds: 600),
           builder: (context, double val, child) {
             final isFront = val < 90;
@@ -314,7 +351,8 @@ class _MedicationScreenState extends State<MedicationScreen> {
     );
   }
 
-  Widget _buildCardFront(MedicationReminder med) {
+  Widget _buildCardFront(MedicationData med) {
+    final isDoseTaken = _state?.isDoseTaken ?? false;
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -353,7 +391,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                   ],
                 ),
                 child: Center(
-                  child: _doseTaken 
+                  child: isDoseTaken 
                       ? Icon(CupertinoIcons.check_mark_circled_solid, color: Colors.green.shade500, size: 40)
                           .animate().scale(duration: 400.ms, curve: Curves.elasticOut)
                       : Transform.rotate(
@@ -394,16 +432,20 @@ class _MedicationScreenState extends State<MedicationScreen> {
                     alignment: Alignment.bottomCenter,
                     child: Container(
                       width: 12,
-                      height: 16, // Mock 50%
+                      height: (32 * med.inventory.fillPercentage).clamp(4.0, 32.0),
                       decoration: BoxDecoration(
-                        color: Colors.green.shade400,
+                        color: med.inventory.status == InventoryStatus.ok 
+                            ? Colors.green.shade400 
+                            : med.inventory.status == InventoryStatus.low 
+                                ? Colors.orange.shade400 
+                                : Colors.red.shade400,
                         borderRadius: BorderRadius.circular(100),
                       ),
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    "${med.inventory.remaining} left",
+                    med.inventory.displayText,
                     style: GoogleFonts.inter(
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
@@ -420,7 +462,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                _doseTaken ? "COMPLETED" : "SCHEDULED FOR 2:00 PM",
+                _state?.getScheduleLabel(context) ?? '',
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -434,12 +476,12 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: _doseTaken ? Colors.green.shade600 : Colors.grey.shade900,
+                  color: isDoseTaken ? Colors.green.shade600 : Colors.grey.shade900,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
-                "${med.dosage} • ${med.context}",
+                med.dosageDisplayText,
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
@@ -453,7 +495,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
           Align(
             alignment: Alignment.centerRight,
             child: GestureDetector(
-              onTap: () => setState(() => _isCardFlipped = true),
+              onTap: () => _dataProvider.setCardFlipped(true),
               child: Container(
                 width: 24,
                 height: 24,
@@ -473,7 +515,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
               color: Colors.grey.shade100,
               borderRadius: BorderRadius.circular(100),
             ),
-            child: _doseTaken 
+            child: isDoseTaken 
                 ? Center(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -481,7 +523,9 @@ class _MedicationScreenState extends State<MedicationScreen> {
                         Icon(CupertinoIcons.check_mark, color: Colors.green.shade600, size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          "Taken at ${TimeOfDay.now().format(context)}",
+                          _state?.doseTakenAt != null 
+                              ? "Taken at ${TimeOfDay.fromDateTime(_state!.doseTakenAt!).format(context)}"
+                              : "Taken",
                           style: GoogleFonts.inter(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
@@ -561,7 +605,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
     );
   }
 
-  Widget _buildCardBack(MedicationReminder med) {
+  Widget _buildCardBack(MedicationData med) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -591,7 +635,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 ),
               ),
               GestureDetector(
-                onTap: () => setState(() => _isCardFlipped = false),
+                onTap: () => _dataProvider.setCardFlipped(false),
                 child: Container(
                   width: 32,
                   height: 32,
@@ -607,46 +651,51 @@ class _MedicationScreenState extends State<MedicationScreen> {
           ),
           const SizedBox(height: 24),
           
-          Text(
-            "DOCTOR'S NOTE",
-            style: GoogleFonts.inter(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey.shade400,
-              letterSpacing: 1.0,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade100),
-            ),
-            child: Text(
-              "\"${med.doctorNotes}\"",
+          // Doctor's Note - only show if available
+          if (med.hasDoctorNotes) ...[
+            Text(
+              "DOCTOR'S NOTE",
               style: GoogleFonts.inter(
-                fontSize: 14,
-                fontStyle: FontStyle.italic,
-                color: Colors.grey.shade700,
-                height: 1.4,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade400,
+                letterSpacing: 1.0,
               ),
             ),
-          ),
-          const SizedBox(height: 24),
-
-          Text(
-            "POTENTIAL SIDE EFFECTS",
-            style: GoogleFonts.inter(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey.shade400,
-              letterSpacing: 1.0,
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade100),
+              ),
+              child: Text(
+                "\"${med.doctorNotes}\"",
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey.shade700,
+                  height: 1.4,
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
+            const SizedBox(height: 24),
+          ],
+
+          // Side Effects - only show if available
+          if (med.hasSideEffects) ...[
+            Text(
+              "POTENTIAL SIDE EFFECTS",
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade400,
+                letterSpacing: 1.0,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
             spacing: 8,
             runSpacing: 8,
             children: med.sideEffects.map((effect) => Container(
@@ -666,6 +715,21 @@ class _MedicationScreenState extends State<MedicationScreen> {
               ),
             )).toList(),
           ),
+          ],
+          
+          // Show empty state message if no clinical details
+          if (!med.hasDoctorNotes && !med.hasSideEffects)
+            Expanded(
+              child: Center(
+                child: Text(
+                  'No clinical details available',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: Colors.grey.shade400,
+                  ),
+                ),
+              ),
+            ),
 
           const Spacer(),
           Divider(color: Colors.grey.shade200),
@@ -673,21 +737,40 @@ class _MedicationScreenState extends State<MedicationScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                "Refill ID: #839210",
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: Colors.grey.shade400,
+              // Refill ID - only show if available
+              if (med.hasRefillId)
+                Text(
+                  "Refill ID: ${med.refillId}",
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: Colors.grey.shade400,
+                  ),
+                )
+              else
+                const SizedBox.shrink(),
+              // View Insert - only show if URL available
+              if (med.hasInsertUrl)
+                GestureDetector(
+                  onTap: () {
+                    // TODO: Open insert URL
+                  },
+                  child: Text(
+                    "View Full Insert",
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade600,
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  "Insert unavailable",
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: Colors.grey.shade300,
+                  ),
                 ),
-              ),
-              Text(
-                "View Full Insert",
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue.shade600,
-                ),
-              ),
             ],
           ),
         ],
@@ -696,6 +779,9 @@ class _MedicationScreenState extends State<MedicationScreen> {
   }
 
   Widget _buildInputBar() {
+    final canLogSideEffect = _state?.canLogSideEffect ?? false;
+    final canContactDoctor = _state?.canContactDoctor ?? false;
+    
     return Container(
       padding: EdgeInsets.only(
         left: 16, 
@@ -712,18 +798,20 @@ class _MedicationScreenState extends State<MedicationScreen> {
           Expanded(
             child: _buildFooterButton(
               icon: Icons.sentiment_dissatisfied_rounded,
-              iconColor: Colors.amber.shade600,
+              iconColor: canLogSideEffect ? Colors.amber.shade600 : Colors.grey.shade400,
               label: "Log Side Effect",
-              onTap: () {},
+              onTap: canLogSideEffect ? () {} : null,
+              enabled: canLogSideEffect,
             ),
           ),
           const SizedBox(width: 16),
           Expanded(
             child: _buildFooterButton(
               icon: CupertinoIcons.phone_fill,
-              iconColor: Colors.blue.shade500,
-              label: "Contact Dr. Emily",
-              onTap: () {},
+              iconColor: canContactDoctor ? Colors.blue.shade500 : Colors.grey.shade400,
+              label: _state?.contactDoctorText ?? "Contact Doctor",
+              onTap: canContactDoctor ? () {} : null,
+              enabled: canContactDoctor,
             ),
           ),
         ],
@@ -735,10 +823,11 @@ class _MedicationScreenState extends State<MedicationScreen> {
     required IconData icon,
     required Color iconColor,
     required String label,
-    required VoidCallback onTap,
+    VoidCallback? onTap,
+    bool enabled = true,
   }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
@@ -758,12 +847,15 @@ class _MedicationScreenState extends State<MedicationScreen> {
           children: [
             Icon(icon, color: iconColor, size: 20),
             const SizedBox(width: 8),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700,
+            Flexible(
+              child: Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: enabled ? Colors.grey.shade700 : Colors.grey.shade400,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -773,57 +865,4 @@ class _MedicationScreenState extends State<MedicationScreen> {
   }
 }
 
-// --- DATA MODELS ---
-
-class ChatMessage {
-  final String id;
-  final String text;
-  final String sender;
-  final DateTime timestamp;
-  final MedicationReminder? medication;
-
-  ChatMessage({
-    required this.id,
-    required this.text,
-    required this.sender,
-    required this.timestamp,
-    this.medication,
-  });
-}
-
-class MedicationReminder {
-  final String name;
-  final String dosage;
-  final String context;
-  final NextDose nextDose;
-  final Inventory inventory;
-  final String doctorNotes;
-  final List<String> sideEffects;
-  final Color pillColor;
-
-  MedicationReminder({
-    required this.name,
-    required this.dosage,
-    required this.context,
-    required this.nextDose,
-    required this.inventory,
-    required this.doctorNotes,
-    required this.sideEffects,
-    required this.pillColor,
-  });
-}
-
-class NextDose {
-  final String time;
-  final String name;
-
-  NextDose({required this.time, required this.name});
-}
-
-class Inventory {
-  final int remaining;
-  final int total;
-  final String status;
-
-  Inventory({required this.remaining, required this.total, required this.status});
-}
+// Data models moved to lib/screens/medication/medication_state.dart

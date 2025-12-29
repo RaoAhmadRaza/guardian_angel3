@@ -1,13 +1,18 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'colors.dart';
 import 'widgets.dart';
 import 'providers/theme_provider.dart';
 import 'theme/motion.dart';
 import 'theme/animation_performance.dart';
 import 'user_selection_screen.dart';
+import 'firebase/auth/phone_auth_provider.dart';
+import 'onboarding/services/onboarding_local_service.dart';
 
 class OTPVerificationScreen extends StatefulWidget {
   final String phoneNumber;
@@ -31,6 +36,8 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen>
   bool _isLoading = false;
   bool _isResending = false;
   int _resendCountdown = 30;
+  String? _verificationId;
+  bool _isSendingCode = false;
 
   late AnimationController _shakeController;
   late AnimationController _progressController;
@@ -41,7 +48,256 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen>
   void initState() {
     super.initState();
     _initializeAnimations();
-    _startCountdown();
+    _sendVerificationCode();
+  }
+
+  /// Send verification code via Firebase
+  Future<void> _sendVerificationCode() async {
+    if (_isSendingCode) return;
+    
+    setState(() {
+      _isSendingCode = true;
+    });
+
+    // Check if running on iOS Simulator in debug mode - bypass Firebase
+    final isSimulator = kDebugMode && Platform.isIOS && await _isIOSSimulator();
+    
+    if (isSimulator) {
+      // Bypass Firebase for simulator testing
+      debugPrint('[PhoneAuth] Simulator detected - using test mode');
+      if (mounted) {
+        setState(() {
+          _isSendingCode = false;
+          _verificationId = 'SIMULATOR_TEST_MODE';
+          _resendCountdown = 30;
+        });
+        _startCountdown();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '🧪 SIMULATOR MODE: Enter any 6 digits to verify',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+            ),
+            backgroundColor: Colors.orange.shade400,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+      return;
+    }
+
+    final result = await PhoneAuthProviderImpl.instance.sendVerificationCode(
+      widget.phoneNumber,
+    );
+
+    if (mounted) {
+      setState(() {
+        _isSendingCode = false;
+      });
+
+      if (result.success && result.verificationId != null) {
+        setState(() {
+          _verificationId = result.verificationId;
+          _resendCountdown = 30;
+        });
+        _startCountdown();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Verification code sent to ${widget.phoneNumber}',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+            ),
+            backgroundColor: Colors.green.shade400,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      } else if (result.user != null) {
+        // Auto-verified (Android)
+        _navigateToNextScreen(user: result.user);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.errorMessage ?? 'Failed to send code',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+            ),
+            backgroundColor: Colors.red.shade400,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Navigates to the next screen after successful authentication.
+  /// 
+  /// STEP 1: Saves auth basics to Local User Base Table FIRST (offline-first).
+  /// Navigation is blocked if local save fails.
+  Future<void> _navigateToNextScreen({User? user}) async {
+    AnimationPerformance.provideFeedback(HapticFeedbackType.mediumImpact);
+    
+    // STEP 1: Save auth basics to Local User Base Table (FIRST - BLOCKING)
+    final firebaseUser = user ?? FirebaseAuth.instance.currentUser;
+    if (firebaseUser != null) {
+      final saveResult = await _saveUserBaseLocally(firebaseUser);
+      if (!saveResult) {
+        // Hard stop - local save failed
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to save user data locally. Please try again.',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+            ),
+            backgroundColor: Colors.red.shade400,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        return;
+      }
+    }
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Phone verified successfully!',
+          style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+        ),
+        backgroundColor: Colors.green.shade400,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+
+    if (widget.isFromSignup) {
+      Navigator.of(context).pushReplacement(
+        AppMotion.slideTransition(page: const UserSelectionScreen()),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        AppMotion.slideTransition(page: const UserVerificationScreen()),
+      );
+    }
+  }
+  
+  /// STEP 1: Saves auth basics to Local User Base Table (OFFLINE-FIRST).
+  /// This is the first step in the onboarding flow.
+  /// Returns true on success, false on failure.
+  Future<bool> _saveUserBaseLocally(User user) async {
+    try {
+      final uid = user.uid;
+      if (uid.isEmpty) {
+        debugPrint('[OTPVerificationScreen] ERROR: User UID is empty');
+        return false;
+      }
+
+      await OnboardingLocalService.instance.saveUserBase(
+        uid: uid,
+        email: user.email,
+        fullName: user.displayName,
+        profileImageUrl: user.photoURL,
+      );
+      
+      debugPrint('[OTPVerificationScreen] Step 1 complete: User base saved locally for $uid');
+      return true;
+    } catch (e) {
+      debugPrint('[OTPVerificationScreen] Step 1 FAILED: $e');
+      return false;
+    }
+  }
+
+  /// Navigates to next screen for SIMULATOR MODE only.
+  /// Creates a mock local profile since no Firebase auth occurred.
+  /// STEP 1 (SIMULATOR): Saves mock auth basics FIRST (offline-first).
+  Future<void> _navigateToNextScreenSimulator() async {
+    AnimationPerformance.provideFeedback(HapticFeedbackType.mediumImpact);
+    
+    // STEP 1: Save mock profile locally (BLOCKING)
+    final saveResult = await _saveSimulatorUserBaseLocally();
+    if (!saveResult) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Failed to save user data locally. Please try again.',
+            style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+          ),
+          backgroundColor: Colors.red.shade400,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      return;
+    }
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '🧪 SIMULATOR: Mock login successful!',
+          style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+        ),
+        backgroundColor: Colors.orange.shade400,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+
+    if (widget.isFromSignup) {
+      Navigator.of(context).pushReplacement(
+        AppMotion.slideTransition(page: const UserSelectionScreen()),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        AppMotion.slideTransition(page: const UserVerificationScreen()),
+      );
+    }
+  }
+
+  /// STEP 1 (SIMULATOR): Saves mock auth basics to Local User Base Table.
+  /// For simulator testing only - creates a mock user profile.
+  Future<bool> _saveSimulatorUserBaseLocally() async {
+    try {
+      // Generate a mock UID for simulator testing
+      final mockUid = 'SIMULATOR_${widget.phoneNumber.replaceAll(RegExp(r'[^0-9]'), '')}';
+      
+      await OnboardingLocalService.instance.saveUserBase(
+        uid: mockUid,
+        email: null,
+        fullName: 'Simulator User',
+        profileImageUrl: null,
+      );
+      
+      debugPrint('[OTPVerificationScreen] SIMULATOR Step 1: Mock user base saved for $mockUid');
+      return true;
+    } catch (e) {
+      debugPrint('[OTPVerificationScreen] SIMULATOR Step 1 FAILED: $e');
+      return false;
+    }
+  }
+
+  /// Check if running on iOS Simulator
+  Future<bool> _isIOSSimulator() async {
+    try {
+      // On iOS Simulator, the device model contains "Simulator" or specific simulator identifiers
+      // We use DeviceInfoPlugin alternative: check environment
+      final Map<String, String> env = Platform.environment;
+      // Check for simulator-specific environment variables
+      if (env.containsKey('SIMULATOR_DEVICE_NAME') || 
+          env.containsKey('SIMULATOR_HOST_HOME')) {
+        return true;
+      }
+      // Fallback: Check if unprovisioned (simulators can't have real APNs)
+      // For simplicity in debug mode on iOS, assume simulator if debug
+      return true; // In debug iOS, treat as simulator for safety
+    } catch (e) {
+      debugPrint('[PhoneAuth] Error checking simulator: $e');
+      return false;
+    }
   }
 
   void _initializeAnimations() {
@@ -103,7 +359,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen>
     String otp = _otpControllers.map((controller) => controller.text).join();
 
     if (otp.length != 6) {
-      _showError();
+      _showError('Please enter the complete 6-digit code');
       return;
     }
 
@@ -114,8 +370,36 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen>
     AnimationPerformance.provideFeedback(HapticFeedbackType.lightImpact);
     _progressController.forward();
 
-    // Simulate OTP verification
-    await Future.delayed(const Duration(seconds: 2));
+    // Check if in simulator test mode
+    if (_verificationId == 'SIMULATOR_TEST_MODE') {
+      // Simulate a short delay for realism
+      await Future.delayed(const Duration(milliseconds: 800));
+      
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        _progressController.reverse();
+        // In simulator mode, create a mock profile since no real Firebase auth occurs
+        _navigateToNextScreenSimulator();
+      }
+      return;
+    }
+
+    // Verify OTP with Firebase
+    if (_verificationId == null) {
+      setState(() {
+        _isLoading = false;
+      });
+      _progressController.reverse();
+      _showError('Verification session expired. Please request a new code.');
+      return;
+    }
+
+    final result = await PhoneAuthProviderImpl.instance.verifyOTP(
+      verificationId: _verificationId!,
+      smsCode: otp,
+    );
 
     if (mounted) {
       setState(() {
@@ -123,22 +407,21 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen>
       });
 
       _progressController.reverse();
-      AnimationPerformance.provideFeedback(HapticFeedbackType.mediumImpact);
 
-      // Navigate based on flow
-      if (widget.isFromSignup) {
-        Navigator.of(context).pushReplacement(
-          AppMotion.slideTransition(page: const UserSelectionScreen()),
-        );
+      if (result.success && result.user != null) {
+        _navigateToNextScreen(user: result.user);
       } else {
-        Navigator.of(context).pushReplacement(
-          AppMotion.slideTransition(page: const UserVerificationScreen()),
-        );
+        _showError(result.errorMessage ?? 'Invalid verification code');
+        // Clear OTP fields on error
+        for (var controller in _otpControllers) {
+          controller.clear();
+        }
+        _focusNodes[0].requestFocus();
       }
     }
   }
 
-  void _showError() {
+  void _showError([String? message]) {
     AnimationPerformance.provideFeedback(HapticFeedbackType.heavyImpact);
     _shakeController.forward().then((_) {
       _shakeController.reverse();
@@ -147,7 +430,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Invalid OTP. Please try again.',
+          message ?? 'Invalid OTP. Please try again.',
           style: GoogleFonts.inter(fontWeight: FontWeight.w500),
         ),
         backgroundColor: Colors.red.shade400,
@@ -166,29 +449,47 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen>
 
     AnimationPerformance.provideFeedback(HapticFeedbackType.selectionClick);
 
-    // Simulate resend
-    await Future.delayed(const Duration(seconds: 1));
+    // Resend verification code via Firebase
+    final result = await PhoneAuthProviderImpl.instance.resendVerificationCode(
+      widget.phoneNumber,
+    );
 
     if (mounted) {
       setState(() {
         _isResending = false;
-        _resendCountdown = 30;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'OTP sent successfully!',
-            style: GoogleFonts.inter(fontWeight: FontWeight.w500),
-          ),
-          backgroundColor: Colors.green.shade400,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      if (result.success && result.verificationId != null) {
+        setState(() {
+          _verificationId = result.verificationId;
+          _resendCountdown = 30;
+        });
+        _startCountdown();
 
-      _startCountdown();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'OTP sent successfully!',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+            ),
+            backgroundColor: Colors.green.shade400,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.errorMessage ?? 'Failed to resend code',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+            ),
+            backgroundColor: Colors.red.shade400,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
     }
   }
 

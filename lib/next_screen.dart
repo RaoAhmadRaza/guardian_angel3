@@ -9,6 +9,7 @@ import 'dart:ui';
 import 'theme/app_theme.dart' as theme;
 
 import 'services/session_service.dart';
+import 'services/demo_mode_service.dart';
 // Previous chat implementation preserved in chat_screen_new.dart
 import 'screens/patient_chat_screen.dart';
 import 'diagnostic_screen.dart';
@@ -17,6 +18,8 @@ import 'home automation/main.dart' show HomeAutomationScreen;
 import 'main.dart';
 import 'settings_screen.dart';
 import 'widgets/overlay_nav_bar.dart';
+import 'screens/patient_home/patient_home_state.dart';
+import 'screens/patient_home/patient_home_data_provider.dart';
 
 class NextScreen extends StatefulWidget {
   final String? selectedGender;
@@ -38,48 +41,60 @@ class _NextScreenState extends State<NextScreen> {
   // Removed nav index state
   // Removed overlay nav controller
 
-  // Live health data variables
-  int _heartPressureSystolic = 120;
-  int _heartPressureDiastolic = 80;
-  int _heartRate = 67;
-  Timer? _healthDataTimer;
+  // Screen state from local database
+  PatientHomeState _homeState = PatientHomeState.loading();
+  bool _isLoading = true;
+
+  // Demo mode subscription - reloads data when demo mode is toggled
+  StreamSubscription<bool>? _demoModeSubscription;
+
+  // Health data timer removed - no fake animations for first-time users
+  // Real vitals will come from connected devices/repositories
 
   @override
   void initState() {
     super.initState();
+    _loadPatientData();
     _checkSessionPeriodically();
-    _startHealthDataAnimation();
+    _listenToDemoModeChanges();
+    // Removed: _startHealthDataAnimation() - no fake data simulation
 
     // Removed home automation initialization
   }
 
   @override
   void dispose() {
-    _healthDataTimer?.cancel();
+    _demoModeSubscription?.cancel();
+    // Removed health data timer - no longer needed
     super.dispose();
   }
 
-  /// Start live health data animation
-  void _startHealthDataAnimation() {
-    _healthDataTimer =
-        Timer.periodic(const Duration(milliseconds: 3000), (timer) {
+  /// Listen for demo mode changes and reload data
+  void _listenToDemoModeChanges() {
+    _demoModeSubscription = DemoModeService.instance.onDemoModeChanged.listen((isEnabled) {
+      debugPrint('[NextScreen] Demo mode changed to: $isEnabled - reloading data');
+      _loadPatientData();
+    });
+  }
+
+  /// Load patient data from local database
+  Future<void> _loadPatientData() async {
+    try {
+      final state = await PatientHomeDataProvider.instance.loadPatientHomeState();
       if (mounted) {
         setState(() {
-          // More realistic hospital-style variations
-          // Heart rate: 60-75 bpm with occasional spikes
-          final now = DateTime.now().millisecondsSinceEpoch;
-          final baseHeartRate = 67;
-          final variation = (now % 13) - 6; // -6 to +6 variation
-          _heartRate = baseHeartRate + variation;
-
-          // Blood pressure: more realistic medical variations
-          final baseSystolic = 120;
-          final baseDiastolic = 80;
-          _heartPressureSystolic = baseSystolic + ((now % 11) - 5); // 115-125
-          _heartPressureDiastolic = baseDiastolic + ((now % 7) - 3); // 77-83
+          _homeState = state;
+          _isLoading = false;
         });
       }
-    });
+    } catch (e) {
+      debugPrint('[NextScreen] Error loading patient data: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   /// Check session validity periodically and logout if expired
@@ -173,8 +188,17 @@ class _NextScreenState extends State<NextScreen> {
 
   /// Build Home Page
   Widget _buildHomePage(bool isDarkMode) {
-    final displayGender = (widget.selectedGender ?? 'Male');
-    final displayName = (widget.patientName ?? 'Patient');
+    // Use state data, with widget params as fallback for backwards compatibility
+    final displayGender = _homeState.gender.isNotEmpty 
+        ? _homeState.gender 
+        : (widget.selectedGender ?? 'Male');
+    final displayName = _homeState.patientName != 'Patient' 
+        ? _homeState.patientName 
+        : (widget.patientName ?? 'Patient');
+    final avatarPath = displayGender.toLowerCase() == 'female'
+        ? 'images/female.jpg'
+        : 'images/male.jpg';
+    
     return SafeArea(
       bottom: false,
       child: SingleChildScrollView(
@@ -206,11 +230,7 @@ class _NextScreenState extends State<NextScreen> {
                       ),
                     ],
                     image: DecorationImage(
-                      image: AssetImage(
-                        displayGender.toLowerCase() == 'female'
-                            ? 'images/female.jpg'
-                            : 'images/male.jpg',
-                      ),
+                      image: AssetImage(avatarPath),
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -327,28 +347,37 @@ class _NextScreenState extends State<NextScreen> {
                         : const Color(0xFFF5F5F7),
                     shape: BoxShape.circle,
                   ),
-                  child: TweenAnimationBuilder<double>(
-                    duration: Duration(milliseconds: 1200 + (_heartRate * 8)),
-                    tween: Tween<double>(begin: 0.98, end: 1.02),
-                    builder: (context, scale, child) {
-                      return Transform.scale(
-                        scale: scale,
-                        child: Icon(
-                          CupertinoIcons.heart_fill,
-                          color: isDarkMode
-                              ? Colors.white.withOpacity(0.7)
-                              : const Color(0xFF475569),
-                          size: 24,
-                        ),
-                      );
-                    },
-                  ),
+                  // Heart icon - only animate if real vitals data exists
+                  child: _homeState.vitals.hasData
+                    ? TweenAnimationBuilder<double>(
+                        duration: Duration(milliseconds: 1200 + (_homeState.vitals.heartRate * 8)),
+                        tween: Tween<double>(begin: 0.98, end: 1.02),
+                        builder: (context, scale, child) {
+                          return Transform.scale(
+                            scale: scale,
+                            child: Icon(
+                              CupertinoIcons.heart_fill,
+                              color: isDarkMode
+                                  ? Colors.white.withOpacity(0.7)
+                                  : const Color(0xFF475569),
+                              size: 24,
+                            ),
+                          );
+                        },
+                      )
+                    : Icon(
+                        CupertinoIcons.heart_fill,
+                        color: isDarkMode
+                            ? Colors.white.withOpacity(0.5)
+                            : const Color(0xFF475569).withOpacity(0.5),
+                        size: 24,
+                      ),
                 ),
 
                 const SizedBox(height: 16),
 
                 Text(
-                  'Health',
+                  _homeState.diagnosisSummary.title,
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
@@ -359,7 +388,7 @@ class _NextScreenState extends State<NextScreen> {
                 const SizedBox(height: 8),
 
                 Text(
-                  'Last diagnosis of heart\n3 days ago',
+                  _homeState.diagnosisSummary.displaySubtitle,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w400,
@@ -525,22 +554,31 @@ class _NextScreenState extends State<NextScreen> {
                                   : Colors.white.withOpacity(0.3),
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: TweenAnimationBuilder<double>(
-                              duration: Duration(milliseconds: 1000 + (_heartRate * 5)),
-                              tween: Tween<double>(begin: 0.95, end: 1.05),
-                              builder: (context, scale, child) {
-                                return Transform.scale(
-                                  scale: scale,
-                                  child: Icon(
-                                    CupertinoIcons.heart,
-                                    color: isDarkMode
-                                        ? Colors.white.withOpacity(0.8) // 80% opacity like automation cards
-                                        : const Color(0xFF475569).withOpacity(0.8),
-                                    size: 18, // Standardized 18px size
-                                  ),
-                                );
-                              },
-                            ),
+                            // Heart pressure icon - only animate if real vitals data exists
+                            child: _homeState.vitals.hasData
+                              ? TweenAnimationBuilder<double>(
+                                  duration: Duration(milliseconds: 1000 + (_homeState.vitals.heartRate * 5)),
+                                  tween: Tween<double>(begin: 0.95, end: 1.05),
+                                  builder: (context, scale, child) {
+                                    return Transform.scale(
+                                      scale: scale,
+                                      child: Icon(
+                                        CupertinoIcons.heart,
+                                        color: isDarkMode
+                                            ? Colors.white.withOpacity(0.8)
+                                            : const Color(0xFF475569).withOpacity(0.8),
+                                        size: 18,
+                                      ),
+                                    );
+                                  },
+                                )
+                              : Icon(
+                                  CupertinoIcons.heart,
+                                  color: isDarkMode
+                                      ? Colors.white.withOpacity(0.5)
+                                      : const Color(0xFF475569).withOpacity(0.5),
+                                  size: 18,
+                                ),
                           ),
                           const SizedBox(width: 10),
                           // Title aligned with icon
@@ -563,36 +601,19 @@ class _NextScreenState extends State<NextScreen> {
 
                       const Spacer(), // Use spacer to fill available space
 
-                      // Pressure reading at bottom
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 500),
-                        transitionBuilder: (Widget child, Animation<double> animation) {
-                          return FadeTransition(
-                            opacity: animation,
-                            child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0.0, 0.1),
-                                end: Offset.zero,
-                              ).animate(CurvedAnimation(
-                                parent: animation,
-                                curve: Curves.easeOut,
-                              )),
-                              child: child,
-                            ),
-                          );
-                        },
-                        child: Text(
-                          '$_heartPressureSystolic / $_heartPressureDiastolic',
-                          key: ValueKey('$_heartPressureSystolic-$_heartPressureDiastolic'),
-                          style: TextStyle(
-                            fontSize: 16, // Slightly smaller for card layout
-                            fontWeight: FontWeight.w700,
-                            color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-                            letterSpacing: -0.1,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      // Pressure reading at bottom - show -- / -- if no data
+                      Text(
+                        _homeState.vitals.bloodPressureDisplay,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: isDarkMode 
+                              ? (_homeState.vitals.hasData ? Colors.white : Colors.white.withOpacity(0.5))
+                              : (_homeState.vitals.hasData ? const Color(0xFF0F172A) : const Color(0xFF0F172A).withOpacity(0.5)),
+                          letterSpacing: -0.1,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -633,22 +654,31 @@ class _NextScreenState extends State<NextScreen> {
                                   : Colors.white.withOpacity(0.3),
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: TweenAnimationBuilder<double>(
-                              duration: Duration(milliseconds: 900 + (_heartRate * 6)),
-                              tween: Tween<double>(begin: 0.9, end: 1.1),
-                              builder: (context, scale, child) {
-                                return Transform.scale(
-                                  scale: scale,
-                                  child: Icon(
-                                    CupertinoIcons.waveform,
-                                    color: isDarkMode
-                                        ? Colors.white.withOpacity(0.8) // 80% opacity like automation cards
-                                        : const Color(0xFF475569).withOpacity(0.8),
-                                    size: 18, // Standardized 18px size
-                                  ),
-                                );
-                              },
-                            ),
+                            // Heart rhythm icon - only animate if real vitals data exists
+                            child: _homeState.vitals.hasData
+                              ? TweenAnimationBuilder<double>(
+                                  duration: Duration(milliseconds: 900 + (_homeState.vitals.heartRate * 6)),
+                                  tween: Tween<double>(begin: 0.9, end: 1.1),
+                                  builder: (context, scale, child) {
+                                    return Transform.scale(
+                                      scale: scale,
+                                      child: Icon(
+                                        CupertinoIcons.waveform,
+                                        color: isDarkMode
+                                            ? Colors.white.withOpacity(0.8)
+                                            : const Color(0xFF475569).withOpacity(0.8),
+                                        size: 18,
+                                      ),
+                                    );
+                                  },
+                                )
+                              : Icon(
+                                  CupertinoIcons.waveform,
+                                  color: isDarkMode
+                                      ? Colors.white.withOpacity(0.5)
+                                      : const Color(0xFF475569).withOpacity(0.5),
+                                  size: 18,
+                                ),
                           ),
                           const SizedBox(width: 10),
                           // Title aligned with icon
@@ -671,36 +701,19 @@ class _NextScreenState extends State<NextScreen> {
 
                       const Spacer(), // Use spacer to fill available space
 
-                      // Heart rate reading at bottom
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 500),
-                        transitionBuilder: (Widget child, Animation<double> animation) {
-                          return FadeTransition(
-                            opacity: animation,
-                            child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0.0, 0.1),
-                                end: Offset.zero,
-                              ).animate(CurvedAnimation(
-                                parent: animation,
-                                curve: Curves.easeOut,
-                              )),
-                              child: child,
-                            ),
-                          );
-                        },
-                        child: Text(
-                          '$_heartRate / min',
-                          key: ValueKey(_heartRate),
-                          style: TextStyle(
-                            fontSize: 16, // Slightly smaller for card layout
-                            fontWeight: FontWeight.w700,
-                            color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-                            letterSpacing: -0.1,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      // Heart rate reading at bottom - show -- / min if no data
+                      Text(
+                        _homeState.vitals.heartRateDisplay,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: isDarkMode 
+                              ? (_homeState.vitals.hasData ? Colors.white : Colors.white.withOpacity(0.5))
+                              : (_homeState.vitals.hasData ? const Color(0xFF0F172A) : const Color(0xFF0F172A).withOpacity(0.5)),
+                          letterSpacing: -0.1,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -763,7 +776,7 @@ class _NextScreenState extends State<NextScreen> {
                 : _getAutomationCardDecorationLight(),
             child: Row(
               children: [
-                // Safety icon
+                // Safety icon - neutral when not monitored, check when active
                 Container(
                   width: 48,
                   height: 48,
@@ -774,10 +787,12 @@ class _NextScreenState extends State<NextScreen> {
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    Icons.check_circle_outline,
+                    _homeState.safetyStatus.status == 'All Clear'
+                        ? Icons.check_circle_outline
+                        : Icons.radio_button_unchecked, // Neutral icon for not monitored
                     color: isDarkMode
-                        ? Colors.white.withOpacity(0.7)
-                        : const Color(0xFF475569),
+                        ? Colors.white.withOpacity(_homeState.safetyStatus.status == 'All Clear' ? 0.7 : 0.5)
+                        : const Color(0xFF475569).withOpacity(_homeState.safetyStatus.status == 'All Clear' ? 1.0 : 0.5),
                     size: 24,
                   ),
                 ),
@@ -787,7 +802,7 @@ class _NextScreenState extends State<NextScreen> {
                 // Status text
                 Expanded(
                   child: Text(
-                    'All Clear',
+                    _homeState.safetyStatus.status,
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w700,
@@ -858,7 +873,7 @@ class _NextScreenState extends State<NextScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Robert Fox',
+                  _homeState.doctorInfo.name,
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
@@ -867,7 +882,7 @@ class _NextScreenState extends State<NextScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Cardiologist',
+                  _homeState.doctorInfo.specialty,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w400,
@@ -880,50 +895,92 @@ class _NextScreenState extends State<NextScreen> {
             ),
           ),
 
-          // Action buttons
-          Row(
-            children: [
-              // Message button
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: isDarkMode
-                      ? Colors.white.withOpacity(0.1)
-                      : const Color(0xFFF5F5F7),
-                  shape: BoxShape.circle,
+          // Action buttons - disabled if no doctor assigned
+          if (_homeState.doctorInfo.isAssigned)
+            Row(
+              children: [
+                // Message button
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.1)
+                        : const Color(0xFFF5F5F7),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    CupertinoIcons.chat_bubble_fill,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.7)
+                        : const Color(0xFF475569),
+                    size: 20,
+                  ),
                 ),
-                child: Icon(
-                  CupertinoIcons.chat_bubble_fill,
-                  color: isDarkMode
-                      ? Colors.white.withOpacity(0.7)
-                      : const Color(0xFF475569),
-                  size: 20,
-                ),
-              ),
 
-              const SizedBox(width: 12),
+                const SizedBox(width: 12),
 
-              // Call button
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: isDarkMode
-                      ? Colors.white.withOpacity(0.1)
-                      : const Color(0xFFF5F5F7),
-                  shape: BoxShape.circle,
+                // Call button
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.1)
+                        : const Color(0xFFF5F5F7),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    CupertinoIcons.phone_fill,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.7)
+                        : const Color(0xFF475569),
+                    size: 20,
+                  ),
                 ),
-                child: Icon(
-                  CupertinoIcons.phone_fill,
-                  color: isDarkMode
-                      ? Colors.white.withOpacity(0.7)
-                      : const Color(0xFF475569),
-                  size: 20,
+              ],
+            )
+          else
+            // Disabled state when no doctor
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.05)
+                        : const Color(0xFFF5F5F7).withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    CupertinoIcons.chat_bubble_fill,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.3)
+                        : const Color(0xFF475569).withOpacity(0.3),
+                    size: 20,
+                  ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 12),
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.05)
+                        : const Color(0xFFF5F5F7).withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    CupertinoIcons.phone_fill,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.3)
+                        : const Color(0xFF475569).withOpacity(0.3),
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -1028,63 +1085,8 @@ class _NextScreenState extends State<NextScreen> {
           ),
           const SizedBox(height: 24), // Slightly more space after title
 
-          // Smart Lighting Card
-          _buildAutomationCard(
-            title: 'Smart Light 💡',
-            subtitle: '12 devices',
-            icon: Icons.lightbulb_outline,
-            value: '8 Active',
-            color: isDarkMode
-                ? Colors.white.withOpacity(0.7)
-                : const Color(0xFF475569),
-            isDarkMode: isDarkMode,
-            height: 100, // Reduced height for column layout
-          ),
-
-          const SizedBox(height: 16),
-
-          // Security Card
-          _buildAutomationCard(
-            title: 'Security 🛡️',
-            subtitle: 'System Status',
-            icon: Icons.security,
-            value: 'ON (Armed)',
-            color: isDarkMode
-                ? Colors.white.withOpacity(0.7)
-                : const Color(0xFF475569),
-            isDarkMode: isDarkMode,
-            height: 100,
-          ),
-
-          const SizedBox(height: 16), // Standard spacing between cards
-
-          // Thermostat Card
-          _buildAutomationCard(
-            title: 'Thermostat',
-            subtitle: 'Climate Control',
-            icon: Icons.thermostat,
-            value: 'AUTO 24°C',
-            color: isDarkMode
-                ? Colors.white.withOpacity(0.7)
-                : const Color(0xFF475569),
-            isDarkMode: isDarkMode,
-            height: 100,
-          ),
-
-          const SizedBox(height: 16),
-
-          // Entertainment Card
-          _buildAutomationCard(
-            title: 'Entertainment',
-            subtitle: 'Living Room',
-            icon: Icons.tv,
-            value: 'Playing Music',
-            color: isDarkMode
-                ? Colors.white.withOpacity(0.7)
-                : const Color(0xFF475569),
-            isDarkMode: isDarkMode,
-            height: 100,
-          ),
+          // Build automation cards from state data
+          ..._buildAutomationCardsFromState(isDarkMode),
         ],
               ), // Close Column
             ), // Close Container  
@@ -1092,6 +1094,86 @@ class _NextScreenState extends State<NextScreen> {
         ); // Close Transform.translate
       }, // Close builder function
     ); // Close TweenAnimationBuilder
+  }
+
+  /// Build automation cards from state data
+  List<Widget> _buildAutomationCardsFromState(bool isDarkMode) {
+    // Icon mapping for automation card types
+    IconData _getAutomationIcon(String title) {
+      if (title.toLowerCase().contains('light')) return Icons.lightbulb_outline;
+      if (title.toLowerCase().contains('security')) return Icons.security;
+      if (title.toLowerCase().contains('thermostat')) return Icons.thermostat;
+      if (title.toLowerCase().contains('entertainment')) return Icons.tv;
+      return Icons.devices;
+    }
+
+    final cards = _homeState.automationCards;
+    if (cards.isEmpty) {
+      // Show proper empty state - no fake data
+      return [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: isDarkMode 
+              ? _getAutomationCardDecorationDark()
+              : _getAutomationCardDecorationLight(),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDarkMode 
+                      ? Colors.white.withOpacity(0.05) 
+                      : const Color(0xFFF5F5F7).withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.devices_other,
+                  color: isDarkMode
+                      ? Colors.white.withOpacity(0.4)
+                      : const Color(0xFF475569).withOpacity(0.4),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  'No devices connected',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.5)
+                        : const Color(0xFF475569).withOpacity(0.5),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    final List<Widget> widgets = [];
+    for (int i = 0; i < cards.length; i++) {
+      final card = cards[i];
+      widgets.add(
+        _buildAutomationCard(
+          title: card.title,
+          subtitle: card.subtitle,
+          icon: _getAutomationIcon(card.title),
+          value: card.value,
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.7)
+              : const Color(0xFF475569),
+          isDarkMode: isDarkMode,
+          height: 100,
+        ),
+      );
+      if (i < cards.length - 1) {
+        widgets.add(const SizedBox(height: 16));
+      }
+    }
+    return widgets;
   }
 
 
@@ -1395,100 +1477,54 @@ class _NextScreenState extends State<NextScreen> {
 
           const SizedBox(height: 24), // Slightly more space after title
 
-          // Morning medications (8:30 AM)
-          _buildMedicationTimeSlot(
-            time: '8:30 AM',
-            medications: [
-              {
-                'name': 'Sergel',
-                'dose': '20 mg, Take 1',
-                'color': isDarkMode
-                    ? Colors.white.withOpacity(0.1)
-                    : const Color(0xFFF5F5F7),
-                'type': 'capsule'
-              },
-              {
-                'name': 'Dribbble',
-                'dose': '150 mg, Take 1',
-                'color': isDarkMode
-                    ? Colors.white.withOpacity(0.05)
-                    : const Color(0xFFE0E0E2),
-                'type': 'pill'
-              },
-            ],
-            isDarkMode: isDarkMode,
-          ),
-
-          const SizedBox(height: 20),
-
-          // Evening medications (8:30 PM)
-          _buildMedicationTimeSlot(
-            time: '8:30 PM',
-            medications: [
-              {
-                'name': 'Napa',
-                'dose': '150 mg, Take 1',
-                'color': isDarkMode
-                    ? Colors.white.withOpacity(0.1)
-                    : const Color(0xFFF5F5F7),
-                'type': 'pill'
-              },
-              {
-                'name': 'Napa',
-                'dose': '150 mg, Take 1',
-                'color': isDarkMode
-                    ? Colors.white.withOpacity(0.05)
-                    : const Color(0xFFE0E0E2),
-                'type': 'capsule'
-              },
-            ],
-            isDarkMode: isDarkMode,
-          ),
+          // Build medication time slots from state data
+          ..._buildMedicationSlotsFromState(isDarkMode),
 
           const SizedBox(height: 24),
 
-          // Enhanced See More button with glassmorphism
-          Center(
-            child: Container(
-              decoration: isDarkMode 
-                  ? _getMedicationCardDecorationDark()
-                  : _getMedicationCardDecorationLight(),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.transparent,
-                    ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
+          // See More button - only show if medications exist
+          if (_homeState.medicationSchedule.isNotEmpty)
+            Center(
+              child: Container(
+                decoration: isDarkMode 
+                    ? _getMedicationCardDecorationDark()
+                    : _getMedicationCardDecorationLight(),
+                child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
-                  onTap: () {
-                    // Handle see more action
-                    print('See more medications tapped');
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 12),
-                    child: Text(
-                      'See More',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: isDarkMode
-                            ? Colors.white.withOpacity(0.8)
-                            : const Color(0xFF475569),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                      ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () {
+                      // Handle see more action
+                      print('See more medications tapped');
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                      child: Text(
+                        'See More',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: isDarkMode
+                              ? Colors.white.withOpacity(0.8)
+                              : const Color(0xFF475569),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
           )
         ],
               ), // Close Column
@@ -1497,6 +1533,86 @@ class _NextScreenState extends State<NextScreen> {
         ); // Close Transform.translate
       }, // Close builder function
     ); // Close TweenAnimationBuilder
+  }
+
+  /// Build medication time slots from state data
+  List<Widget> _buildMedicationSlotsFromState(bool isDarkMode) {
+    final schedule = _homeState.medicationSchedule;
+    
+    if (schedule.isEmpty) {
+      // Show proper empty state - no fake medication data
+      return [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: isDarkMode 
+              ? _getMedicationCardDecorationDark()
+              : _getMedicationCardDecorationLight(),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDarkMode 
+                      ? Colors.white.withOpacity(0.05) 
+                      : const Color(0xFFF5F5F7).withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  CupertinoIcons.capsule,
+                  color: isDarkMode
+                      ? Colors.white.withOpacity(0.4)
+                      : const Color(0xFF475569).withOpacity(0.4),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  'No medications added',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.5)
+                        : const Color(0xFF475569).withOpacity(0.5),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    final List<Widget> widgets = [];
+    for (int i = 0; i < schedule.length; i++) {
+      final slot = schedule[i];
+      // Convert MedicationEntry list to Map format for existing method
+      final medsAsMaps = slot.medications.asMap().entries.map((entry) {
+        final isEven = entry.key % 2 == 0;
+        return {
+          'name': entry.value.name,
+          'dose': entry.value.dose,
+          'color': isDarkMode
+              ? Colors.white.withOpacity(isEven ? 0.1 : 0.05)
+              : (isEven ? const Color(0xFFF5F5F7) : const Color(0xFFE0E0E2)),
+          'type': entry.value.type,
+        };
+      }).toList();
+
+      widgets.add(
+        _buildMedicationTimeSlot(
+          time: slot.time,
+          medications: medsAsMaps,
+          isDarkMode: isDarkMode,
+        ),
+      );
+      
+      if (i < schedule.length - 1) {
+        widgets.add(const SizedBox(height: 20));
+      }
+    }
+    return widgets;
   }
 
   /// Get medication card decoration for dark theme

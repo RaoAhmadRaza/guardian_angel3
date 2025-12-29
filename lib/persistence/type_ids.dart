@@ -139,6 +139,58 @@ abstract final class TypeIds {
   static const int auditLogArchive = 34;
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // ONBOARDING & USER TABLES (40-49)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  /// UserBaseModel - Auth basics (email, fullName, profileImageUrl)
+  /// Adapter: lib/persistence/adapters/user_base_adapter.dart
+  static const int userBase = 40;
+  
+  /// CaregiverUserModel - Caregiver role assignment
+  /// Adapter: lib/persistence/adapters/caregiver_user_adapter.dart
+  static const int caregiverUser = 41;
+  
+  /// CaregiverDetailsModel - Full caregiver details
+  /// Adapter: lib/persistence/adapters/caregiver_details_adapter.dart
+  static const int caregiverDetails = 42;
+  
+  /// PatientUserModel - Patient role assignment + age
+  /// Adapter: lib/persistence/adapters/patient_user_adapter.dart
+  static const int patientUser = 43;
+  
+  /// PatientDetailsModel - Full patient details
+  /// Adapter: lib/persistence/adapters/patient_details_adapter.dart
+  static const int patientDetails = 44;
+  
+  /// RelationshipModel - Patient-Caregiver relationship
+  /// Adapter: lib/persistence/adapters/relationship_adapter.dart
+  static const int relationship = 45;
+  
+  /// RelationshipStatus - Enum for relationship status
+  /// Adapter: lib/persistence/adapters/relationship_adapter.dart
+  static const int relationshipStatus = 46;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CHAT SYSTEM (47-54)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  /// ChatThreadModel - Chat thread between Patient and Caregiver
+  /// Adapter: lib/persistence/adapters/chat_adapter.dart
+  static const int chatThread = 47;
+  
+  /// ChatMessageModel - Individual chat message
+  /// Adapter: lib/persistence/adapters/chat_adapter.dart
+  static const int chatMessage = 48;
+  
+  /// ChatMessageType - Enum for message type (text, image, voice, system)
+  /// Adapter: lib/persistence/adapters/chat_adapter.dart
+  static const int chatMessageType = 49;
+  
+  /// ChatMessageLocalStatus - Enum for local message status
+  /// Adapter: lib/persistence/adapters/chat_adapter.dart
+  static const int chatMessageLocalStatus = 50;
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // REGISTRY HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
   
@@ -171,6 +223,21 @@ abstract final class TypeIds {
     lockRecord: 'LockRecordAdapter',
     auditLogEntry: 'AuditLogEntryAdapter',
     auditLogArchive: 'AuditLogArchiveAdapter',
+    
+    // Onboarding & User Tables (40-49)
+    userBase: 'UserBaseAdapter',
+    caregiverUser: 'CaregiverUserAdapter',
+    caregiverDetails: 'CaregiverDetailsAdapter',
+    patientUser: 'PatientUserAdapter',
+    patientDetails: 'PatientDetailsAdapter',
+    relationship: 'RelationshipAdapter',
+    relationshipStatus: 'RelationshipStatusAdapter',
+    
+    // Chat System (47-54)
+    chatThread: 'ChatThreadAdapter',
+    chatMessage: 'ChatMessageAdapter',
+    chatMessageType: 'ChatMessageTypeAdapter',
+    chatMessageLocalStatus: 'ChatMessageLocalStatusAdapter',
   };
   
   /// Returns all TypeId values as a set.

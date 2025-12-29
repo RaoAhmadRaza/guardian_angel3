@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'patient_ai_chat/patient_ai_chat_state.dart';
+import 'patient_ai_chat/patient_ai_chat_data_provider.dart';
 
 class PatientAIChatScreen extends StatefulWidget {
   const PatientAIChatScreen({super.key});
@@ -18,16 +20,16 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
   
-  // State
-  bool _isTyping = false;
-  bool _isListening = false;
-  String _inputMode = 'voice'; // 'voice' or 'text'
-  List<ChatMessage> _messages = [];
+  // Production state management
+  PatientAIChatState? _state;
+  bool _isLoading = true;
+  final PatientAIChatDataProvider _dataProvider = PatientAIChatDataProvider();
+  
+  // Local UI state (not persisted)
+  bool _isMenuOpen = false;
   
   // Animation Controllers
   late AnimationController _pulseController;
-  
-  bool _isMenuOpen = false;
 
   @override
   void initState() {
@@ -37,15 +39,30 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
 
-    // Initial Mock Message
-    _messages = [
-      ChatMessage(
-        id: 'welcome',
-        text: "Hello. I'm here with you — whether you want to talk, check your health, or just share a moment.",
-        sender: 'other',
-        timestamp: DateTime.now(),
-      ),
-    ];
+    // Load state from local storage
+    _loadChatState();
+  }
+  
+  /// Load chat state from local storage
+  /// First-time users get empty state with welcome message only
+  Future<void> _loadChatState() async {
+    try {
+      final state = await _dataProvider.loadInitialState();
+      if (mounted) {
+        setState(() {
+          _state = state;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      // On error, show empty state
+      if (mounted) {
+        setState(() {
+          _state = PatientAIChatState.initial();
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -57,36 +74,35 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
   }
 
   void _handleSend([String? message]) {
+    if (_state == null) return;
     final text = message ?? _textController.text;
     if (text.trim().isEmpty) return;
     
+    final newMessage = ChatMessage(
+      id: DateTime.now().toString(),
+      text: text,
+      sender: 'user',
+      timestamp: DateTime.now(),
+      status: 'sending',
+    );
+    
     setState(() {
-      _messages.add(ChatMessage(
-        id: DateTime.now().toString(),
-        text: text,
-        sender: 'user',
-        timestamp: DateTime.now(),
-        status: 'sending',
-      ));
+      _state = _state!.copyWith(
+        messages: [..._state!.messages, newMessage],
+        isAITyping: true,
+      );
       _textController.clear();
-      _isTyping = true;
     });
     
     _scrollToBottom();
 
-    // Simulate AI Response
+    // TODO: Replace with real AI service call
+    // For now, just mark as not typing after delay (no fake response)
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
         setState(() {
-          _isTyping = false;
-          _messages.add(ChatMessage(
-            id: DateTime.now().toString(),
-            text: "I hear you. How are you feeling right now?",
-            sender: 'other',
-            timestamp: DateTime.now(),
-          ));
+          _state = _state!.copyWith(isAITyping: false);
         });
-        _scrollToBottom();
       }
     });
   }
@@ -196,7 +212,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
           ),
 
           // 2. Siri-style Thinking Glow (when typing)
-          if (_isTyping)
+          if (_state?.isAITyping == true)
             Positioned.fill(
               child: IgnorePointer(
                 child: Stack(
@@ -246,11 +262,12 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                     ListView.builder(
                       controller: _scrollController,
                       padding: const EdgeInsets.only(top: 100, bottom: 160, left: 16, right: 16),
-                      itemCount: _messages.length,
+                      itemCount: _state?.messages.length ?? 0,
                       itemBuilder: (context, index) {
-                        final msg = _messages[index];
+                        final messages = _state!.messages;
+                        final msg = messages[index];
                         final isMe = msg.sender == 'user';
-                        final isLast = index == _messages.length - 1;
+                        final isLast = index == messages.length - 1;
                         return _buildMessageBubble(msg, isMe, isLast);
                       },
                     ),
@@ -282,20 +299,21 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  // Status indicator dot - gray when idle, green when monitoring
                                   Container(
                                     width: 6,
                                     height: 6,
                                     decoration: BoxDecoration(
-                                      color: Colors.green,
+                                      color: (_state?.isMonitoringActive == true) ? Colors.green : Colors.grey.shade400,
                                       shape: BoxShape.circle,
-                                      boxShadow: [
+                                      boxShadow: (_state?.isMonitoringActive == true) ? [
                                         BoxShadow(
                                           color: Colors.green.withOpacity(0.6),
                                           blurRadius: 8,
                                         ),
-                                      ],
+                                      ] : null,
                                     ),
-                                  ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(0.8, 0.8), end: const Offset(1.2, 1.2)),
+                                  ),
                                   const SizedBox(width: 10),
                                   Container(
                                     height: 12,
@@ -303,11 +321,11 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                     color: Colors.grey.withOpacity(0.3),
                                   ),
                                   const SizedBox(width: 10),
-                                  Icon(CupertinoIcons.heart_fill, size: 14, color: Colors.red.shade500)
-                                      .animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(0.9, 0.9), end: const Offset(1.1, 1.1)),
+                                  Icon(CupertinoIcons.heart_fill, size: 14, color: (_state?.hasHealthDevice == true) ? Colors.red.shade500 : Colors.grey.shade400),
                                   const SizedBox(width: 6),
+                                  // State-driven BPM display
                                   Text(
-                                    "72 BPM",
+                                    _state?.heartRateDisplay ?? '-- BPM',
                                     style: GoogleFonts.inter(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
@@ -322,8 +340,9 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                     color: Colors.grey.withOpacity(0.3),
                                   ),
                                   const SizedBox(width: 10),
+                                  // State-driven monitoring status
                                   Text(
-                                    "Monitoring",
+                                    _state?.monitoringStatusText ?? 'Idle',
                                     style: GoogleFonts.inter(
                                       fontSize: 10,
                                       fontWeight: FontWeight.w500,
@@ -344,7 +363,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
           ),
 
           // 5. Smart Stack Widgets (if few messages)
-          if (_messages.length <= 1 && !_isTyping)
+          if ((_state?.messages.length ?? 0) <= 1 && _state?.isAITyping != true)
             Positioned(
               bottom: 140,
               left: 0,
@@ -355,84 +374,86 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   children: [
-                    // Call Sarah Widget
-                    _buildSmartWidget(
-                      width: MediaQuery.of(context).size.width * 0.85,
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 56,
-                            height: 56,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade200,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
+                    // Call Caregiver Widget - ONLY shown if caregiver exists
+                    if (_state?.hasCaregiver == true)
+                      _buildSmartWidget(
+                        width: MediaQuery.of(context).size.width * 0.85,
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 56,
+                              height: 56,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                _state!.caregiver!.initial,
+                                style: GoogleFonts.inter(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade500,
                                 ),
-                              ],
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              "S",
-                              style: GoogleFonts.inter(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.grey.shade500,
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "Call Sarah",
-                                  style: GoogleFonts.inter(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade900,
-                                    height: 1.1,
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    "Call ${_state!.caregiver!.name}",
+                                    style: GoogleFonts.inter(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey.shade900,
+                                      height: 1.1,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  "Daughter • Online",
-                                  style: GoogleFonts.inter(
-                                    fontSize: 13,
-                                    color: Colors.grey.shade500,
-                                    height: 1.1,
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _state!.caregiver!.subtitle,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade500,
+                                      height: 1.1,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.green,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.green.withOpacity(0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: _state!.caregiver!.isOnline ? Colors.green : Colors.grey.shade400,
+                                shape: BoxShape.circle,
+                                boxShadow: _state!.caregiver!.isOnline ? [
+                                  BoxShadow(
+                                    color: Colors.green.withOpacity(0.3),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ] : null,
+                              ),
+                              child: const Icon(Icons.phone, color: Colors.white, size: 20),
                             ),
-                            child: const Icon(Icons.phone, color: Colors.white, size: 20),
-                          ),
-                        ],
+                          ],
+                        ),
+                        onTap: () => _handleSend("Call ${_state!.caregiver!.name}"),
                       ),
-                      onTap: () => _handleSend("Call Sarah"),
-                    ),
-                    const SizedBox(width: 16),
-                    // Mood Widget
+                    if (_state?.hasCaregiver == true)
+                      const SizedBox(width: 16),
+                    // Mood Widget - Always visible
                     _buildSmartWidget(
                       width: MediaQuery.of(context).size.width * 0.45,
                       child: Column(
@@ -452,7 +473,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "Anxious",
+                                "Log Mood",
                                 style: GoogleFonts.inter(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
@@ -461,7 +482,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                 ),
                               ),
                               Text(
-                                "Log Mood",
+                                "How are you?",
                                 style: GoogleFonts.inter(
                                   fontSize: 11,
                                   color: Colors.grey.shade500,
@@ -472,10 +493,10 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                           ),
                         ],
                       ),
-                      onTap: () => _handleSend("I feel anxious"),
+                      onTap: () => _handleSend("I want to log my mood"),
                     ),
                     const SizedBox(width: 16),
-                    // Relax Widget
+                    // Relax Widget - Always visible
                     _buildSmartWidget(
                       width: MediaQuery.of(context).size.width * 0.45,
                       child: Column(
@@ -938,7 +959,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                         blurRadius: 40,
                         offset: const Offset(0, 8),
                       ),
-                      if (_isListening)
+                      if (_state?.isRecording == true)
                         BoxShadow(
                           color: Colors.purple.withOpacity(0.25),
                           blurRadius: 50,
@@ -952,19 +973,24 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                       // Mode Toggle
                       GestureDetector(
                         onTap: () {
+                          if (_state == null) return;
                           setState(() {
-                            _inputMode = _inputMode == 'voice' ? 'text' : 'voice';
+                            _state = _state!.copyWith(
+                              inputMode: _state!.inputMode == InputMode.voice 
+                                  ? InputMode.keyboard 
+                                  : InputMode.voice,
+                            );
                           });
                         },
                         child: Container(
                           width: 40,
                           height: 40,
-                          decoration: BoxDecoration(
+                          decoration: const BoxDecoration(
                             shape: BoxShape.circle,
                             color: Colors.transparent,
                           ),
                           child: Icon(
-                            _inputMode == 'voice' ? Icons.keyboard : Icons.mic,
+                            _state?.inputMode == InputMode.voice ? Icons.keyboard : Icons.mic,
                             color: Colors.grey.shade500,
                             size: 24,
                           ),
@@ -975,14 +1001,18 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                       Expanded(
                         child: SizedBox(
                           height: 48,
-                          child: _inputMode == 'voice'
+                          child: _state?.inputMode == InputMode.voice
                               ? GestureDetector(
                                   onTap: () {
+                                    if (_state == null) return;
                                     setState(() {
-                                      _isListening = !_isListening;
+                                      _state = _state!.copyWith(
+                                        isRecording: !_state!.isRecording,
+                                      );
                                     });
                                   },
-                                  child: _isListening
+                                  // Only show animated waveform when ACTUALLY recording
+                                  child: _state?.isRecording == true
                                       ? Row(
                                           mainAxisAlignment: MainAxisAlignment.center,
                                           children: List.generate(5, (index) {
@@ -1009,7 +1039,8 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                       : Row(
                                           mainAxisAlignment: MainAxisAlignment.center,
                                           children: [
-                                            if (_isTyping)
+                                            // Show "Thinking..." only when AI is actually processing
+                                            if (_state?.isAITyping == true)
                                               Text(
                                                 "Thinking...",
                                                 style: GoogleFonts.inter(
@@ -1026,9 +1057,9 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                                   fontWeight: FontWeight.w500,
                                                   fontSize: 15,
                                                 ),
-                                              ).animate(onPlay: (c) => c.repeat(reverse: true)).fade(begin: 0.5, end: 1.0),
+                                              ),
                                             const SizedBox(width: 8),
-                                            // Static Waveform
+                                            // Static Waveform - only decorative, no animation
                                             Row(
                                               children: [3, 6, 4, 8, 5, 10, 4, 7, 3, 5, 8, 4, 6, 3, 7, 4, 8, 5, 3].map((h) {
                                                 return Container(
@@ -1036,7 +1067,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                                   height: h.toDouble(),
                                                   margin: const EdgeInsets.symmetric(horizontal: 1),
                                                   decoration: BoxDecoration(
-                                                    color: _isTyping ? Colors.indigo.shade400 : Colors.grey.shade800,
+                                                    color: (_state?.isAITyping == true) ? Colors.indigo.shade400 : Colors.grey.shade400,
                                                     borderRadius: BorderRadius.circular(100),
                                                   ),
                                                 );
@@ -1070,22 +1101,27 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
 
                       // Right Action
                       GestureDetector(
-                        onTap: (_inputMode == 'text' && _textController.text.isNotEmpty) 
+                        onTap: (_state?.inputMode == InputMode.keyboard && _textController.text.isNotEmpty) 
                             ? _handleSend 
-                            : () => setState(() => _isListening = !_isListening),
+                            : () {
+                                if (_state == null) return;
+                                setState(() {
+                                  _state = _state!.copyWith(isRecording: !_state!.isRecording);
+                                });
+                              },
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
                           width: 48,
                           height: 48,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: (_inputMode == 'text' && _textController.text.isNotEmpty)
+                            color: (_state?.inputMode == InputMode.keyboard && _textController.text.isNotEmpty)
                                 ? Colors.indigo.shade600
-                                : _isListening
+                                : (_state?.isRecording == true)
                                     ? Colors.red.shade500
                                     : Colors.black.withOpacity(0.05),
                             boxShadow: [
-                              if (_inputMode == 'text' && _textController.text.isNotEmpty)
+                              if (_state?.inputMode == InputMode.keyboard && _textController.text.isNotEmpty)
                                 BoxShadow(
                                   color: Colors.indigo.withOpacity(0.3),
                                   blurRadius: 8,
@@ -1094,9 +1130,9 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                             ],
                           ),
                           child: Center(
-                            child: (_inputMode == 'text' && _textController.text.isNotEmpty)
+                            child: (_state?.inputMode == InputMode.keyboard && _textController.text.isNotEmpty)
                                 ? const Icon(Icons.arrow_upward, color: Colors.white, size: 20)
-                                : _isListening
+                                : (_state?.isRecording == true)
                                     ? Container(
                                         width: 16,
                                         height: 16,
@@ -1135,18 +1171,4 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
   }
 }
 
-class ChatMessage {
-  final String id;
-  final String text;
-  final String sender;
-  final DateTime timestamp;
-  final String status;
-
-  ChatMessage({
-    required this.id,
-    required this.text,
-    required this.sender,
-    required this.timestamp,
-    this.status = 'sent',
-  });
-}
+// ChatMessage class moved to patient_ai_chat/patient_ai_chat_state.dart

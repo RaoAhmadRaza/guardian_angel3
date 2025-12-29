@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'colors.dart';
 import 'providers/theme_provider.dart';
 import 'theme/motion.dart';
 import 'watch_connection_screen.dart';
 import 'services/patient_service.dart';
+import 'onboarding/services/onboarding_local_service.dart';
+import 'onboarding/services/onboarding_firestore_service.dart';
+import 'relationships/services/relationship_service.dart';
 
 /// Modern patient details screen with gender selection and form fields
 ///
@@ -125,23 +130,53 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
   }
 
   /// Validates and submits the patient details form
+  /// STEP 5B: Saves Patient Details to Local Table (OFFLINE-FIRST)
+  /// STEP 6B: Mirrors to Firestore (NON-BLOCKING)
   void _submitPatientDetails() async {
     if (_formKey.currentState!.validate()) {
       // Provide success haptic feedback
       HapticFeedback.mediumImpact();
 
-      // Create patient data object
-      final patientData = {
-        'age': widget.patientAge,
-        'gender': _selectedGender.name,
-        'fullName': _nameController.text.trim(),
-        'phoneNumber': _phoneController.text.trim(),
-        'address': _addressController.text.trim(),
-        'medicalHistory': _medicalHistoryController.text.trim(),
-        'createdAt': DateTime.now().toIso8601String(),
-      };
+      // Get current user ID
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null || uid.isEmpty) {
+        debugPrint('[PatientDetailsScreen] ERROR: No authenticated user');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Authentication error. Please sign in again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
 
-      // Save patient data to local storage
+      // STEP 5B: Save Patient Details to Local Table (OFFLINE-FIRST - BLOCKING)
+      try {
+        await OnboardingLocalService.instance.savePatientDetails(
+          uid: uid,
+          gender: _selectedGender.name,
+          name: _nameController.text.trim(),
+          phoneNumber: _phoneController.text.trim(),
+          address: _addressController.text.trim().isNotEmpty 
+              ? _addressController.text.trim() 
+              : '',
+          medicalHistory: _medicalHistoryController.text.trim().isNotEmpty 
+              ? _medicalHistoryController.text.trim() 
+              : '',
+        );
+        debugPrint('[PatientDetailsScreen] Step 5B: Patient details saved locally');
+      } catch (e) {
+        debugPrint('[PatientDetailsScreen] Step 5B FAILED: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to save details. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Save patient data to local storage (SharedPreferences - legacy support)
       await PatientService.instance.savePatientData(
         fullName: _nameController.text.trim(),
         gender: _selectedGender.name,
@@ -151,7 +186,27 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
         medicalHistory: _medicalHistoryController.text.trim(),
       );
 
-      debugPrint('Patient Details: $patientData');
+      // STEP 6B: Mirror to Firestore (NON-BLOCKING)
+      // Fire-and-forget - errors logged but don't block navigation
+      OnboardingFirestoreService.instance.mirrorPatientToFirestore(uid).then((_) {
+        debugPrint('[PatientDetailsScreen] Step 6B: Patient data mirrored to Firestore');
+      }).catchError((e) {
+        debugPrint('[PatientDetailsScreen] Step 6B Firestore mirror failed (will retry): $e');
+      });
+
+      // STEP 7B: Create pending relationship with invite code (NON-BLOCKING)
+      // This allows patient to share invite code with caregivers
+      RelationshipService.instance.createPatientInvite(patientId: uid).then((result) {
+        if (result.success && result.data != null) {
+          debugPrint('[PatientDetailsScreen] Step 7B: Relationship invite created: ${result.data!.inviteCode}');
+        } else {
+          debugPrint('[PatientDetailsScreen] Step 7B: Failed to create invite: ${result.errorMessage}');
+        }
+      }).catchError((e) {
+        debugPrint('[PatientDetailsScreen] Step 7B: Invite creation error: $e');
+      });
+
+      debugPrint('Patient Details saved: age=${widget.patientAge}, gender=${_selectedGender.name}');
 
       // Show success message
       _showSuccessSnackBar();

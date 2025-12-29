@@ -1,11 +1,14 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'colors.dart';
 import 'providers/theme_provider.dart';
 import 'theme/motion.dart';
+import 'onboarding/services/onboarding_local_service.dart';
 
 // New Patient Details Screen import
 import 'patient_details_screen.dart';
@@ -121,8 +124,40 @@ class _PatientAgeSelectionScreenState extends State<PatientAgeSelectionScreen> {
     ScaffoldMessenger.of(context).showSnackBar(snackBar);
   }
 
-  /// Navigates to patient details screen with smooth transition
-  void _navigateToPatientDetails() {
+  /// Navigates to patient details screen with smooth transition.
+  /// STEP 4B: Updates Patient User with validated age (OFFLINE-FIRST).
+  Future<void> _navigateToPatientDetails() async {
+    // Get current user ID
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid.isEmpty) {
+      debugPrint('[PatientAgeSelectionScreen] ERROR: No authenticated user');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Authentication error. Please sign in again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // STEP 4B: Update Patient User with validated age (min 60 already validated)
+    try {
+      await OnboardingLocalService.instance.savePatientRole(
+        uid: uid,
+        age: selectedValue,
+      );
+      debugPrint('[PatientAgeSelectionScreen] Step 4B: Patient age ($selectedValue) saved locally');
+    } catch (e) {
+      debugPrint('[PatientAgeSelectionScreen] Step 4B FAILED: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to save age. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     Navigator.push(
       context,
       AppMotion.slideTransition(

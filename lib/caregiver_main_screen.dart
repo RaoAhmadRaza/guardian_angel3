@@ -11,6 +11,7 @@ import 'chat_screen_new.dart';
 import 'main.dart';
 import 'caregiver_settings_screen.dart';
 import 'services/session_service.dart';
+import 'firebase/auth/auth_service.dart';
 
 class CaregiverMainScreen extends StatefulWidget {
   final String? caregiverName;
@@ -214,6 +215,11 @@ class _CaregiverMainScreenState extends State<CaregiverMainScreen>
 
               // Recent Alerts
               _buildRecentAlerts(isDarkMode, isTablet),
+              const SizedBox(height: 32),
+
+              // Reset Session Button
+              _buildResetButton(isDarkMode, isTablet),
+              const SizedBox(height: 40),
             ],
           ),
         ),
@@ -1060,6 +1066,185 @@ class _CaregiverMainScreenState extends State<CaregiverMainScreen>
         backgroundColor: const Color(0xFF8B5CF6),
       ),
     );
+  }
+
+  Widget _buildResetButton(bool isDarkMode, bool isTablet) {
+    return Center(
+      child: GestureDetector(
+        onTap: () => _showResetConfirmation(isDarkMode),
+        child: Container(
+          width: isTablet ? 300 : double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? Colors.red.withOpacity(0.15)
+                : Colors.red.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDarkMode
+                  ? Colors.red.withOpacity(0.3)
+                  : Colors.red.withOpacity(0.2),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                CupertinoIcons.arrow_counterclockwise,
+                color: const Color(0xFFEF4444),
+                size: isTablet ? 22 : 20,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Reset Session & Logout',
+                style: GoogleFonts.inter(
+                  fontSize: isTablet ? 16 : 15,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFFEF4444),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showResetConfirmation(bool isDarkMode) {
+    HapticFeedback.mediumImpact();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  CupertinoIcons.exclamationmark_triangle_fill,
+                  color: Color(0xFFEF4444),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Reset Session?',
+                style: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'This will log you out and clear all session data. You will need to sign in again.',
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.7)
+                  : const Color(0xFF64748B),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(
+                  color: isDarkMode
+                      ? Colors.white.withOpacity(0.7)
+                      : const Color(0xFF64748B),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await _performReset();
+              },
+              child: Text(
+                'Reset & Logout',
+                style: GoogleFonts.inter(
+                  color: const Color(0xFFEF4444),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _performReset() async {
+    try {
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF1E293B)
+                  : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Logging out...'),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // End session in SessionService
+      await SessionService.instance.endSession();
+
+      // Sign out from Firebase
+      await AuthService.instance.signOut();
+
+      // Navigate to welcome screen and clear navigation stack
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const MyApp()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      // Close loading dialog if still open
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      debugPrint('❌ Error during reset: $e');
+
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error logging out: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    }
   }
 
   

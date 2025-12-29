@@ -11,11 +11,15 @@ import 'add_member_screen.dart';
 import 'medication_screen.dart';
 import 'peace_of_mind_screen.dart';
 import 'community_discovery_screen.dart';
+import 'patient_chat/patient_chat_state.dart';
+import 'patient_chat/patient_chat_data_provider.dart';
 
-// --- MOCK DATA & TYPES ---
+// --- TYPES (NO MOCK DATA) ---
 
 enum ViewType { AI_COMPANION, CAREGIVER, DOCTOR, SYSTEM, PEACE_OF_MIND, COMMUNITY }
 
+/// Chat session model for care team members and system features
+/// This class is kept but NO fake instances are created
 class ChatSession {
   final String id;
   final ViewType type;
@@ -36,42 +40,8 @@ class ChatSession {
   });
 }
 
-final List<ChatSession> INITIAL_SESSIONS = [
-  ChatSession(
-    id: 'ai-1',
-    type: ViewType.AI_COMPANION,
-    name: 'Guardian Angel',
-    subtitle: 'Monitoring quietly',
-  ),
-  ChatSession(
-    id: 'caregiver-1',
-    type: ViewType.CAREGIVER,
-    name: 'Sarah',
-    subtitle: 'Active earlier',
-    isOnline: true,
-    unreadCount: 2,
-  ),
-  ChatSession(
-    id: 'doc-1',
-    type: ViewType.DOCTOR,
-    name: 'Dr. Emily',
-    subtitle: 'Cardiologist',
-    isOnline: false,
-    imageUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea860632?q=80&w=100&auto=format&fit=crop',
-  ),
-  ChatSession(
-    id: 'sys-1',
-    type: ViewType.SYSTEM,
-    name: 'Medication',
-    subtitle: 'On track',
-  ),
-  ChatSession(
-    id: 'peace-1',
-    type: ViewType.PEACE_OF_MIND,
-    name: 'Daily Peace',
-    subtitle: 'Mindfulness',
-  ),
-];
+// INITIAL_SESSIONS removed - no fake data
+// First-time users see empty state with helpful guidance
 
 // --- COMPONENTS ---
 
@@ -150,6 +120,11 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   bool _isScrolled = false;
   bool _isSOSOpen = false;
   String _greeting = "Good Afternoon";
+  
+  // Production state management
+  PatientChatState? _state;
+  bool _isLoading = true;
+  final PatientChatDataProvider _dataProvider = PatientChatDataProvider();
 
   @override
   void initState() {
@@ -165,6 +140,33 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
     _pulseAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+    
+    // Load patient data
+    _loadPatientChatData();
+  }
+  
+  /// Load patient data from local storage
+  /// First-time users get empty state with helpful guidance
+  Future<void> _loadPatientChatData() async {
+    try {
+      // TODO: Get patient name from onboarding/profile storage
+      const patientName = 'there'; // Placeholder - will be loaded from storage
+      final state = await _dataProvider.loadInitialState(patientName: patientName);
+      if (mounted) {
+        setState(() {
+          _state = state;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      // On error, show empty state
+      if (mounted) {
+        setState(() {
+          _state = PatientChatState.initial('there');
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -440,7 +442,9 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   }
 
   Widget _buildCareTeamRail() {
-    final careTeam = INITIAL_SESSIONS.where((s) => s.type == ViewType.CAREGIVER || s.type == ViewType.DOCTOR).toList();
+    // Use state-driven care team instead of INITIAL_SESSIONS
+    final List<ChatSession> careTeam = _state?.careTeam ?? [];
+    final hasCareTeam = careTeam.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -458,43 +462,101 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                   color: Color(0xFF111827),
                 ),
               ),
-              GestureDetector(
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => CareTeamDirectoryScreen(sessions: INITIAL_SESSIONS),
+              // Hide "See All" when no care team members
+              if (hasCareTeam)
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => CareTeamDirectoryScreen(sessions: careTeam),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    'See All',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF2563EB), // blue-600
                     ),
-                  );
-                },
-                child: const Text(
-                  'See All',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF2563EB), // blue-600
                   ),
                 ),
-              ),
             ],
           ),
         ),
-        SizedBox(
-          height: 110, // Height for avatar + name
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            scrollDirection: Axis.horizontal,
-            itemCount: careTeam.length + 1, // +1 for Add button
-            separatorBuilder: (c, i) => const SizedBox(width: 16),
-            itemBuilder: (context, index) {
-              if (index == careTeam.length) {
-                return _buildAddMemberButton();
-              }
-              return _buildCareTeamMember(careTeam[index]);
-            },
+        // Show empty state message or care team list
+        if (!hasCareTeam)
+          _buildEmptyCareTeamState()
+        else
+          SizedBox(
+            height: 110, // Height for avatar + name
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              scrollDirection: Axis.horizontal,
+              itemCount: careTeam.length + 1, // +1 for Add button
+              separatorBuilder: (c, i) => const SizedBox(width: 16),
+              itemBuilder: (context, index) {
+                if (index == careTeam.length) {
+                  return _buildAddMemberButton();
+                }
+                return _buildCareTeamMember(careTeam[index]);
+              },
+            ),
           ),
-        ),
         const SizedBox(height: 32),
       ],
+    );
+  }
+  
+  /// Empty state for care team section
+  /// Shows guidance message and add button for first-time users
+  Widget _buildEmptyCareTeamState() {
+    return Container(
+      height: 110,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: [
+          // Empty state message card
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFFE5E7EB), // gray-200
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'No caregivers or doctors added yet',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF6B7280), // gray-500
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Add your care team to stay connected',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[400],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Add button
+          _buildAddMemberButton(),
+        ],
+      ),
     );
   }
 
@@ -691,6 +753,11 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   }
 
   Widget _buildMedicationCard() {
+    // Use state-driven medication status
+    final medicationStatus = _state?.medicationStatus;
+    final progress = medicationStatus?.progressPercent ?? 0;
+    final statusText = medicationStatus?.status ?? 'No medications added';
+    
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(
@@ -700,7 +767,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                 id: 'sys-1',
                 type: ViewType.SYSTEM,
                 name: 'Medication',
-                subtitle: 'On track',
+                subtitle: statusText,
               ),
             ),
           ),
@@ -708,7 +775,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
       },
       child: Container(
         height: 160, // Aspect square approx
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
@@ -746,15 +813,15 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                 ),
               ],
             ),
-            const ProgressRing(
-              progress: 80,
-              color: Color(0xFF10B981), // emerald-500
+            ProgressRing(
+              progress: progress.toDouble(),
+              color: const Color(0xFF10B981), // emerald-500
               icon: CupertinoIcons.checkmark_circle_fill,
-              size: 52,
+              size: 48,
             ),
-            const Column(
+            Column(
               children: [
-                Text(
+                const Text(
                   'Medication',
                   style: TextStyle(
                     fontSize: 14,
@@ -764,12 +831,14 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                   ),
                 ),
                 Text(
-                  'On track',
-                  style: TextStyle(
-                    fontSize: 12,
+                  statusText,
+                  style: const TextStyle(
+                    fontSize: 11,
                     fontWeight: FontWeight.w500,
                     color: Color(0xFF9CA3AF), // gray-400
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -780,6 +849,12 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   }
 
   Widget _buildPeaceCard() {
+    // Use state-driven peace status
+    final peaceStatus = _state?.peaceStatus;
+    final progress = peaceStatus?.progressPercent ?? 0;
+    final statusText = peaceStatus?.timeRemaining ?? 
+        (peaceStatus?.status ?? 'Start your journey');
+    
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(
@@ -790,7 +865,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
       },
       child: Container(
         height: 160,
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
@@ -828,15 +903,15 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                 ),
               ],
             ),
-            const ProgressRing(
-              progress: 45,
-              color: Color(0xFF0D9488), // teal-600
+            ProgressRing(
+              progress: progress.toDouble(),
+              color: const Color(0xFF0D9488), // teal-600
               icon: CupertinoIcons.bolt_fill,
-              size: 52,
+              size: 48,
             ),
-            const Column(
+            Column(
               children: [
-                Text(
+                const Text(
                   'Daily Peace',
                   style: TextStyle(
                     fontSize: 14,
@@ -846,12 +921,14 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                   ),
                 ),
                 Text(
-                  '2 mins left',
-                  style: TextStyle(
+                  statusText,
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
                     color: Color(0xFF9CA3AF),
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -862,6 +939,10 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   }
 
   Widget _buildCommunityCard() {
+    // Use state-driven community status
+    final communityStatus = _state?.communityStatus;
+    final statusText = communityStatus?.status ?? 'Join the community';
+    
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(
@@ -911,8 +992,8 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '3 active discussions',
-                      style: TextStyle(
+                      statusText,
+                      style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                         color: Color(0xFF9CA3AF), // gray-400

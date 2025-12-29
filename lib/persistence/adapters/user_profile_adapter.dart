@@ -20,13 +20,17 @@ class UserProfileModelAdapter extends TypeAdapter<UserProfileModel> {
       email: fields[3] as String?,
       createdAt: _parse(fields[4] as String?),
       updatedAt: _parse(fields[5] as String?),
+      age: fields[6] as int?,
+      address: fields[7] as String?,
+      medicalHistory: fields[8] as String?,
+      gender: fields[9] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserProfileModel obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(10) // Updated field count
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -38,7 +42,15 @@ class UserProfileModelAdapter extends TypeAdapter<UserProfileModel> {
       ..writeByte(4)
       ..write(obj.createdAt.toUtc().toIso8601String())
       ..writeByte(5)
-      ..write(obj.updatedAt.toUtc().toIso8601String());
+      ..write(obj.updatedAt.toUtc().toIso8601String())
+      ..writeByte(6)
+      ..write(obj.age)
+      ..writeByte(7)
+      ..write(obj.address)
+      ..writeByte(8)
+      ..write(obj.medicalHistory)
+      ..writeByte(9)
+      ..write(obj.gender);
   }
 
   DateTime _parse(String? v) => v != null ? (DateTime.tryParse(v)?.toUtc() ?? DateTime.now().toUtc()) : DateTime.now().toUtc();

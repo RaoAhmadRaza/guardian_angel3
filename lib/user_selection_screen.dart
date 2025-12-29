@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'colors.dart';
 import 'providers/theme_provider.dart';
 import 'patient_age_selection_screen.dart';
 import 'guardian_details_screen.dart';
+import 'doctor_details_screen.dart';
+import 'onboarding/services/onboarding_local_service.dart';
 
-enum UserRole { patient, guardian, developer }
+enum UserRole { patient, guardian, doctor, developer }
 
 class UserSelectionScreen extends StatefulWidget {
   const UserSelectionScreen({super.key});
@@ -18,6 +22,43 @@ class UserSelectionScreen extends StatefulWidget {
 
 class _UserSelectionScreenState extends State<UserSelectionScreen> {
   UserRole? _selectedRole;
+  final ScrollController _scrollController = ScrollController();
+  bool _showScrollArrow = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 20) {
+      if (_showScrollArrow) {
+        setState(() => _showScrollArrow = false);
+      }
+    } else {
+      if (!_showScrollArrow) {
+        setState(() => _showScrollArrow = true);
+      }
+    }
+  }
+
+  void _scrollToBottom() {
+    _scrollController.animateTo(
+      _scrollController.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +79,13 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
         'subtitle': 'Family member or caregiver',
         'image': 'images/caregiver.png',
         'icon': Icons.people_alt,
+      },
+      {
+        'role': UserRole.doctor,
+        'label': 'Doctor',
+        'subtitle': 'Medical professional',
+        'image': 'images/doctor.png',
+        'icon': Icons.medical_services,
       }
     ];
 
@@ -558,19 +606,81 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
 
                     // Role Cards in Column
                     Expanded(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Column(
-                          children: roleCards.map((card) {
-                            return buildRoleCard(
-                              role: card['role'] as UserRole,
-                              label: card['label'] as String,
-                              subtitle: card['subtitle'] as String,
-                              image: card['image'] as String,
-                              icon: card['icon'] as IconData,
-                            );
-                          }).toList(),
-                        ),
+                      child: Stack(
+                        children: [
+                          SingleChildScrollView(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Column(
+                              children: [
+                                ...roleCards.map((card) {
+                                  return buildRoleCard(
+                                    role: card['role'] as UserRole,
+                                    label: card['label'] as String,
+                                    subtitle: card['subtitle'] as String,
+                                    image: card['image'] as String,
+                                    icon: card['icon'] as IconData,
+                                  );
+                                }),
+                                const SizedBox(height: 60), // Space for arrow
+                              ],
+                            ),
+                          ),
+                          // Scroll Down Arrow
+                          Positioned(
+                            bottom: 10,
+                            left: 0,
+                            right: 0,
+                            child: IgnorePointer(
+                              ignoring: !_showScrollArrow,
+                              child: AnimatedOpacity(
+                                opacity: _showScrollArrow ? 1.0 : 0.0,
+                                duration: const Duration(milliseconds: 300),
+                                child: Center(
+                                  child: GestureDetector(
+                                    onTap: _scrollToBottom,
+                                    child: Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: isDarkMode
+                                            ? Colors.white.withOpacity(0.1)
+                                            : Colors.black.withOpacity(0.05),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: isDarkMode
+                                              ? Colors.white.withOpacity(0.2)
+                                              : Colors.black.withOpacity(0.1),
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        Icons.keyboard_arrow_down_rounded,
+                                        color: isDarkMode
+                                            ? Colors.white.withOpacity(0.8)
+                                            : Colors.black.withOpacity(0.6),
+                                        size: 24,
+                                      ),
+                                    ),
+                                  )
+                                      .animate(
+                                          onPlay: (controller) =>
+                                              controller.repeat())
+                                      .moveY(
+                                          begin: 0,
+                                          end: 5,
+                                          duration: 1000.ms,
+                                          curve: Curves.easeInOut)
+                                      .then()
+                                      .moveY(
+                                          begin: 5,
+                                          end: 0,
+                                          duration: 1000.ms,
+                                          curve: Curves.easeInOut),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
 
@@ -653,9 +763,41 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
                               borderRadius: BorderRadius.circular(
                                   25), // Adjusted for new height
                               onTap: _selectedRole != null
-                                  ? () {
+                                  ? () async {
                                       HapticFeedback.mediumImpact();
+                                      
+                                      // STEP 2: Save role to Local Table (OFFLINE-FIRST)
+                                      final uid = FirebaseAuth.instance.currentUser?.uid;
+                                      if (uid == null || uid.isEmpty) {
+                                        debugPrint('[UserSelectionScreen] ERROR: No authenticated user');
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Authentication error. Please sign in again.'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      
                                       if (_selectedRole == UserRole.patient) {
+                                        // Save Patient role (without age yet - that comes in Step 4B)
+                                        try {
+                                          await OnboardingLocalService.instance.savePatientRole(
+                                            uid: uid,
+                                            age: 0, // Placeholder - will be updated in PatientAgeSelectionScreen
+                                          );
+                                          debugPrint('[UserSelectionScreen] Step 2: Patient role saved locally');
+                                        } catch (e) {
+                                          debugPrint('[UserSelectionScreen] Step 2 FAILED: $e');
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Failed to save role. Please try again.'),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                        
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
@@ -665,11 +807,38 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
                                         );
                                       } else if (_selectedRole ==
                                           UserRole.guardian) {
+                                        // Save Caregiver role
+                                        try {
+                                          await OnboardingLocalService.instance.saveCaregiverRole(
+                                            uid: uid,
+                                          );
+                                          debugPrint('[UserSelectionScreen] Step 2: Caregiver role saved locally');
+                                        } catch (e) {
+                                          debugPrint('[UserSelectionScreen] Step 2 FAILED: $e');
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Failed to save role. Please try again.'),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                        
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
                                             builder: (context) =>
                                                 const GuardianDetailsScreen(),
+                                          ),
+                                        );
+                                      } else if (_selectedRole ==
+                                          UserRole.doctor) {
+                                        // Navigate to Doctor Details Screen
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                const DoctorDetailsScreen(),
                                           ),
                                         );
                                       }
