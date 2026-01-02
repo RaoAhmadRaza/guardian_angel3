@@ -1,11 +1,11 @@
 /// OnboardingLocalService - Local-first onboarding persistence.
 ///
 /// This is the CORE service for strict offline-first onboarding.
-/// It handles all 5 local tables in the correct sequence:
+/// It handles all local tables in the correct sequence:
 /// 
 /// 1. UserBaseTable - Auth basics (Step 1)
-/// 2. CaregiverUserTable / PatientUserTable - Role assignment (Step 3)
-/// 3. CaregiverDetailsTable / PatientDetailsTable - Full details (Step 4/5)
+/// 2. CaregiverUserTable / PatientUserTable / DoctorUserTable - Role assignment (Step 3)
+/// 3. CaregiverDetailsTable / PatientDetailsTable / DoctorDetailsTable - Full details (Step 4/5)
 ///
 /// Rules:
 /// - Local writes ALWAYS happen first
@@ -22,6 +22,8 @@ import '../models/caregiver_user_model.dart';
 import '../models/caregiver_details_model.dart';
 import '../models/patient_user_model.dart';
 import '../models/patient_details_model.dart';
+import '../models/doctor_user_model.dart';
+import '../models/doctor_details_model.dart';
 
 /// Result of a local save operation.
 class LocalSaveResult<T> {
@@ -72,10 +74,15 @@ class OnboardingLocalService {
   Box<PatientDetailsModel> get _patientDetailsBox => 
       Hive.box<PatientDetailsModel>(BoxRegistry.patientDetailsBox);
 
+  Box<DoctorUserModel> get _doctorUserBox => 
+      Hive.box<DoctorUserModel>(BoxRegistry.doctorUserBox);
+
+  Box<DoctorDetailsModel> get _doctorDetailsBox => 
+      Hive.box<DoctorDetailsModel>(BoxRegistry.doctorDetailsBox);
+
   // ═══════════════════════════════════════════════════════════════════════════
   // STEP 1: USER BASE TABLE (Auth basics)
   // ═══════════════════════════════════════════════════════════════════════════
-
   /// Saves auth basics to User Base Table immediately after authentication.
   /// 
   /// This is STEP 1 - runs exactly once per auth session.
@@ -119,6 +126,29 @@ class OnboardingLocalService {
 
   /// Checks if user base exists for uid.
   bool hasUserBase(String uid) => _userBaseBox.containsKey(uid);
+
+  /// Gets the most recently saved user's UID from local storage.
+  /// 
+  /// This is useful for simulator mode where FirebaseAuth.instance.currentUser
+  /// is null but we still have a locally saved user from the mock auth flow.
+  /// Returns null if no users exist in local storage.
+  String? getLastSavedUid() {
+    try {
+      if (_userBaseBox.isEmpty) return null;
+      
+      // Get all users and find the one with the most recent updatedAt
+      final users = _userBaseBox.values.toList();
+      if (users.isEmpty) return null;
+      
+      users.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      final lastUser = users.first;
+      debugPrint('[OnboardingLocalService] getLastSavedUid: ${lastUser.uid}');
+      return lastUser.uid;
+    } catch (e) {
+      debugPrint('[OnboardingLocalService] getLastSavedUid FAILED: $e');
+      return null;
+    }
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // STEP 3A: CAREGIVER USER TABLE (Role assignment)
@@ -322,6 +352,110 @@ class OnboardingLocalService {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // STEP 3C: DOCTOR USER TABLE (Role assignment)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Saves doctor role to Doctor User Table.
+  /// 
+  /// This is STEP 3C - only if user selects "Doctor".
+  /// Does NOT write to Firestore.
+  Future<LocalSaveResult<DoctorUserModel>> saveDoctorRole({
+    required String uid,
+  }) async {
+    debugPrint('[OnboardingLocalService] STEP 3C: Saving doctor role for uid: $uid');
+    
+    try {
+      final now = DateTime.now().toUtc();
+      
+      final existing = _doctorUserBox.get(uid);
+      
+      final model = DoctorUserModel(
+        uid: uid,
+        role: 'doctor',
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      );
+      
+      model.validate();
+      await _doctorUserBox.put(uid, model);
+      
+      debugPrint('[OnboardingLocalService] Doctor role saved successfully');
+      return LocalSaveResult.success(model);
+    } catch (e) {
+      debugPrint('[OnboardingLocalService] STEP 3C FAILED: $e');
+      return LocalSaveResult.failure('Failed to save doctor role: $e');
+    }
+  }
+
+  /// Gets the doctor user record.
+  DoctorUserModel? getDoctorUser(String uid) => _doctorUserBox.get(uid);
+
+  /// Checks if doctor role is assigned.
+  bool isDoctorRole(String uid) => _doctorUserBox.containsKey(uid);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STEP 4C: DOCTOR DETAILS TABLE (Full details)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Saves doctor details to Doctor Details Table.
+  /// 
+  /// This is STEP 4C - from Doctor Details Screen.
+  /// Does NOT write to Firestore yet.
+  Future<LocalSaveResult<DoctorDetailsModel>> saveDoctorDetails({
+    required String uid,
+    required String fullName,
+    required String email,
+    required String phoneNumber,
+    required String specialization,
+    required String licenseNumber,
+    required int yearsOfExperience,
+    required String clinicOrHospitalName,
+    required String address,
+  }) async {
+    debugPrint('[OnboardingLocalService] STEP 4C: Saving doctor details for uid: $uid');
+    
+    try {
+      final now = DateTime.now().toUtc();
+      
+      final existing = _doctorDetailsBox.get(uid);
+      
+      final model = DoctorDetailsModel(
+        uid: uid,
+        fullName: fullName,
+        email: email,
+        phoneNumber: phoneNumber,
+        specialization: specialization,
+        licenseNumber: licenseNumber,
+        yearsOfExperience: yearsOfExperience,
+        clinicOrHospitalName: clinicOrHospitalName,
+        address: address,
+        isVerified: false, // Default to unverified
+        isComplete: true, // Mark as complete since all required fields provided
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      );
+      
+      model.validate();
+      await _doctorDetailsBox.put(uid, model);
+      
+      debugPrint('[OnboardingLocalService] Doctor details saved successfully (isComplete: true)');
+      return LocalSaveResult.success(model);
+    } catch (e) {
+      debugPrint('[OnboardingLocalService] STEP 4C FAILED: $e');
+      return LocalSaveResult.failure('Failed to save doctor details: $e');
+    }
+  }
+
+  /// Gets doctor details.
+  DoctorDetailsModel? getDoctorDetails(String uid) => _doctorDetailsBox.get(uid);
+
+  /// Checks if doctor details are complete.
+  bool isDoctorOnboardingComplete(String uid) {
+    final details = _doctorDetailsBox.get(uid);
+    return details?.isComplete ?? false;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // ONBOARDING STATUS CHECKS
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -335,8 +469,9 @@ class OnboardingLocalService {
     // Check if role is assigned
     final isCaregiver = isCaregiverRole(uid);
     final isPatient = isPatientRole(uid);
+    final isDoctor = isDoctorRole(uid);
 
-    if (!isCaregiver && !isPatient) {
+    if (!isCaregiver && !isPatient && !isDoctor) {
       return OnboardingState.awaitingRoleSelection;
     }
 
@@ -356,6 +491,14 @@ class OnboardingLocalService {
       return OnboardingState.patientAwaitingDetails;
     }
 
+    // Doctor flow
+    if (isDoctor) {
+      if (isDoctorOnboardingComplete(uid)) {
+        return OnboardingState.doctorComplete;
+      }
+      return OnboardingState.doctorAwaitingDetails;
+    }
+
     return OnboardingState.notStarted;
   }
 
@@ -363,7 +506,8 @@ class OnboardingLocalService {
   bool isOnboardingComplete(String uid) {
     final state = getOnboardingState(uid);
     return state == OnboardingState.caregiverComplete || 
-           state == OnboardingState.patientComplete;
+           state == OnboardingState.patientComplete ||
+           state == OnboardingState.doctorComplete;
   }
 }
 
@@ -386,4 +530,10 @@ enum OnboardingState {
   
   /// Patient details complete, ready for Firestore mirror
   patientComplete,
+  
+  /// Doctor role assigned, waiting for details
+  doctorAwaitingDetails,
+  
+  /// Doctor details complete, ready for Firestore mirror
+  doctorComplete,
 }

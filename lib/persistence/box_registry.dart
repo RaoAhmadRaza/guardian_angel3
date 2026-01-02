@@ -53,8 +53,17 @@ class BoxRegistry {
   /// Patient details data (full patient profile)
   static const patientDetailsBox = 'patient_details_box';
   
+  /// Doctor user data (role assignment)
+  static const doctorUserBox = 'doctor_user_box';
+  
+  /// Doctor details data (full doctor profile)
+  static const doctorDetailsBox = 'doctor_details_box';
+  
   /// Relationship data (patient-caregiver links)
   static const relationshipsBox = 'relationships_box';
+
+  /// Doctor-patient relationship data (patient-doctor links)
+  static const doctorRelationshipsBox = 'doctor_relationships_box';
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CHAT SYSTEM BOX NAMES (authoritative)
@@ -78,6 +87,23 @@ class BoxRegistry {
   /// 4. Query pattern: messages are typically loaded by thread, which is 
   ///    efficiently handled via filtering on composite key prefix
   static const chatMessagesBox = 'chat_messages_box';
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HEALTH DATA PERSISTENCE BOX NAMES (authoritative)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  /// Health readings box (StoredHealthReading) - all patient health data
+  /// Contains: heart rate, SpO₂, sleep sessions, HRV readings
+  /// Encrypted: YES (HIPAA - sensitive health data)
+  /// Key format: patientUid_readingType_timestamp (composite)
+  /// 
+  /// BOX STRATEGY JUSTIFICATION:
+  /// We use a SINGLE health_readings_box with composite keys because:
+  /// 1. Deduplication via deterministic keys (patientUid_type_timestamp)
+  /// 2. Efficient prefix-based queries (all heart rates for patient)
+  /// 3. Simpler TTL pruning across all reading types
+  /// 4. Consistent with chat_messages_box pattern
+  static const healthReadingsBox = 'health_readings_box';
 
   // ═══════════════════════════════════════════════════════════════════════════
   // HOME AUTOMATION BOX NAMES (authoritative)
@@ -128,6 +154,8 @@ class BoxRegistry {
     // Chat system boxes
     chatThreadsBox,
     chatMessagesBox,
+    // Health data persistence boxes
+    healthReadingsBox,
     // Home automation boxes
     homeAutomationRoomsBox,
     homeAutomationDevicesBox,

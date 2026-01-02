@@ -12,6 +12,7 @@ import 'services/patient_service.dart';
 import 'onboarding/services/onboarding_local_service.dart';
 import 'onboarding/services/onboarding_firestore_service.dart';
 import 'relationships/services/relationship_service.dart';
+import 'relationships/services/doctor_relationship_service.dart';
 
 /// Modern patient details screen with gender selection and form fields
 ///
@@ -137,8 +138,15 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
       // Provide success haptic feedback
       HapticFeedback.mediumImpact();
 
-      // Get current user ID
-      final uid = FirebaseAuth.instance.currentUser?.uid;
+      // Get current user ID - try Firebase Auth first, fallback to local storage
+      String? uid = FirebaseAuth.instance.currentUser?.uid;
+      
+      // Fallback for simulator mode: get UID from local storage
+      if (uid == null || uid.isEmpty) {
+        uid = OnboardingLocalService.instance.getLastSavedUid();
+        debugPrint('[PatientDetailsScreen] Using fallback UID from local storage: $uid');
+      }
+      
       if (uid == null || uid.isEmpty) {
         debugPrint('[PatientDetailsScreen] ERROR: No authenticated user');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -198,12 +206,24 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
       // This allows patient to share invite code with caregivers
       RelationshipService.instance.createPatientInvite(patientId: uid).then((result) {
         if (result.success && result.data != null) {
-          debugPrint('[PatientDetailsScreen] Step 7B: Relationship invite created: ${result.data!.inviteCode}');
+          debugPrint('[PatientDetailsScreen] Step 7B: Caregiver invite created: ${result.data!.inviteCode}');
         } else {
-          debugPrint('[PatientDetailsScreen] Step 7B: Failed to create invite: ${result.errorMessage}');
+          debugPrint('[PatientDetailsScreen] Step 7B: Failed to create caregiver invite: ${result.errorMessage}');
         }
       }).catchError((e) {
-        debugPrint('[PatientDetailsScreen] Step 7B: Invite creation error: $e');
+        debugPrint('[PatientDetailsScreen] Step 7B: Caregiver invite creation error: $e');
+      });
+
+      // STEP 7C: Create pending doctor relationship with invite code (NON-BLOCKING)
+      // This allows patient to share invite code with doctors
+      DoctorRelationshipService.instance.createPatientDoctorInvite(patientId: uid).then((result) {
+        if (result.success && result.data != null) {
+          debugPrint('[PatientDetailsScreen] Step 7C: Doctor invite created: ${result.data!.inviteCode}');
+        } else {
+          debugPrint('[PatientDetailsScreen] Step 7C: Failed to create doctor invite: ${result.errorMessage}');
+        }
+      }).catchError((e) {
+        debugPrint('[PatientDetailsScreen] Step 7C: Doctor invite creation error: $e');
       });
 
       debugPrint('Patient Details saved: age=${widget.patientAge}, gender=${_selectedGender.name}');

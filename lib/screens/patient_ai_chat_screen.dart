@@ -9,6 +9,71 @@ import 'package:google_fonts/google_fonts.dart';
 import 'patient_ai_chat/patient_ai_chat_state.dart';
 import 'patient_ai_chat/patient_ai_chat_data_provider.dart';
 
+// --- THEME COLORS ---
+
+class _ChatColors {
+  final bool isDark;
+
+  _ChatColors(this.isDark);
+
+  static _ChatColors of(BuildContext context) {
+    return _ChatColors(Theme.of(context).brightness == Brightness.dark);
+  }
+
+  // 1. Foundation
+  Color get bgPrimary => isDark ? const Color(0xFF0F0F0F) : const Color(0xFFFDFDFD);
+  Color get bgSecondary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF5F5F7);
+  Color get surfacePrimary => isDark ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF);
+  Color get surfaceSecondary => isDark ? const Color(0xFF2C2C2E) : const Color(0xFFFFFFFF);
+  Color get surfaceGlass => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : Colors.white.withOpacity(0.5); // Fallback for light
+  Color get borderSubtle => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFFFFFFF).withOpacity(0.30);
+  List<BoxShadow> get shadowCard => isDark 
+      ? [BoxShadow(color: const Color(0xFF000000).withOpacity(0.40), blurRadius: 16, offset: const Offset(0, 6))]
+      : [BoxShadow(color: const Color(0xFF475569).withOpacity(0.15), blurRadius: 16, offset: const Offset(0, 6))];
+
+  // 2. Containers
+  Color get containerDefault => isDark ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF);
+  Color get containerHighlight => isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF5F5F7);
+  Color get containerSlot => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF5F5F7);
+  Color get containerSlotAlt => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFE0E0E2);
+  Color get overlayModal => isDark ? const Color(0xFF1A1A1A).withOpacity(0.80) : const Color(0xFFFFFFFF).withOpacity(0.80);
+
+  // 3. Typography
+  Color get textPrimary => isDark ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A);
+  Color get textSecondary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.70) : const Color(0xFF475569);
+  Color get textTertiary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.50) : const Color(0xFF64748B);
+  Color get textInverse => isDark ? const Color(0xFF0F172A) : const Color(0xFFFFFFFF);
+  Color get textLink => isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB);
+
+  // 4. Iconography
+  Color get iconPrimary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.70) : const Color(0xFF475569);
+  Color get iconSecondary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.40) : const Color(0xFF94A3B8);
+  Color get iconBgPrimary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFF5F5F7);
+  Color get iconBgActive => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFFFFFFF);
+
+  // 5. Interactive
+  Color get actionPrimaryBg => isDark ? const Color(0xFF2C2C2E) : const Color(0xFFFFFFFF);
+  Color get actionPrimaryFg => isDark ? const Color(0xFFFFFFFF).withOpacity(0.80) : const Color(0xFF475569);
+  Color get actionHover => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF8FAFC);
+  Color get actionPressed => isDark ? const Color(0xFF000000).withOpacity(0.20) : const Color(0xFFE2E8F0);
+  Color get actionDisabledBg => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF1F5F9);
+  Color get actionDisabledFg => isDark ? const Color(0xFFFFFFFF).withOpacity(0.30) : const Color(0xFF94A3B8);
+
+  // 6. Status
+  Color get statusSuccess => isDark ? const Color(0xFF34D399) : const Color(0xFF059669);
+  Color get statusWarning => isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
+  Color get statusError => isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626);
+  Color get statusInfo => isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB);
+  Color get statusNeutral => isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+
+  // 7. Input
+  Color get inputBg => isDark ? const Color(0xFF1A1A1A) : const Color(0xFFFEFEFE);
+  Color get inputBorder => isDark ? const Color(0xFF3C4043) : const Color(0xFFE2E8F0);
+  Color get inputBorderFocus => isDark ? const Color(0xFFF8F9FA) : const Color(0xFF3B82F6);
+  Color get controlActive => isDark ? const Color(0xFFF5F5F5) : const Color(0xFF2563EB);
+  Color get controlTrack => isDark ? const Color(0xFF3C4043) : const Color(0xFFE2E8F0);
+}
+
 class PatientAIChatScreen extends StatefulWidget {
   const PatientAIChatScreen({super.key});
 
@@ -22,7 +87,6 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
   
   // Production state management
   PatientAIChatState? _state;
-  bool _isLoading = true;
   final PatientAIChatDataProvider _dataProvider = PatientAIChatDataProvider();
   
   // Local UI state (not persisted)
@@ -51,7 +115,6 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
       if (mounted) {
         setState(() {
           _state = state;
-          _isLoading = false;
         });
       }
     } catch (e) {
@@ -59,7 +122,6 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
       if (mounted) {
         setState(() {
           _state = PatientAIChatState.initial();
-          _isLoading = false;
         });
       }
     }
@@ -121,8 +183,9 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
 
   @override
   Widget build(BuildContext context) {
+    final colors = _ChatColors.of(context);
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: colors.bgPrimary,
       body: Stack(
         children: [
           // 1. Ambient Glow Background
@@ -143,7 +206,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.indigo.withOpacity(0.2),
+                            color: Colors.indigo.withOpacity(colors.isDark ? 0.1 : 0.2),
                             blurRadius: 80,
                             spreadRadius: 20,
                           ),
@@ -163,7 +226,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.pink.withOpacity(0.2),
+                            color: Colors.pink.withOpacity(colors.isDark ? 0.1 : 0.2),
                             blurRadius: 80,
                             spreadRadius: 20,
                           ),
@@ -183,7 +246,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.purple.withOpacity(0.2),
+                            color: Colors.purple.withOpacity(colors.isDark ? 0.1 : 0.2),
                             blurRadius: 80,
                             spreadRadius: 20,
                           ),
@@ -199,9 +262,9 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                         begin: Alignment.bottomLeft,
                         end: Alignment.topRight,
                         colors: [
-                          Colors.white.withOpacity(0),
-                          Colors.white.withOpacity(0),
-                          Colors.white.withOpacity(0.4),
+                          colors.bgPrimary.withOpacity(0),
+                          colors.bgPrimary.withOpacity(0),
+                          colors.bgPrimary.withOpacity(0.4),
                         ],
                       ),
                     ),
@@ -221,7 +284,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                       decoration: BoxDecoration(
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF6366F1).withOpacity(0.2),
+                            color: colors.statusInfo.withOpacity(0.2),
                             blurRadius: 80,
                             spreadRadius: 20,
                             offset: Offset.zero,
@@ -238,7 +301,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                             colors: [
-                              Colors.indigo.withOpacity(0.1),
+                              colors.statusInfo.withOpacity(0.1),
                               Colors.transparent,
                             ],
                           ),
@@ -285,16 +348,10 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                             child: Container(
                               padding: const EdgeInsets.fromLTRB(12, 6, 16, 6),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.8),
+                                color: colors.surfaceGlass,
                                 borderRadius: BorderRadius.circular(100),
-                                border: Border.all(color: Colors.white.withOpacity(0.4)),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.08),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
+                                border: Border.all(color: colors.borderSubtle),
+                                boxShadow: colors.shadowCard,
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -304,11 +361,11 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                     width: 6,
                                     height: 6,
                                     decoration: BoxDecoration(
-                                      color: (_state?.isMonitoringActive == true) ? Colors.green : Colors.grey.shade400,
+                                      color: (_state?.isMonitoringActive == true) ? colors.statusSuccess : colors.statusNeutral,
                                       shape: BoxShape.circle,
                                       boxShadow: (_state?.isMonitoringActive == true) ? [
                                         BoxShadow(
-                                          color: Colors.green.withOpacity(0.6),
+                                          color: colors.statusSuccess.withOpacity(0.6),
                                           blurRadius: 8,
                                         ),
                                       ] : null,
@@ -318,10 +375,10 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                   Container(
                                     height: 12,
                                     width: 1,
-                                    color: Colors.grey.withOpacity(0.3),
+                                    color: colors.borderSubtle,
                                   ),
                                   const SizedBox(width: 10),
-                                  Icon(CupertinoIcons.heart_fill, size: 14, color: (_state?.hasHealthDevice == true) ? Colors.red.shade500 : Colors.grey.shade400),
+                                  Icon(CupertinoIcons.heart_fill, size: 14, color: (_state?.hasHealthDevice == true) ? colors.statusError : colors.statusNeutral),
                                   const SizedBox(width: 6),
                                   // State-driven BPM display
                                   Text(
@@ -329,7 +386,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                     style: GoogleFonts.inter(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
-                                      color: Colors.grey.shade900,
+                                      color: colors.textPrimary,
                                       letterSpacing: 0.2,
                                     ),
                                   ),
@@ -337,7 +394,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                   Container(
                                     height: 12,
                                     width: 1,
-                                    color: Colors.grey.withOpacity(0.3),
+                                    color: colors.borderSubtle,
                                   ),
                                   const SizedBox(width: 10),
                                   // State-driven monitoring status
@@ -346,7 +403,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                     style: GoogleFonts.inter(
                                       fontSize: 10,
                                       fontWeight: FontWeight.w500,
-                                      color: Colors.grey.shade500,
+                                      color: colors.textSecondary,
                                     ),
                                   ),
                                 ],
@@ -384,15 +441,9 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                               width: 56,
                               height: 56,
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
+                                color: colors.bgSecondary,
                                 shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
+                                boxShadow: colors.shadowCard,
                               ),
                               alignment: Alignment.center,
                               child: Text(
@@ -400,7 +451,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                 style: GoogleFonts.inter(
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.grey.shade500,
+                                  color: colors.textSecondary,
                                 ),
                               ),
                             ),
@@ -415,7 +466,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                     style: GoogleFonts.inter(
                                       fontSize: 17,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.grey.shade900,
+                                      color: colors.textPrimary,
                                       height: 1.1,
                                     ),
                                   ),
@@ -424,7 +475,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                     _state!.caregiver!.subtitle,
                                     style: GoogleFonts.inter(
                                       fontSize: 13,
-                                      color: Colors.grey.shade500,
+                                      color: colors.textSecondary,
                                       height: 1.1,
                                     ),
                                   ),
@@ -435,17 +486,17 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
-                                color: _state!.caregiver!.isOnline ? Colors.green : Colors.grey.shade400,
+                                color: _state!.caregiver!.isOnline ? colors.statusSuccess : colors.statusNeutral,
                                 shape: BoxShape.circle,
                                 boxShadow: _state!.caregiver!.isOnline ? [
                                   BoxShadow(
-                                    color: Colors.green.withOpacity(0.3),
+                                    color: colors.statusSuccess.withOpacity(0.3),
                                     blurRadius: 8,
                                     offset: const Offset(0, 4),
                                   ),
                                 ] : null,
                               ),
-                              child: const Icon(Icons.phone, color: Colors.white, size: 20),
+                              child: Icon(Icons.phone, color: colors.textInverse, size: 20),
                             ),
                           ],
                         ),
@@ -464,10 +515,10 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade100,
+                              color: colors.statusInfo.withOpacity(0.1),
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(CupertinoIcons.cloud_rain_fill, color: Colors.blue.shade600, size: 20),
+                            child: Icon(CupertinoIcons.cloud_rain_fill, color: colors.statusInfo, size: 20),
                           ),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -477,7 +528,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                 style: GoogleFonts.inter(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.grey.shade900,
+                                  color: colors.textPrimary,
                                   height: 1.1,
                                 ),
                               ),
@@ -485,7 +536,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                 "How are you?",
                                 style: GoogleFonts.inter(
                                   fontSize: 11,
-                                  color: Colors.grey.shade500,
+                                  color: colors.textSecondary,
                                   height: 1.1,
                                 ),
                               ),
@@ -507,10 +558,10 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: Colors.purple.shade100,
+                              color: Colors.purple.withOpacity(0.1),
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(CupertinoIcons.wind, color: Colors.purple.shade600, size: 20),
+                            child: Icon(CupertinoIcons.wind, color: Colors.purple.shade400, size: 20),
                           ),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -520,7 +571,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                 style: GoogleFonts.inter(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.grey.shade900,
+                                  color: colors.textPrimary,
                                   height: 1.1,
                                 ),
                               ),
@@ -528,7 +579,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                 "Breathing",
                                 style: GoogleFonts.inter(
                                   fontSize: 11,
-                                  color: Colors.grey.shade500,
+                                  color: colors.textSecondary,
                                   height: 1.1,
                                 ),
                               ),
@@ -571,17 +622,17 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                 children: [
-                                  _buildMenuItem(CupertinoIcons.camera_fill, 'Camera', Colors.grey.shade100, Colors.grey.shade900, 0),
-                                  _buildMenuItem(CupertinoIcons.photo_fill, 'Photos', Colors.grey.shade100, Colors.grey.shade900, 50),
-                                  _buildMenuItem(CupertinoIcons.heart_fill, 'Vitals', Colors.red.shade50, Colors.red.shade600, 100),
+                                  _buildMenuItem(CupertinoIcons.camera_fill, 'Camera', colors.bgSecondary, colors.textPrimary, 0),
+                                  _buildMenuItem(CupertinoIcons.photo_fill, 'Photos', colors.bgSecondary, colors.textPrimary, 50),
+                                  _buildMenuItem(CupertinoIcons.heart_fill, 'Vitals', colors.statusError.withOpacity(0.1), colors.statusError, 100),
                                 ],
                               ),
                               const SizedBox(height: 24),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                 children: [
-                                  _buildMenuItem(CupertinoIcons.location_solid, 'Location', Colors.green.shade50, Colors.green.shade600, 150),
-                                  _buildMenuItem(CupertinoIcons.doc_text_fill, 'Report', Colors.blue.shade50, Colors.blue.shade600, 200),
+                                  _buildMenuItem(CupertinoIcons.location_solid, 'Location', colors.statusSuccess.withOpacity(0.1), colors.statusSuccess, 150),
+                                  _buildMenuItem(CupertinoIcons.doc_text_fill, 'Report', colors.statusInfo.withOpacity(0.1), colors.statusInfo, 200),
                                   const SizedBox(width: 80), // Spacer for grid alignment
                                 ],
                               ),
@@ -619,6 +670,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
   }
 
   Widget _buildMenuItem(IconData icon, String label, Color bgColor, Color iconColor, int delay) {
+    final colors = _ChatColors.of(context);
     return Column(
       children: [
         Container(
@@ -627,13 +679,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
           decoration: BoxDecoration(
             color: bgColor,
             shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            boxShadow: colors.shadowCard,
           ),
           child: Icon(icon, color: iconColor, size: 32),
         ),
@@ -643,7 +689,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
           style: GoogleFonts.inter(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: Colors.grey.shade800,
+            color: colors.textSecondary,
           ),
         ),
       ],
@@ -651,6 +697,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
   }
 
   Widget _buildHeader() {
+    final colors = _ChatColors.of(context);
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -662,8 +709,8 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
             right: 16,
           ),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.7),
-            border: Border(bottom: BorderSide(color: Colors.black.withOpacity(0.05))),
+            color: colors.surfaceGlass,
+            border: Border(bottom: BorderSide(color: colors.borderSubtle)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -673,14 +720,14 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                 onTap: () => Navigator.pop(context),
                 child: Row(
                   children: [
-                    const Icon(Icons.arrow_back_ios_new, size: 24, color: Colors.black87),
+                    Icon(Icons.arrow_back_ios_new, size: 24, color: colors.iconPrimary),
                     const SizedBox(width: 4),
                     Text(
                       "Chats",
                       style: GoogleFonts.inter(
                         fontSize: 17,
                         fontWeight: FontWeight.w500,
-                        color: Colors.black87,
+                        color: colors.textPrimary,
                       ),
                     ),
                   ],
@@ -698,11 +745,11 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.indigo.shade50,
+                          color: colors.statusInfo.withOpacity(0.1),
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.indigo.withOpacity(0.1),
+                              color: colors.statusInfo.withOpacity(0.1),
                               blurRadius: 4,
                               offset: const Offset(0, 2),
                             ),
@@ -715,7 +762,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                         height: 40,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.indigo.shade200, width: 2),
+                          border: Border.all(color: colors.statusInfo.withOpacity(0.3), width: 2),
                         ),
                       ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(1, 1), end: const Offset(1.1, 1.1)).fade(begin: 0.6, end: 0.3),
                       // Outer Pulse
@@ -724,11 +771,11 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                         height: 40,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.purple.shade300, width: 1),
+                          border: Border.all(color: Colors.purple.withOpacity(0.3), width: 1),
                         ),
                       ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(1.2, 1.2), end: const Offset(1.4, 1.4)).fade(begin: 0.3, end: 0.0),
                       
-                      Icon(CupertinoIcons.cloud_sun_fill, size: 20, color: Colors.indigo.shade600),
+                      Icon(CupertinoIcons.cloud_sun_fill, size: 20, color: colors.statusInfo),
                     ],
                   ),
                   const SizedBox(width: 12),
@@ -737,7 +784,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                     style: GoogleFonts.inter(
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
-                      color: Colors.black87,
+                      color: colors.textPrimary,
                     ),
                   ),
                 ],
@@ -748,10 +795,10 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100.withOpacity(0.5),
+                  color: colors.bgSecondary.withOpacity(0.5),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.more_horiz, color: Colors.grey.shade500),
+                child: Icon(Icons.more_horiz, color: colors.iconSecondary),
               ),
             ],
           ),
@@ -761,6 +808,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
   }
 
   Widget _buildMessageBubble(ChatMessage msg, bool isMe, bool isLast) {
+    final colors = _ChatColors.of(context);
     return Padding(
       padding: EdgeInsets.only(top: isMe ? 8 : 24, bottom: isLast ? 24 : 0),
       child: Row(
@@ -796,8 +844,8 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
             child: Container(
               decoration: BoxDecoration(
                 color: isMe 
-                    ? const Color(0xFF3B82F6) // Blue-500
-                    : Colors.white.withOpacity(0.4),
+                    ? colors.statusInfo // Blue-500
+                    : colors.surfaceGlass,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(26),
                   topRight: const Radius.circular(26),
@@ -807,7 +855,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                 boxShadow: [
                   if (isMe)
                     BoxShadow(
-                      color: Colors.blue.withOpacity(0.3),
+                      color: colors.statusInfo.withOpacity(0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     )
@@ -818,7 +866,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                       offset: const Offset(0, 2),
                     ),
                 ],
-                border: isMe ? null : Border.all(color: Colors.white.withOpacity(0.6)),
+                border: isMe ? null : Border.all(color: colors.borderSubtle),
               ),
               child: ClipRRect( // For backdrop blur on AI messages
                 borderRadius: BorderRadius.only(
@@ -839,7 +887,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                           style: GoogleFonts.inter(
                             fontSize: 17,
                             height: 1.4,
-                            color: isMe ? Colors.white : Colors.grey.shade800,
+                            color: isMe ? colors.textInverse : colors.textPrimary,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -852,7 +900,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                               style: GoogleFonts.inter(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w500,
-                                color: isMe ? Colors.blue.shade100 : Colors.grey.shade400,
+                                color: isMe ? colors.textInverse.withOpacity(0.7) : colors.textTertiary,
                               ),
                             ),
                             if (isMe) ...[
@@ -860,7 +908,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                               Icon(
                                 msg.status == 'read' ? Icons.done_all : Icons.check,
                                 size: 12,
-                                color: Colors.white.withOpacity(0.7),
+                                color: colors.textInverse.withOpacity(0.7),
                               ),
                             ],
                           ],
@@ -878,6 +926,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
   }
 
   Widget _buildSmartWidget({required Widget child, required double width, required VoidCallback onTap}) {
+    final colors = _ChatColors.of(context);
     return GestureDetector(
       onTap: onTap,
       child: ClipRRect(
@@ -888,16 +937,10 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
             width: width,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.7),
+              color: colors.surfaceGlass,
               borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: Colors.white.withOpacity(0.5)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
+              border: Border.all(color: colors.borderSubtle),
+              boxShadow: colors.shadowCard,
             ),
             child: child,
           ),
@@ -907,6 +950,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
   }
 
   Widget _buildInputBar() {
+    final colors = _ChatColors.of(context);
     return Container(
       padding: EdgeInsets.only(
         left: 20, 
@@ -924,7 +968,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: Colors.grey.shade200.withOpacity(0.5),
+                color: colors.bgSecondary.withOpacity(0.5),
                 shape: BoxShape.circle,
               ),
               child: ClipRRect(
@@ -932,7 +976,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                   child: Center(
-                    child: Icon(Icons.add, color: Colors.grey.shade600, size: 24),
+                    child: Icon(Icons.add, color: colors.iconPrimary, size: 24),
                   ),
                 ),
               ),
@@ -950,9 +994,9 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                   duration: const Duration(milliseconds: 500),
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.8),
+                    color: colors.surfaceGlass,
                     borderRadius: BorderRadius.circular(32),
-                    border: Border.all(color: Colors.white.withOpacity(0.6)),
+                    border: Border.all(color: colors.borderSubtle),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.12),
@@ -991,7 +1035,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                           ),
                           child: Icon(
                             _state?.inputMode == InputMode.voice ? Icons.keyboard : Icons.mic,
-                            color: Colors.grey.shade500,
+                            color: colors.iconSecondary,
                             size: 24,
                           ),
                         ),
@@ -1053,7 +1097,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                               Text(
                                                 "Tap to speak",
                                                 style: GoogleFonts.inter(
-                                                  color: Colors.grey.shade400,
+                                                  color: colors.textTertiary,
                                                   fontWeight: FontWeight.w500,
                                                   fontSize: 15,
                                                 ),
@@ -1067,7 +1111,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                                   height: h.toDouble(),
                                                   margin: const EdgeInsets.symmetric(horizontal: 1),
                                                   decoration: BoxDecoration(
-                                                    color: (_state?.isAITyping == true) ? Colors.indigo.shade400 : Colors.grey.shade400,
+                                                    color: (_state?.isAITyping == true) ? Colors.indigo.shade400 : colors.textTertiary,
                                                     borderRadius: BorderRadius.circular(100),
                                                   ),
                                                 );
@@ -1081,7 +1125,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                   decoration: InputDecoration(
                                     hintText: "Type a message...",
                                     hintStyle: GoogleFonts.inter(
-                                      color: Colors.grey.shade400,
+                                      color: colors.textTertiary,
                                       fontWeight: FontWeight.w500,
                                       fontSize: 17,
                                     ),
@@ -1089,7 +1133,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                                   ),
                                   style: GoogleFonts.inter(
-                                    color: Colors.grey.shade800,
+                                    color: colors.textPrimary,
                                     fontSize: 17,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -1116,14 +1160,14 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: (_state?.inputMode == InputMode.keyboard && _textController.text.isNotEmpty)
-                                ? Colors.indigo.shade600
+                                ? colors.statusInfo
                                 : (_state?.isRecording == true)
-                                    ? Colors.red.shade500
-                                    : Colors.black.withOpacity(0.05),
+                                    ? colors.statusError
+                                    : colors.bgSecondary.withOpacity(0.5),
                             boxShadow: [
                               if (_state?.inputMode == InputMode.keyboard && _textController.text.isNotEmpty)
                                 BoxShadow(
-                                  color: Colors.indigo.withOpacity(0.3),
+                                  color: colors.statusInfo.withOpacity(0.3),
                                   blurRadius: 8,
                                   offset: const Offset(0, 4),
                                 ),
@@ -1131,13 +1175,13 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                           ),
                           child: Center(
                             child: (_state?.inputMode == InputMode.keyboard && _textController.text.isNotEmpty)
-                                ? const Icon(Icons.arrow_upward, color: Colors.white, size: 20)
+                                ? Icon(Icons.arrow_upward, color: colors.textInverse, size: 20)
                                 : (_state?.isRecording == true)
                                     ? Container(
                                         width: 16,
                                         height: 16,
                                         decoration: BoxDecoration(
-                                          color: Colors.white,
+                                          color: colors.textInverse,
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                       )
@@ -1145,7 +1189,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                                         width: 12,
                                         height: 12,
                                         decoration: BoxDecoration(
-                                          color: Colors.red.shade500,
+                                          color: colors.statusError,
                                           shape: BoxShape.circle,
                                         ),
                                       ),

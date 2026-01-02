@@ -8,6 +8,8 @@ import 'colors.dart';
 import 'providers/theme_provider.dart';
 import 'theme/motion.dart';
 import 'onboarding/services/onboarding_local_service.dart';
+import 'onboarding/services/onboarding_firestore_service.dart';
+import 'relationships/services/doctor_relationship_service.dart';
 import 'doctor_main_screen.dart';
 
 /// Modern doctor details screen with gender selection and form fields
@@ -30,6 +32,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
   final _hospitalController = TextEditingController();
   final _phoneController = TextEditingController();
   final _licenseController = TextEditingController();
+  final _inviteCodeController = TextEditingController(); // Optional patient invite code
 
   // Gender selection state
   Gender _selectedGender = Gender.male;
@@ -92,6 +95,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     _hospitalController.dispose();
     _phoneController.dispose();
     _licenseController.dispose();
+    _inviteCodeController.dispose();
     _avatarAnimationController.dispose();
     _genderToggleController.dispose();
     _nameFocusNode.dispose();
@@ -131,8 +135,15 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
       // Provide success haptic feedback
       HapticFeedback.mediumImpact();
 
-      // Get current user ID
-      final uid = FirebaseAuth.instance.currentUser?.uid;
+      // Get current user ID - try Firebase Auth first, fallback to local storage
+      String? uid = FirebaseAuth.instance.currentUser?.uid;
+      
+      // Fallback for simulator mode: get UID from local storage
+      if (uid == null || uid.isEmpty) {
+        uid = OnboardingLocalService.instance.getLastSavedUid();
+        debugPrint('[DoctorDetailsScreen] Using fallback UID from local storage: $uid');
+      }
+      
       if (uid == null || uid.isEmpty) {
         debugPrint('[DoctorDetailsScreen] ERROR: No authenticated user');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -144,10 +155,81 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
         return;
       }
 
-      // TODO: Save Doctor Details to Local Table (OFFLINE-FIRST)
-      // For now, we'll just simulate saving and navigate
-      
-      debugPrint('Doctor Details saved: name=${_nameController.text}, specialty=${_specialtyController.text}');
+      // Validate required fields
+      final name = _nameController.text.trim();
+      final specialty = _specialtyController.text.trim();
+      final license = _licenseController.text.trim();
+      final hospital = _hospitalController.text.trim();
+      final phone = _phoneController.text.trim();
+      final email = FirebaseAuth.instance.currentUser?.email ?? '';
+
+      if (name.isEmpty || specialty.isEmpty || license.isEmpty) {
+        debugPrint('[DoctorDetailsScreen] ERROR: Required fields missing');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please fill in all required fields (Name, Specialty, License).'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // STEP 4: Save Doctor Details to Local Table (OFFLINE-FIRST)
+      final result = await OnboardingLocalService.instance.saveDoctorDetails(
+        uid: uid,
+        fullName: name,
+        email: email,
+        phoneNumber: phone.isEmpty ? 'N/A' : phone,
+        specialization: specialty,
+        licenseNumber: license,
+        yearsOfExperience: 0, // Default value - not collected in this form
+        clinicOrHospitalName: hospital.isEmpty ? 'N/A' : hospital,
+        address: 'N/A', // Default value - not collected in this form
+      );
+
+      if (!result.success) {
+        debugPrint('[DoctorDetailsScreen] ERROR: Failed to save doctor details to local storage: ${result.errorMessage}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save: ${result.errorMessage}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      debugPrint('[DoctorDetailsScreen] STEP 4 SUCCESS: Doctor details saved to Hive');
+
+      // STEP 5: Mirror to Firestore (FIRE-AND-FORGET - non-blocking)
+      OnboardingFirestoreService.instance.mirrorDoctorToFirestore(uid).then((mirrorResult) {
+        if (mirrorResult.success) {
+          debugPrint('[DoctorDetailsScreen] STEP 5 SUCCESS: Doctor mirrored to Firestore');
+        } else {
+          debugPrint('[DoctorDetailsScreen] STEP 5 WARNING: Firestore mirror failed (will retry later): ${mirrorResult.errorMessage}');
+        }
+      }).catchError((error) {
+        debugPrint('[DoctorDetailsScreen] STEP 5 ERROR: Firestore mirror exception: $error');
+      });
+
+      // STEP 6: Accept patient invite code if provided (NON-BLOCKING)
+      final inviteCode = _inviteCodeController.text.trim();
+      if (inviteCode.isNotEmpty) {
+        DoctorRelationshipService.instance.acceptDoctorInvite(
+          inviteCode: inviteCode,
+          doctorId: uid,
+        ).then((relationshipResult) {
+          if (relationshipResult.success && relationshipResult.data != null) {
+            debugPrint('[DoctorDetailsScreen] STEP 6 SUCCESS: Patient relationship accepted: ${relationshipResult.data!.id}');
+          } else {
+            debugPrint('[DoctorDetailsScreen] STEP 6 WARNING: Failed to accept invite: ${relationshipResult.errorMessage}');
+            // Show user-friendly message but don't block navigation
+          }
+        }).catchError((error) {
+          debugPrint('[DoctorDetailsScreen] STEP 6 ERROR: Accept invite exception: $error');
+        });
+      }
+
+      debugPrint('Doctor Details saved: name=$name, specialty=$specialty');
 
       // Show success message
       _showSuccessSnackBar();
@@ -584,6 +666,17 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
             return null;
           },
           delay: 700,
+        ),
+        const SizedBox(height: 24),
+        // Optional patient invite code field
+        _buildTextField(
+          controller: _inviteCodeController,
+          focusNode: FocusNode(),
+          label: 'Patient Invite Code (Optional)',
+          hint: 'DOC-ABC123',
+          icon: Icons.link_outlined,
+          validator: null, // Optional field, no validation required
+          delay: 800,
         ),
       ],
     );

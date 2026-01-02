@@ -767,7 +767,15 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
                                       HapticFeedback.mediumImpact();
                                       
                                       // STEP 2: Save role to Local Table (OFFLINE-FIRST)
-                                      final uid = FirebaseAuth.instance.currentUser?.uid;
+                                      // Try Firebase Auth first, fallback to local storage for simulator mode
+                                      String? uid = FirebaseAuth.instance.currentUser?.uid;
+                                      
+                                      // Fallback for simulator mode: get UID from local storage
+                                      if (uid == null || uid.isEmpty) {
+                                        uid = OnboardingLocalService.instance.getLastSavedUid();
+                                        debugPrint('[UserSelectionScreen] Using fallback UID from local storage: $uid');
+                                      }
+                                      
                                       if (uid == null || uid.isEmpty) {
                                         debugPrint('[UserSelectionScreen] ERROR: No authenticated user');
                                         ScaffoldMessenger.of(context).showSnackBar(
@@ -833,6 +841,23 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
                                         );
                                       } else if (_selectedRole ==
                                           UserRole.doctor) {
+                                        // Save Doctor role
+                                        try {
+                                          await OnboardingLocalService.instance.saveDoctorRole(
+                                            uid: uid,
+                                          );
+                                          debugPrint('[UserSelectionScreen] Step 2: Doctor role saved locally');
+                                        } catch (e) {
+                                          debugPrint('[UserSelectionScreen] Step 2 FAILED: $e');
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Failed to save role. Please try again.'),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                        
                                         // Navigate to Doctor Details Screen
                                         Navigator.push(
                                           context,

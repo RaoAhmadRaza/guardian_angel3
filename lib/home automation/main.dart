@@ -1,3 +1,4 @@
+import 'dart:ui'; // Add this import for ImageFilter if needed, though not explicitly used yet, good for glassmorphism
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'src/data/home_automation_hive_bridge.dart';
@@ -8,6 +9,71 @@ import 'src/logic/providers/device_providers.dart';
 import 'src/logic/providers/weather_location_providers.dart';
 import 'src/data/models/device_model.dart' as domain;
 import 'navigation/drawer_wrapper.dart';
+
+// --- THEME COLORS ---
+
+class _ScreenColors {
+  final bool isDark;
+
+  _ScreenColors(this.isDark);
+
+  static _ScreenColors of(BuildContext context) {
+    return _ScreenColors(Theme.of(context).brightness == Brightness.dark);
+  }
+
+  // 1. Foundation
+  Color get bgPrimary => isDark ? const Color(0xFF0F0F0F) : const Color(0xFFFDFDFD);
+  Color get bgSecondary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF5F5F7);
+  Color get surfacePrimary => isDark ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF);
+  Color get surfaceSecondary => isDark ? const Color(0xFF2C2C2E) : const Color(0xFFFFFFFF);
+  Color get surfaceGlass => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : Colors.white.withOpacity(0.5); // Fallback for light
+  Color get borderSubtle => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFFFFFFF).withOpacity(0.30);
+  List<BoxShadow> get shadowCard => isDark 
+      ? [BoxShadow(color: const Color(0xFF000000).withOpacity(0.40), blurRadius: 16, offset: const Offset(0, 6))]
+      : [BoxShadow(color: const Color(0xFF475569).withOpacity(0.15), blurRadius: 16, offset: const Offset(0, 6))];
+
+  // 2. Containers
+  Color get containerDefault => isDark ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF);
+  Color get containerHighlight => isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF5F5F7);
+  Color get containerSlot => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF5F5F7);
+  Color get containerSlotAlt => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFE0E0E2);
+  Color get overlayModal => isDark ? const Color(0xFF1A1A1A).withOpacity(0.80) : const Color(0xFFFFFFFF).withOpacity(0.80);
+
+  // 3. Typography
+  Color get textPrimary => isDark ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A);
+  Color get textSecondary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.70) : const Color(0xFF475569);
+  Color get textTertiary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.50) : const Color(0xFF64748B);
+  Color get textInverse => isDark ? const Color(0xFF0F172A) : const Color(0xFFFFFFFF);
+  Color get textLink => isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB);
+
+  // 4. Iconography
+  Color get iconPrimary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.70) : const Color(0xFF475569);
+  Color get iconSecondary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.40) : const Color(0xFF94A3B8);
+  Color get iconBgPrimary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFF5F5F7);
+  Color get iconBgActive => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFFFFFFF);
+
+  // 5. Interactive
+  Color get actionPrimaryBg => isDark ? const Color(0xFF2C2C2E) : const Color(0xFFFFFFFF);
+  Color get actionPrimaryFg => isDark ? const Color(0xFFFFFFFF).withOpacity(0.80) : const Color(0xFF475569);
+  Color get actionHover => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF8FAFC);
+  Color get actionPressed => isDark ? const Color(0xFF000000).withOpacity(0.20) : const Color(0xFFE2E8F0);
+  Color get actionDisabledBg => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF1F5F9);
+  Color get actionDisabledFg => isDark ? const Color(0xFFFFFFFF).withOpacity(0.30) : const Color(0xFF94A3B8);
+
+  // 6. Status
+  Color get statusSuccess => isDark ? const Color(0xFF34D399) : const Color(0xFF059669);
+  Color get statusWarning => isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
+  Color get statusError => isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626);
+  Color get statusInfo => isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB);
+  Color get statusNeutral => isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+
+  // 7. Input
+  Color get inputBg => isDark ? const Color(0xFF1A1A1A) : const Color(0xFFFEFEFE);
+  Color get inputBorder => isDark ? const Color(0xFF3C4043) : const Color(0xFFE2E8F0);
+  Color get inputBorderFocus => isDark ? const Color(0xFFF8F9FA) : const Color(0xFF3B82F6);
+  Color get controlActive => isDark ? const Color(0xFFF5F5F5) : const Color(0xFF2563EB);
+  Color get controlTrack => isDark ? const Color(0xFF3C4043) : const Color(0xFFE2E8F0);
+}
 
 // Removed standalone main(); initialization will be invoked from Guardian Angel root.
 
@@ -74,13 +140,12 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
 
   @override
   Widget build(BuildContext context) {
+    final colors = _ScreenColors.of(context);
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: colors.bgPrimary,
       body: Container(
-        decoration:  BoxDecoration(
-          
-          color: Colors.white
-          
+        decoration: BoxDecoration(
+          color: colors.bgPrimary,
         ),
         child: Stack(
           alignment: Alignment.topCenter,
@@ -89,15 +154,10 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
             Container(
              height: 320,
              decoration: BoxDecoration(
-               
-               gradient: LinearGradient(colors:  [
-                  Color(0xFF3D2E6B),
-            Color(0xFF3D2E6B),
-               ]),
-               borderRadius: BorderRadius.only(
+               color: colors.bgSecondary,
+               borderRadius: const BorderRadius.only(
                  bottomLeft: Radius.circular(32),
                  bottomRight: Radius.circular(32),
-                 
                ),
              ),
              child: Padding(
@@ -126,9 +186,9 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
               child: // Scrollable Content
               Expanded(
                 child: Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.only(
+                  decoration: BoxDecoration(
+                    color: colors.bgPrimary,
+                    borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(0),
                       topRight: Radius.circular(0),
                     ),
@@ -170,6 +230,7 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
   }
 
   Widget _buildHeader() {
+    final colors = _ScreenColors.of(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -179,13 +240,14 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: Colors.transparent,
+              color: colors.surfaceGlass,
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: colors.borderSubtle),
             ),
             child: AnimatedIcon(
               icon: AnimatedIcons.menu_close,
               progress: _menuAnimationController,
-              color: Colors.white.withOpacity(0.9),
+              color: colors.iconPrimary,
               size: 28,
             ),
           ),
@@ -197,7 +259,7 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(28),
             border: Border.all(
-              color: Colors.white.withOpacity(0.2),
+              color: colors.borderSubtle,
               width: 2,
             ),
             image: const DecorationImage(
@@ -217,7 +279,7 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
               Text(
                 'Welcome home,',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
+                  color: colors.textSecondary,
                   fontSize: 16,
                   fontWeight: FontWeight.w400,
                   height: 1.2,
@@ -225,10 +287,10 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Savannah Nguyen',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: colors.textPrimary,
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
                   height: 1.2,
@@ -243,35 +305,16 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
   }
 
   Widget _buildWeatherCard() {
+    final colors = _ScreenColors.of(context);
     return Consumer(builder: (context, ref, _) {
       final weatherAsync = ref.watch(currentWeatherProvider);
       final placeAsync = ref.watch(reverseGeocodeProvider);
       return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF3D2E6B),
-            Color(0xFF252045),
-          ],
-        ),
+        color: colors.surfacePrimary,
         borderRadius: BorderRadius.circular(26),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1A1438).withOpacity(0.3),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-            spreadRadius: 0,
-          ),
-          BoxShadow(
-            color: const Color(0xFF1A1438).withOpacity(0.15),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-            spreadRadius: 0,
-          ),
-        ],
+        boxShadow: colors.shadowCard,
       ),
         child: Row(
           children: [
@@ -279,11 +322,11 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.12),
+              color: colors.bgSecondary,
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.white.withOpacity(0.1),
+                  color: colors.shadowCard.first.color.withOpacity(0.1),
                   blurRadius: 8,
                   spreadRadius: 1,
                 ),
@@ -321,7 +364,7 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.white.withOpacity(0.3),
+                          color: Colors.black.withOpacity(0.1),
                           blurRadius: 8,
                           spreadRadius: 1,
                         ),
@@ -338,33 +381,33 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
               children: [
                 Builder(builder: (_) {
                   return placeAsync.when(
-                    loading: () => const Text(
+                    loading: () => Text(
                       'Locating…',
-                      style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0.2),
+                      style: TextStyle(color: colors.textSecondary, fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0.2),
                     ),
-                    error: (e, __) => const Text(
+                    error: (e, __) => Text(
                       'Location unavailable',
-                      style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0.2),
+                      style: TextStyle(color: colors.textSecondary, fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0.2),
                     ),
                     data: (p) => Text(
                       p.city.isNotEmpty ? p.city : (p.formatted.isNotEmpty ? p.formatted : 'Your area'),
-                      style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0.2),
+                      style: TextStyle(color: colors.textSecondary, fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0.2),
                     ),
                   );
                 }),
                 const SizedBox(height: 6),
                 weatherAsync.when(
-                  loading: () => const Text(
+                  loading: () => Text(
                     '—°',
-                    style: TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w700, height: 1.0, letterSpacing: -0.5),
+                    style: TextStyle(color: colors.textPrimary, fontSize: 36, fontWeight: FontWeight.w700, height: 1.0, letterSpacing: -0.5),
                   ),
-                  error: (e, __) => const Text(
+                  error: (e, __) => Text(
                     '—°',
-                    style: TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w700, height: 1.0, letterSpacing: -0.5),
+                    style: TextStyle(color: colors.textPrimary, fontSize: 36, fontWeight: FontWeight.w700, height: 1.0, letterSpacing: -0.5),
                   ),
                   data: (wx) => Text(
                     '${wx.temperature.toStringAsFixed(0)}°',
-                    style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w700, height: 1.0, letterSpacing: -0.5),
+                    style: TextStyle(color: colors.textPrimary, fontSize: 36, fontWeight: FontWeight.w700, height: 1.0, letterSpacing: -0.5),
                   ),
                 ),
               ],
@@ -374,32 +417,32 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 weatherAsync.when(
-                  loading: () => const Text(
+                  loading: () => Text(
                     'Humidity',
-                    style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0.2),
+                    style: TextStyle(color: colors.textSecondary, fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0.2),
                   ),
-                  error: (e, __) => const Text(
+                  error: (e, __) => Text(
                     'Humidity',
-                    style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0.2),
+                    style: TextStyle(color: colors.textSecondary, fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0.2),
                   ),
                   data: (wx) => Text(
                     wx.description.isNotEmpty ? _capitalize(wx.description) : 'Humidity',
-                    style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0.2),
+                    style: TextStyle(color: colors.textSecondary, fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0.2),
                   ),
                 ),
                 const SizedBox(height: 6),
                 weatherAsync.when(
-                  loading: () => const Text(
+                  loading: () => Text(
                     '—%',
-                    style: TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w700, height: 1.0, letterSpacing: -0.5),
+                    style: TextStyle(color: colors.textPrimary, fontSize: 36, fontWeight: FontWeight.w700, height: 1.0, letterSpacing: -0.5),
                   ),
-                  error: (e, __) => const Text(
+                  error: (e, __) => Text(
                     '—%',
-                    style: TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w700, height: 1.0, letterSpacing: -0.5),
+                    style: TextStyle(color: colors.textPrimary, fontSize: 36, fontWeight: FontWeight.w700, height: 1.0, letterSpacing: -0.5),
                   ),
                   data: (wx) => Text(
                     '${wx.humidity}%',
-                    style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w700, height: 1.0, letterSpacing: -0.5),
+                    style: TextStyle(color: colors.textPrimary, fontSize: 36, fontWeight: FontWeight.w700, height: 1.0, letterSpacing: -0.5),
                   ),
                 ),
               ],
@@ -460,26 +503,14 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
     required String title,
     required String subtitle,
   }) {
+    final colors = _ScreenColors.of(context);
     return Container(
       width: 180,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colors.surfacePrimary,
         borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-            spreadRadius: 0,
-          ),
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-            spreadRadius: 0,
-          ),
-        ],
+        boxShadow: colors.shadowCard,
       ),
       child: Row(
         children: [
@@ -506,8 +537,8 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: Color(0xFF1A1438),
+                  style: TextStyle(
+                    color: colors.textPrimary,
                     fontSize: 13.5,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.1,
@@ -517,7 +548,7 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
                 Text(
                   subtitle,
                   style: TextStyle(
-                    color: const Color(0xFF1A1438).withOpacity(0.5),
+                    color: colors.textSecondary,
                     fontSize: 11.5,
                     fontWeight: FontWeight.w400,
                     letterSpacing: 0.1,
@@ -532,15 +563,16 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
   }
 
   Widget _buildDevicesHeader() {
+    final colors = _ScreenColors.of(context);
     return Consumer(builder: (context, ref, _) {
       final allDevices = ref.watch(allDevicesProvider);
       final activeCount = allDevices.where((d) => d.isOn).length;
       return Row(
         children: [
-          const Text(
+          Text(
             'Active Devices',
             style: TextStyle(
-              color: Color(0xFF1A1438),
+              color: colors.textPrimary,
               fontSize: 19,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.2,
@@ -550,13 +582,13 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1438).withOpacity(0.08),
+              color: colors.bgSecondary,
               borderRadius: BorderRadius.circular(14),
             ),
             child: Text(
               '$activeCount',
               style: TextStyle(
-                color: const Color(0xFF1A1438).withOpacity(0.6),
+                color: colors.textSecondary,
                 fontSize: 13.5,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.1,
@@ -622,32 +654,20 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
     required bool isOn,
     required ValueChanged<bool> onToggle,
   }) {
+    final colors = _ScreenColors.of(context);
     return PhysicalModel(
-      color: Colors.white,
-  elevation: 8,
-  borderRadius: BorderRadius.circular(20),
-  shadowColor: Colors.black.withOpacity(0.3),
-  clipBehavior: Clip.antiAlias,
+      color: colors.surfacePrimary,
+      elevation: 8,
+      borderRadius: BorderRadius.circular(20),
+      shadowColor: colors.shadowCard.first.color,
+      clipBehavior: Clip.antiAlias,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: colors.surfacePrimary,
             borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 30,
-                offset: const Offset(0, 10),
-                spreadRadius: 2,
-              ),
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 15,
-                offset: const Offset(0, 4),
-                spreadRadius: 1,
-              ),
-            ],
+            boxShadow: colors.shadowCard,
           ),
           child: Stack(
             children: [
@@ -659,7 +679,7 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(
-                    color: const Color.fromARGB(255, 150, 150, 191),
+                    color: colors.statusInfo.withOpacity(0.3),
                     shape: BoxShape.circle,
                   ),
                   child: Center(
@@ -688,10 +708,10 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
                           child: Switch(
                             value: isOn,
                             onChanged: onToggle,
-                            activeColor: Colors.white,
-                            activeTrackColor: const Color(0xFF4D7CFE),
-                            inactiveThumbColor: Colors.white,
-                            inactiveTrackColor: const Color(0xFFE0E0E0),
+                            activeColor: colors.textInverse,
+                            activeTrackColor: colors.controlActive,
+                            inactiveThumbColor: colors.textInverse,
+                            inactiveTrackColor: colors.controlTrack,
                             trackOutlineColor: MaterialStateProperty.all(Colors.transparent),
                             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
@@ -702,8 +722,8 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
                     // Device Name
                     Text(
                       name,
-                      style: const TextStyle(
-                        color: Color(0xFF2D2D2D),
+                      style: TextStyle(
+                        color: colors.textPrimary,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0,
@@ -715,7 +735,7 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
                     Text(
                       location,
                       style: TextStyle(
-                        color: const Color(0xFF9E9E9E),
+                        color: colors.textSecondary,
                         fontSize: 13,
                         fontWeight: FontWeight.w400,
                         letterSpacing: 0,

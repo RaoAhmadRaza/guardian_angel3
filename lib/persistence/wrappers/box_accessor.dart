@@ -33,8 +33,10 @@ import '../../models/settings_model.dart';
 import '../../models/device_model.dart';
 import '../../models/audit_log_record.dart';
 import '../../relationships/models/relationship_model.dart';
+import '../../relationships/models/doctor_relationship_model.dart';
 import '../../chat/models/chat_thread_model.dart';
 import '../../chat/models/chat_message_model.dart';
+import '../../health/models/stored_health_reading.dart';
 import '../../services/telemetry_service.dart';
 
 /// Riverpod provider for BoxAccessor
@@ -155,6 +157,13 @@ class BoxAccessor {
     return Hive.box<RelationshipModel>(BoxRegistry.relationshipsBox);
   }
 
+  /// Access doctor-patient relationships box.
+  Box<DoctorRelationshipModel> doctorRelationships() {
+    _trackAccess(BoxRegistry.doctorRelationshipsBox);
+    _assertOpen(BoxRegistry.doctorRelationshipsBox);
+    return Hive.box<DoctorRelationshipModel>(BoxRegistry.doctorRelationshipsBox);
+  }
+
   /// Access chat threads box.
   Box<ChatThreadModel> chatThreads() {
     _trackAccess(BoxRegistry.chatThreadsBox);
@@ -167,6 +176,13 @@ class BoxAccessor {
     _trackAccess(BoxRegistry.chatMessagesBox);
     _assertOpen(BoxRegistry.chatMessagesBox);
     return Hive.box<ChatMessageModel>(BoxRegistry.chatMessagesBox);
+  }
+
+  /// Access health readings box.
+  Box<StoredHealthReading> healthReadings() {
+    _trackAccess(BoxRegistry.healthReadingsBox);
+    _assertOpen(BoxRegistry.healthReadingsBox);
+    return Hive.box<StoredHealthReading>(BoxRegistry.healthReadingsBox);
   }
 
   /// Access emergency ops box.
@@ -229,6 +245,8 @@ class BoxAccessor {
         return Hive.box<ChatThreadModel>(boxName);
       case BoxRegistry.chatMessagesBox:
         return Hive.box<ChatMessageModel>(boxName);
+      case BoxRegistry.healthReadingsBox:
+        return Hive.box<StoredHealthReading>(boxName);
       default:
         return Hive.box(boxName);
     }

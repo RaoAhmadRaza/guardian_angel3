@@ -1,0 +1,118 @@
+// Firestore Security Rules for Health Readings
+//
+// This file documents the Firestore security rules needed for health data sync.
+// Copy the health_readings section into your main firestore.rules file.
+//
+// Collection path: patients/{patientUid}/health_readings/{readingId}
+//
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // HEALTH READINGS COLLECTION
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    // Path: patients/{patientUid}/health_readings/{readingId}
+    //
+    // SECURITY MODEL:
+    // - Patient can WRITE (create/update) their own health readings
+    // - Patient can READ their own health readings
+    // - Patient can DELETE their own health readings (GDPR)
+    // - Caregivers can READ health readings of patients they care for
+    // - Doctors can READ health readings of their patients
+    // - No one else can access health data
+    //
+    match /patients/{patientUid}/health_readings/{readingId} {
+
+      // ─────────────────────────────────────────────────────────────────────────
+      // PATIENT ACCESS: Full CRUD on own data
+      // ─────────────────────────────────────────────────────────────────────────
+
+      // Patient can read their own health readings
+      allow read: if isAuthenticated() && isPatientOwner(patientUid);
+
+      // Patient can create/update their own health readings
+      // Validation: ensure patient_uid in document matches path
+      allow create: if isAuthenticated()
+                    && isPatientOwner(patientUid)
+                    && validHealthReading()
+                    && request.resource.data.patient_uid == patientUid;
+
+      // Patient can update their own health readings (for synced_at field)
+      allow update: if isAuthenticated()
+                    && isPatientOwner(patientUid)
+                    && validHealthReading()
+                    && request.resource.data.patient_uid == patientUid;
+
+      // Patient can delete their own health readings (GDPR)
+      allow delete: if isAuthenticated() && isPatientOwner(patientUid);
+
+      // ─────────────────────────────────────────────────────────────────────────
+      // CAREGIVER ACCESS: Read-only for linked patients
+      // ─────────────────────────────────────────────────────────────────────────
+
+      // Caregivers can read health readings of patients they're linked to
+      allow read: if isAuthenticated() && isCaregiverForPatient(patientUid);
+
+      // ─────────────────────────────────────────────────────────────────────────
+      // DOCTOR ACCESS: Read-only for assigned patients
+      // ─────────────────────────────────────────────────────────────────────────
+
+      // Doctors can read health readings of their assigned patients
+      allow read: if isAuthenticated() && isDoctorForPatient(patientUid);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // HELPER FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if authenticated user is the patient owner
+    function isPatientOwner(patientUid) {
+      return request.auth.uid == patientUid;
+    }
+
+    // Check if user is a caregiver for this patient
+    // Looks up the relationships collection to verify caregiver-patient link
+    function isCaregiverForPatient(patientUid) {
+      // Option 1: Check relationships subcollection under patient
+      return exists(/databases/$(database)/documents/patients/$(patientUid)/caregivers/$(request.auth.uid));
+
+      // Option 2: Check global relationships collection
+      // return exists(/databases/$(database)/documents/relationships/$(request.auth.uid + '_' + patientUid))
+      //        && get(/databases/$(database)/documents/relationships/$(request.auth.uid + '_' + patientUid)).data.type == 'caregiver';
+    }
+
+    // Check if user is a doctor for this patient
+    function isDoctorForPatient(patientUid) {
+      // Check doctor-patient relationship
+      return exists(/databases/$(database)/documents/patients/$(patientUid)/doctors/$(request.auth.uid));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VALIDATION FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Validate health reading document structure
+    function validHealthReading() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['id', 'patient_uid', 'reading_type', 'recorded_at', 'data'])
+             && data.patient_uid is string
+             && data.reading_type in ['heartRate', 'bloodOxygen', 'sleepSession', 'hrvReading']
+             && data.recorded_at is string
+             && data.data is map;
+    }
+
+    // Validate reading type is one of the allowed types
+    function validReadingType(readingType) {
+      return readingType in ['heartRate', 'bloodOxygen', 'sleepSession', 'hrvReading'];
+    }
+
+  }
+}

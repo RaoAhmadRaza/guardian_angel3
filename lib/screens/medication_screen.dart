@@ -9,6 +9,71 @@ import 'patient_chat_screen.dart'; // For ChatSession and ViewType
 import 'medication/medication_state.dart';
 import 'medication/medication_data_provider.dart';
 
+// --- THEME COLORS ---
+
+class _ScreenColors {
+  final bool isDark;
+
+  _ScreenColors(this.isDark);
+
+  static _ScreenColors of(BuildContext context) {
+    return _ScreenColors(Theme.of(context).brightness == Brightness.dark);
+  }
+
+  // 1. Foundation
+  Color get bgPrimary => isDark ? const Color(0xFF0F0F0F) : const Color(0xFFFDFDFD);
+  Color get bgSecondary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF5F5F7);
+  Color get surfacePrimary => isDark ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF);
+  Color get surfaceSecondary => isDark ? const Color(0xFF2C2C2E) : const Color(0xFFFFFFFF);
+  Color get surfaceGlass => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : Colors.white.withOpacity(0.5); // Fallback for light
+  Color get borderSubtle => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFFFFFFF).withOpacity(0.30);
+  List<BoxShadow> get shadowCard => isDark 
+      ? [BoxShadow(color: const Color(0xFF000000).withOpacity(0.40), blurRadius: 16, offset: const Offset(0, 6))]
+      : [BoxShadow(color: const Color(0xFF475569).withOpacity(0.15), blurRadius: 16, offset: const Offset(0, 6))];
+
+  // 2. Containers
+  Color get containerDefault => isDark ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF);
+  Color get containerHighlight => isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF5F5F7);
+  Color get containerSlot => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF5F5F7);
+  Color get containerSlotAlt => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFE0E0E2);
+  Color get overlayModal => isDark ? const Color(0xFF1A1A1A).withOpacity(0.80) : const Color(0xFFFFFFFF).withOpacity(0.80);
+
+  // 3. Typography
+  Color get textPrimary => isDark ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A);
+  Color get textSecondary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.70) : const Color(0xFF475569);
+  Color get textTertiary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.50) : const Color(0xFF64748B);
+  Color get textInverse => isDark ? const Color(0xFF0F172A) : const Color(0xFFFFFFFF);
+  Color get textLink => isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB);
+
+  // 4. Iconography
+  Color get iconPrimary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.70) : const Color(0xFF475569);
+  Color get iconSecondary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.40) : const Color(0xFF94A3B8);
+  Color get iconBgPrimary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFF5F5F7);
+  Color get iconBgActive => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFFFFFFF);
+
+  // 5. Interactive
+  Color get actionPrimaryBg => isDark ? const Color(0xFF2C2C2E) : const Color(0xFFFFFFFF);
+  Color get actionPrimaryFg => isDark ? const Color(0xFFFFFFFF).withOpacity(0.80) : const Color(0xFF475569);
+  Color get actionHover => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF8FAFC);
+  Color get actionPressed => isDark ? const Color(0xFF000000).withOpacity(0.20) : const Color(0xFFE2E8F0);
+  Color get actionDisabledBg => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF1F5F9);
+  Color get actionDisabledFg => isDark ? const Color(0xFFFFFFFF).withOpacity(0.30) : const Color(0xFF94A3B8);
+
+  // 6. Status
+  Color get statusSuccess => isDark ? const Color(0xFF34D399) : const Color(0xFF059669);
+  Color get statusWarning => isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
+  Color get statusError => isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626);
+  Color get statusInfo => isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB);
+  Color get statusNeutral => isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+
+  // 7. Input
+  Color get inputBg => isDark ? const Color(0xFF1A1A1A) : const Color(0xFFFEFEFE);
+  Color get inputBorder => isDark ? const Color(0xFF3C4043) : const Color(0xFFE2E8F0);
+  Color get inputBorderFocus => isDark ? const Color(0xFFF8F9FA) : const Color(0xFF3B82F6);
+  Color get controlActive => isDark ? const Color(0xFFF5F5F5) : const Color(0xFF2563EB);
+  Color get controlTrack => isDark ? const Color(0xFF3C4043) : const Color(0xFFE2E8F0);
+}
+
 class MedicationScreen extends StatefulWidget {
   final ChatSession session;
 
@@ -106,8 +171,9 @@ class _MedicationScreenState extends State<MedicationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = _ScreenColors.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB), // gray-50
+      backgroundColor: colors.bgPrimary,
       body: Stack(
         children: [
           Column(
@@ -145,6 +211,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
   }
 
   Widget _buildHeader() {
+    final colors = _ScreenColors.of(context);
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -156,8 +223,8 @@ class _MedicationScreenState extends State<MedicationScreen> {
             right: 16,
           ),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.95),
-            border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+            color: colors.surfaceGlass,
+            border: Border(bottom: BorderSide(color: colors.borderSubtle)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -168,12 +235,12 @@ class _MedicationScreenState extends State<MedicationScreen> {
                     onTap: () => Navigator.of(context).pop(),
                     child: Row(
                       children: [
-                        const Icon(CupertinoIcons.chevron_left, color: Colors.blue, size: 28),
+                        Icon(CupertinoIcons.chevron_left, color: colors.statusInfo, size: 28),
                         Text(
                           "Chats",
                           style: GoogleFonts.inter(
                             fontSize: 17,
-                            color: Colors.blue,
+                            color: colors.statusInfo,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -196,12 +263,12 @@ class _MedicationScreenState extends State<MedicationScreen> {
                             child: CircularProgressIndicator(
                               value: _state?.adherenceRingValue ?? 0.0,
                               strokeWidth: 3,
-                              color: const Color(0xFF10B981),
-                              backgroundColor: Colors.grey.shade200,
+                              color: colors.statusSuccess,
+                              backgroundColor: colors.containerSlot,
                             ),
                           ),
                         ),
-                        Icon(CupertinoIcons.capsule_fill, color: Colors.grey.shade500, size: 16),
+                        Icon(CupertinoIcons.capsule_fill, color: colors.iconSecondary, size: 16),
                       ],
                     ),
                   ),
@@ -216,7 +283,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                             style: GoogleFonts.inter(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Colors.black,
+                              color: colors.textPrimary,
                             ),
                           ),
                           const SizedBox(width: 6),
@@ -225,19 +292,19 @@ class _MedicationScreenState extends State<MedicationScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.orange.shade50,
+                                color: colors.statusWarning.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(100),
                               ),
                               child: Row(
                                 children: [
-                                  Icon(CupertinoIcons.flame_fill, size: 10, color: Colors.orange.shade500),
+                                  Icon(CupertinoIcons.flame_fill, size: 10, color: colors.statusWarning),
                                   const SizedBox(width: 2),
                                   Text(
                                     _state!.progress.streakDisplayText,
                                     style: GoogleFonts.inter(
                                       fontSize: 8,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.orange.shade600,
+                                      color: colors.statusWarning,
                                     ),
                                   ),
                                 ],
@@ -249,7 +316,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                         _state?.headerProgressText ?? 'No medications added yet',
                         style: GoogleFonts.inter(
                           fontSize: 12,
-                          color: Colors.grey.shade500,
+                          color: colors.textSecondary,
                         ),
                       ),
                     ],
@@ -260,10 +327,10 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: colors.bgSecondary,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(CupertinoIcons.info, color: Colors.grey.shade500, size: 20),
+                child: Icon(CupertinoIcons.info, color: colors.iconSecondary, size: 20),
               ),
             ],
           ),
@@ -274,6 +341,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
 
   /// Empty state when no medications are assigned
   Widget _buildEmptyState() {
+    final colors = _ScreenColors.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -284,13 +352,13 @@ class _MedicationScreenState extends State<MedicationScreen> {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: colors.bgSecondary,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 CupertinoIcons.capsule,
                 size: 40,
-                color: Colors.grey.shade400,
+                color: colors.iconSecondary,
               ),
             ),
             const SizedBox(height: 24),
@@ -299,7 +367,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
               style: GoogleFonts.inter(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey.shade800,
+                color: colors.textPrimary,
               ),
             ),
             const SizedBox(height: 8),
@@ -309,7 +377,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
               style: GoogleFonts.inter(
                 fontSize: 15,
                 height: 1.5,
-                color: Colors.grey.shade500,
+                color: colors.textSecondary,
               ),
             ),
           ],
@@ -352,20 +420,15 @@ class _MedicationScreenState extends State<MedicationScreen> {
   }
 
   Widget _buildCardFront(MedicationData med) {
+    final colors = _ScreenColors.of(context);
     final isDoseTaken = _state?.isDoseTaken ?? false;
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
+        color: colors.surfacePrimary,
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: Colors.white.withOpacity(0.6)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 40,
-            offset: const Offset(0, 12),
-          ),
-        ],
+        border: Border.all(color: colors.borderSubtle),
+        boxShadow: colors.shadowCard,
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -380,7 +443,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: colors.bgSecondary,
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
@@ -392,7 +455,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 ),
                 child: Center(
                   child: isDoseTaken 
-                      ? Icon(CupertinoIcons.check_mark_circled_solid, color: Colors.green.shade500, size: 40)
+                      ? Icon(CupertinoIcons.check_mark_circled_solid, color: colors.statusSuccess, size: 40)
                           .animate().scale(duration: 400.ms, curve: Curves.elasticOut)
                       : Transform.rotate(
                           angle: 0.2,
@@ -425,9 +488,9 @@ class _MedicationScreenState extends State<MedicationScreen> {
                     width: 12,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
+                      color: colors.containerSlot,
                       borderRadius: BorderRadius.circular(100),
-                      border: Border.all(color: Colors.grey.shade200),
+                      border: Border.all(color: colors.borderSubtle),
                     ),
                     alignment: Alignment.bottomCenter,
                     child: Container(
@@ -435,10 +498,10 @@ class _MedicationScreenState extends State<MedicationScreen> {
                       height: (32 * med.inventory.fillPercentage).clamp(4.0, 32.0),
                       decoration: BoxDecoration(
                         color: med.inventory.status == InventoryStatus.ok 
-                            ? Colors.green.shade400 
+                            ? colors.statusSuccess 
                             : med.inventory.status == InventoryStatus.low 
-                                ? Colors.orange.shade400 
-                                : Colors.red.shade400,
+                                ? colors.statusWarning 
+                                : colors.statusError,
                         borderRadius: BorderRadius.circular(100),
                       ),
                     ),
@@ -449,7 +512,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                     style: GoogleFonts.inter(
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade400,
+                      color: colors.textTertiary,
                     ),
                   ),
                 ],
@@ -466,7 +529,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade400,
+                  color: colors.textSecondary,
                   letterSpacing: 1.0,
                 ),
               ),
@@ -476,7 +539,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: isDoseTaken ? Colors.green.shade600 : Colors.grey.shade900,
+                  color: isDoseTaken ? colors.statusSuccess : colors.textPrimary,
                 ),
               ),
               const SizedBox(height: 4),
@@ -485,7 +548,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: Colors.grey.shade500,
+                  color: colors.textSecondary,
                 ),
               ),
             ],
@@ -500,10 +563,10 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 width: 24,
                 height: 24,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: colors.bgSecondary,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(CupertinoIcons.info, size: 14, color: Colors.grey.shade500),
+                child: Icon(CupertinoIcons.info, size: 14, color: colors.iconSecondary),
               ),
             ),
           ),
@@ -512,7 +575,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
           Container(
             height: 56,
             decoration: BoxDecoration(
-              color: Colors.grey.shade100,
+              color: colors.containerSlot,
               borderRadius: BorderRadius.circular(100),
             ),
             child: isDoseTaken 
@@ -520,7 +583,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(CupertinoIcons.check_mark, color: Colors.green.shade600, size: 20),
+                        Icon(CupertinoIcons.check_mark, color: colors.statusSuccess, size: 20),
                         const SizedBox(width: 8),
                         Text(
                           _state?.doseTakenAt != null 
@@ -529,7 +592,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                           style: GoogleFonts.inter(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
-                            color: Colors.green.shade600,
+                            color: colors.statusSuccess,
                           ),
                         ),
                       ],
@@ -544,7 +607,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                             width: 48 + _sliderValue,
                             height: 56,
                             decoration: BoxDecoration(
-                              color: Colors.green.shade100,
+                              color: colors.statusSuccess.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(100),
                             ),
                           ),
@@ -561,12 +624,12 @@ class _MedicationScreenState extends State<MedicationScreen> {
                                     style: GoogleFonts.inter(
                                       fontSize: 13,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.grey.shade400,
+                                      color: colors.textTertiary,
                                       letterSpacing: 1.2,
                                     ),
                                   ),
                                   const SizedBox(width: 4),
-                                  Icon(CupertinoIcons.chevron_right, size: 14, color: Colors.grey.shade400),
+                                  Icon(CupertinoIcons.chevron_right, size: 14, color: colors.textTertiary),
                                 ],
                               ),
                             ),
@@ -581,7 +644,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                                 width: 48, // Reduced width for thumb
                                 height: 56,
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
+                                  color: colors.surfacePrimary,
                                   shape: BoxShape.circle,
                                   boxShadow: [
                                     BoxShadow(
@@ -591,7 +654,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                                     ),
                                   ],
                                 ),
-                                child: const Icon(CupertinoIcons.capsule_fill, color: Colors.blue, size: 20),
+                                child: Icon(CupertinoIcons.capsule_fill, color: colors.statusInfo, size: 20),
                               ),
                             ),
                           ),
@@ -606,19 +669,14 @@ class _MedicationScreenState extends State<MedicationScreen> {
   }
 
   Widget _buildCardBack(MedicationData med) {
+    final colors = _ScreenColors.of(context);
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F7),
+        color: colors.containerHighlight,
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        border: Border.all(color: colors.borderSubtle),
+        boxShadow: colors.shadowCard,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -631,7 +689,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade900,
+                  color: colors.textPrimary,
                 ),
               ),
               GestureDetector(
@@ -640,11 +698,11 @@ class _MedicationScreenState extends State<MedicationScreen> {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: colors.surfacePrimary,
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.grey.shade200),
+                    border: Border.all(color: colors.borderSubtle),
                   ),
-                  child: Icon(CupertinoIcons.arrow_counterclockwise, size: 16, color: Colors.grey.shade500),
+                  child: Icon(CupertinoIcons.arrow_counterclockwise, size: 16, color: colors.iconSecondary),
                 ),
               ),
             ],
@@ -658,7 +716,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
               style: GoogleFonts.inter(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey.shade400,
+                color: colors.textTertiary,
                 letterSpacing: 1.0,
               ),
             ),
@@ -666,16 +724,16 @@ class _MedicationScreenState extends State<MedicationScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colors.surfacePrimary,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade100),
+                border: Border.all(color: colors.borderSubtle),
               ),
               child: Text(
                 "\"${med.doctorNotes}\"",
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   fontStyle: FontStyle.italic,
-                  color: Colors.grey.shade700,
+                  color: colors.textSecondary,
                   height: 1.4,
                 ),
               ),
@@ -690,7 +748,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
               style: GoogleFonts.inter(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey.shade400,
+                color: colors.textTertiary,
                 letterSpacing: 1.0,
               ),
             ),
@@ -701,16 +759,16 @@ class _MedicationScreenState extends State<MedicationScreen> {
             children: med.sideEffects.map((effect) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colors.surfacePrimary,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: colors.borderSubtle),
               ),
               child: Text(
                 effect,
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
-                  color: Colors.grey.shade600,
+                  color: colors.textSecondary,
                 ),
               ),
             )).toList(),
@@ -725,14 +783,14 @@ class _MedicationScreenState extends State<MedicationScreen> {
                   'No clinical details available',
                   style: GoogleFonts.inter(
                     fontSize: 14,
-                    color: Colors.grey.shade400,
+                    color: colors.textTertiary,
                   ),
                 ),
               ),
             ),
 
           const Spacer(),
-          Divider(color: Colors.grey.shade200),
+          Divider(color: colors.borderSubtle),
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -743,7 +801,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                   "Refill ID: ${med.refillId}",
                   style: GoogleFonts.inter(
                     fontSize: 12,
-                    color: Colors.grey.shade400,
+                    color: colors.textTertiary,
                   ),
                 )
               else
@@ -759,7 +817,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade600,
+                      color: colors.textLink,
                     ),
                   ),
                 )
@@ -768,7 +826,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                   "Insert unavailable",
                   style: GoogleFonts.inter(
                     fontSize: 12,
-                    color: Colors.grey.shade300,
+                    color: colors.textTertiary,
                   ),
                 ),
             ],
@@ -779,6 +837,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
   }
 
   Widget _buildInputBar() {
+    final colors = _ScreenColors.of(context);
     final canLogSideEffect = _state?.canLogSideEffect ?? false;
     final canContactDoctor = _state?.canContactDoctor ?? false;
     
@@ -790,15 +849,15 @@ class _MedicationScreenState extends State<MedicationScreen> {
         top: 12
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB), // gray-50
-        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+        color: colors.surfaceGlass,
+        border: Border(top: BorderSide(color: colors.borderSubtle)),
       ),
       child: Row(
         children: [
           Expanded(
             child: _buildFooterButton(
               icon: Icons.sentiment_dissatisfied_rounded,
-              iconColor: canLogSideEffect ? Colors.amber.shade600 : Colors.grey.shade400,
+              iconColor: canLogSideEffect ? colors.statusWarning : colors.iconSecondary,
               label: "Log Side Effect",
               onTap: canLogSideEffect ? () {} : null,
               enabled: canLogSideEffect,
@@ -808,7 +867,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
           Expanded(
             child: _buildFooterButton(
               icon: CupertinoIcons.phone_fill,
-              iconColor: canContactDoctor ? Colors.blue.shade500 : Colors.grey.shade400,
+              iconColor: canContactDoctor ? colors.statusInfo : colors.iconSecondary,
               label: _state?.contactDoctorText ?? "Contact Doctor",
               onTap: canContactDoctor ? () {} : null,
               enabled: canContactDoctor,
@@ -826,21 +885,16 @@ class _MedicationScreenState extends State<MedicationScreen> {
     VoidCallback? onTap,
     bool enabled = true,
   }) {
+    final colors = _ScreenColors.of(context);
     return GestureDetector(
       onTap: enabled ? onTap : null,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: enabled ? colors.surfacePrimary : colors.actionDisabledBg,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.shade200),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 2,
-              offset: const Offset(0, 1),
-            ),
-          ],
+          border: Border.all(color: colors.borderSubtle),
+          boxShadow: enabled ? colors.shadowCard : null,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -853,7 +907,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
-                  color: enabled ? Colors.grey.shade700 : Colors.grey.shade400,
+                  color: enabled ? colors.textSecondary : colors.actionDisabledFg,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),

@@ -25,10 +25,13 @@ export 'repositories/chat_repository_hive.dart';
 // Services
 export 'services/chat_service.dart';
 export 'services/chat_firestore_service.dart';
+export 'services/doctor_chat_service.dart';
 
 // Providers
 export 'providers/chat_provider.dart';
+export 'providers/doctor_chat_provider.dart';
 
 // Screens
 export 'screens/patient_caregiver_chat_screen.dart';
+export 'screens/patient_doctor_chat_screen.dart';
 export 'screens/chat_threads_list_screen.dart';

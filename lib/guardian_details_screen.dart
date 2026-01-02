@@ -368,8 +368,15 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
                               child: TextButton(
                                 onPressed: () async {
                                   if (_formKey.currentState!.validate()) {
-                                    // Get current user ID
-                                    final uid = FirebaseAuth.instance.currentUser?.uid;
+                                    // Get current user ID - try Firebase Auth first, fallback to local storage
+                                    String? uid = FirebaseAuth.instance.currentUser?.uid;
+                                    
+                                    // Fallback for simulator mode: get UID from local storage
+                                    if (uid == null || uid.isEmpty) {
+                                      uid = OnboardingLocalService.instance.getLastSavedUid();
+                                      debugPrint('[GuardianDetailsScreen] Using fallback UID from local storage: $uid');
+                                    }
+                                    
                                     if (uid == null || uid.isEmpty) {
                                       debugPrint('[GuardianDetailsScreen] ERROR: No authenticated user');
                                       ScaffoldMessenger.of(context).showSnackBar(

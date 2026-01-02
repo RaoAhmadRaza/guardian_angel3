@@ -139,7 +139,7 @@ abstract final class TypeIds {
   static const int auditLogArchive = 34;
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ONBOARDING & USER TABLES (40-49)
+  // ONBOARDING & USER TABLES (40-46, 51-52 for Doctor)
   // ═══════════════════════════════════════════════════════════════════════════
   
   /// UserBaseModel - Auth basics (email, fullName, profileImageUrl)
@@ -171,7 +171,7 @@ abstract final class TypeIds {
   static const int relationshipStatus = 46;
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // CHAT SYSTEM (47-54)
+  // CHAT SYSTEM (47-50)
   // ═══════════════════════════════════════════════════════════════════════════
   
   /// ChatThreadModel - Chat thread between Patient and Caregiver
@@ -189,6 +189,44 @@ abstract final class TypeIds {
   /// ChatMessageLocalStatus - Enum for local message status
   /// Adapter: lib/persistence/adapters/chat_adapter.dart
   static const int chatMessageLocalStatus = 50;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DOCTOR ROLE (51-52)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  /// DoctorUserModel - Doctor role assignment
+  /// Adapter: lib/persistence/adapters/doctor_user_adapter.dart
+  static const int doctorUser = 51;
+  
+  /// DoctorDetailsModel - Full doctor details
+  /// Adapter: lib/persistence/adapters/doctor_details_adapter.dart
+  static const int doctorDetails = 52;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DOCTOR-PATIENT RELATIONSHIPS (53-54)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  /// DoctorRelationshipModel - Patient-Doctor relationship
+  /// Adapter: lib/persistence/adapters/doctor_relationship_adapter.dart
+  static const int doctorRelationship = 53;
+  
+  /// DoctorRelationshipStatus - Enum for doctor relationship status
+  /// Adapter: lib/persistence/adapters/doctor_relationship_adapter.dart
+  static const int doctorRelationshipStatus = 54;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HEALTH DATA PERSISTENCE (55-59)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  /// StoredHealthReading - Persisted health reading (all types)
+  /// Adapter: lib/persistence/adapters/stored_health_reading_adapter.dart
+  static const int storedHealthReading = 55;
+  
+  /// StoredHealthReadingType - Enum for reading type discriminator
+  /// Adapter: lib/persistence/adapters/stored_health_reading_adapter.dart
+  static const int storedHealthReadingType = 56;
+  
+  // Reserved: 57-59 for future health persistence types
 
   // ═══════════════════════════════════════════════════════════════════════════
   // REGISTRY HELPERS
@@ -224,7 +262,7 @@ abstract final class TypeIds {
     auditLogEntry: 'AuditLogEntryAdapter',
     auditLogArchive: 'AuditLogArchiveAdapter',
     
-    // Onboarding & User Tables (40-49)
+    // Onboarding & User Tables (40-46)
     userBase: 'UserBaseAdapter',
     caregiverUser: 'CaregiverUserAdapter',
     caregiverDetails: 'CaregiverDetailsAdapter',
@@ -233,11 +271,23 @@ abstract final class TypeIds {
     relationship: 'RelationshipAdapter',
     relationshipStatus: 'RelationshipStatusAdapter',
     
-    // Chat System (47-54)
+    // Chat System (47-50)
     chatThread: 'ChatThreadAdapter',
     chatMessage: 'ChatMessageAdapter',
     chatMessageType: 'ChatMessageTypeAdapter',
     chatMessageLocalStatus: 'ChatMessageLocalStatusAdapter',
+    
+    // Doctor Role (51-52)
+    doctorUser: 'DoctorUserAdapter',
+    doctorDetails: 'DoctorDetailsAdapter',
+    
+    // Doctor-Patient Relationships (53-54)
+    doctorRelationship: 'DoctorRelationshipAdapter',
+    doctorRelationshipStatus: 'DoctorRelationshipStatusAdapter',
+    
+    // Health Data Persistence (55-59)
+    storedHealthReading: 'StoredHealthReadingAdapter',
+    storedHealthReadingType: 'StoredHealthReadingTypeAdapter',
   };
   
   /// Returns all TypeId values as a set.

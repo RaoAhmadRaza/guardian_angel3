@@ -127,8 +127,15 @@ class _PatientAgeSelectionScreenState extends State<PatientAgeSelectionScreen> {
   /// Navigates to patient details screen with smooth transition.
   /// STEP 4B: Updates Patient User with validated age (OFFLINE-FIRST).
   Future<void> _navigateToPatientDetails() async {
-    // Get current user ID
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    // Get current user ID - try Firebase Auth first, fallback to local storage
+    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    
+    // Fallback for simulator mode: get UID from local storage
+    if (uid == null || uid.isEmpty) {
+      uid = OnboardingLocalService.instance.getLastSavedUid();
+      debugPrint('[PatientAgeSelectionScreen] Using fallback UID from local storage: $uid');
+    }
+    
     if (uid == null || uid.isEmpty) {
       debugPrint('[PatientAgeSelectionScreen] ERROR: No authenticated user');
       ScaffoldMessenger.of(context).showSnackBar(

@@ -53,6 +53,9 @@ dependencies:
   speech_to_text: ^5.0.0
   flutter_tts: ^3.8.0
   
+  # Health data extraction (HealthKit + Health Connect)
+  health: ^10.2.0
+  
   # State management and persistence
   shared_preferences: ^2.2.2
   flutter_riverpod: ^2.3.0

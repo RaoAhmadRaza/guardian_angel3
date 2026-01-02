@@ -62,19 +62,22 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
       {'name': 'Bathroom', 'icon': 'images/bathtub.png'},
     ];
     
-  String selectedIcon = availableIcons[0]['icon']!;
+    String selectedIcon = availableIcons[0]['icon']!;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final colors = _ScreenColors(isDark);
+
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+              decoration: BoxDecoration(
+                color: colors.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
               ),
               padding: EdgeInsets.only(
                 left: 20,
@@ -99,12 +102,12 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                           ),
                         ),
                         const SizedBox(width: 12),
-                        const Text(
+                        Text(
                           'Add New Room',
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF2D2D2D),
+                            color: colors.textPri,
                           ),
                         ),
                       ],
@@ -115,17 +118,27 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                     TextField(
                       key: AppKeys.roomNameField,
                       controller: nameController,
+                      style: TextStyle(color: colors.textPri),
                       decoration: InputDecoration(
                         labelText: 'Room Name',
+                        labelStyle: TextStyle(color: colors.textSec),
                         hintText: 'e.g., Living Room',
+                        hintStyle: TextStyle(color: colors.textTer),
                         prefixIcon: const Icon(Icons.meeting_room, color: Color(0xFF4D7CFE)),
+                        filled: true,
+                        fillColor: colors.inputBackground,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: colors.inputBorderColor),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: colors.inputBorderColor),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF4D7CFE),
+                          borderSide: BorderSide(
+                            color: colors.inputFocusBorder,
                             width: 2,
                           ),
                         ),
@@ -137,17 +150,27 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                     TextField(
                       controller: deviceCountController,
                       keyboardType: TextInputType.number,
+                      style: TextStyle(color: colors.textPri),
                       decoration: InputDecoration(
                         labelText: 'Number of Devices',
+                        labelStyle: TextStyle(color: colors.textSec),
                         hintText: '3',
+                        hintStyle: TextStyle(color: colors.textTer),
                         prefixIcon: const Icon(Icons.devices, color: Color(0xFF4D7CFE)),
+                        filled: true,
+                        fillColor: colors.inputBackground,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: colors.inputBorderColor),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: colors.inputBorderColor),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF4D7CFE),
+                          borderSide: BorderSide(
+                            color: colors.inputFocusBorder,
                             width: 2,
                           ),
                         ),
@@ -156,12 +179,12 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                     const SizedBox(height: 20),
                     
                     // Icon Selector
-                    const Text(
+                    Text(
                       'Select Icon',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF2D2D2D),
+                        color: colors.textPri,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -186,7 +209,7 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                               decoration: BoxDecoration(
                                 color: isSelected 
                                     ? const Color(0xFF4D7CFE).withOpacity(0.1)
-                                    : const Color(0xFFF5F5F7),
+                                    : colors.bgSec,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: isSelected 
@@ -204,10 +227,10 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                                     height: 40,
                                     fit: BoxFit.contain,
                                     errorBuilder: (context, error, stackTrace) {
-                                      return const Icon(
+                                      return Icon(
                                         Icons.image,
                                         size: 40,
-                                        color: Colors.grey,
+                                        color: colors.textTer,
                                       );
                                     },
                                   ),
@@ -232,10 +255,10 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            child: const Text(
+                            child: Text(
                               'Cancel',
                               style: TextStyle(
-                                color: Color(0xFF9E9E9E),
+                                color: colors.textSec,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -349,16 +372,19 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
   @override
   Widget build(BuildContext context) {
     final roomsAsync = ref.watch(roomsControllerProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = _ScreenColors(isDark);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
+      backgroundColor: colors.bg,
       body: Stack(
         children: [
           // Header
           Container(
             height: 160,
-            decoration: const BoxDecoration(
-              color: Color(0xFF3D2E6B),
-              borderRadius: BorderRadius.only(
+            decoration: BoxDecoration(
+              color: colors.bgSec,
+              borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(30),
                 bottomRight: Radius.circular(30),
               ),
@@ -379,29 +405,29 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                       child: AnimatedIcon(
                         icon: AnimatedIcons.menu_close,
                         progress: _menuAnimationController,
-                        color: Colors.white,
+                        color: colors.textPri,
                         size: 24,
                       ),
                     ),
                   ),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Rooms',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Colors.white,
+                        color: colors.textPri,
                         fontSize: 20,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                   PopupMenuButton<String>(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.more_horiz,
-                      color: Colors.white,
+                      color: colors.textPri,
                       size: 28,
                     ),
-                    color: Colors.white,
+                    color: colors.surface,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -423,10 +449,10 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                               size: 20,
                             ),
                             const SizedBox(width: 12),
-                            const Text(
+                            Text(
                               'Add new room',
                               style: TextStyle(
-                                color: Color(0xFF2D2D2D),
+                                color: colors.textPri,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -448,15 +474,15 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colors.surface,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: const Color(0xFFE0E0E0),
+                  color: colors.border,
                   width: 1.5,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: colors.shadow,
                     blurRadius: 10,
                     offset: const Offset(0, 2),
                   ),
@@ -476,22 +502,22 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                         hintText: 'Search rooms',
                         disabledBorder: InputBorder.none,
                         hintStyle: TextStyle(
-                          color: Colors.grey[400],
+                          color: colors.textTer,
                           fontSize: 16,
                           fontWeight: FontWeight.w400,
                         ),
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(vertical: 12),
                       ),
-                      style: const TextStyle(
-                        color: Color(0xFF2D2D2D),
+                      style: TextStyle(
+                        color: colors.textPri,
                         fontSize: 16,
                       ),
                     ),
                   ),
                   Icon(
                     Icons.search,
-                    color: Colors.grey[400],
+                    color: colors.textTer,
                     size: 24,
                   ),
                 ],
@@ -508,10 +534,10 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
                     children: [
-                      const Text(
+                      Text(
                         'Your Rooms',
                         style: TextStyle(
-                          color: Color(0xFF2D2D2D),
+                          color: colors.textPri,
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
                         ),
@@ -520,14 +546,14 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE8E8E8),
+                          color: colors.bgSec,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: roomsAsync.when(
                           data: (rooms) => Text(
                             '${rooms.length}',
-                            style: const TextStyle(
-                              color: Color(0xFF6B6B6B),
+                            style: TextStyle(
+                              color: colors.textSec,
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
@@ -537,10 +563,10 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                             width: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           ),
-                          error: (_, __) => const Text(
+                          error: (_, __) => Text(
                             '—',
                             style: TextStyle(
-                              color: Color(0xFF6B6B6B),
+                              color: colors.textSec,
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
@@ -563,11 +589,11 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.search_off, size: 48, color: Color(0xFF9E9E9E)),
+                              Icon(Icons.search_off, size: 48, color: colors.textTer),
                               const SizedBox(height: 12),
                               Text(
                                 'No rooms match "${_searchQuery}"',
-                                style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 14),
+                                style: TextStyle(color: colors.textTer, fontSize: 14),
                               ),
                               const SizedBox(height: 12),
                               TextButton(
@@ -624,6 +650,9 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
   Widget _buildRoomCard(domain.RoomModel room) {
     final devicesAsync = ref.watch(devicesControllerProvider(room.id));
     final imageUrl = _iconAssetFor(room.iconId);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = _ScreenColors(isDark);
+
     return GestureDetector(
       key: AppKeys.roomTileKey(room.id),
       onTap: () {
@@ -647,11 +676,11 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: colors.surface,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: colors.shadow,
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -672,8 +701,8 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                         Expanded(
                           child: Text(
                             room.name,
-                            style: const TextStyle(
-                              color: Color(0xFF2D2D2D),
+                            style: TextStyle(
+                              color: colors.textPri,
                               fontSize: 20,
                               fontWeight: FontWeight.w600,
                             ),
@@ -705,7 +734,7 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                             error: (_, __) => '— devices',
                           ),
                           style: TextStyle(
-                            color: Colors.grey[400],
+                            color: colors.textTer,
                             fontSize: 15,
                             fontWeight: FontWeight.w400,
                           ),
@@ -730,10 +759,10 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
                         return Container(
                           width: 100,
                           height: 100,
-                          color: Colors.grey[300],
+                          color: colors.bgSec,
                           child: Icon(
                             Icons.image,
-                            color: Colors.grey[500],
+                            color: colors.textTer,
                             size: 40,
                           ),
                         );
@@ -748,4 +777,51 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen>
       ),
     );
   }
+}
+
+class _ScreenColors {
+  static const bgPrimary = Color(0xFFFDFDFD);
+  static const bgPrimaryDark = Color(0xFF0F0F0F);
+  static const bgSecondary = Color(0xFFF5F5F7);
+  static const bgSecondaryDark = Color(0xFF1C1C1E); // Adjusted for dark mode contrast
+  static const surfacePrimary = Color(0xFFFFFFFF);
+  static const surfacePrimaryDark = Color(0xFF1C1C1E);
+  static const textPrimary = Color(0xFF0F172A);
+  static const textPrimaryDark = Color(0xFFFFFFFF);
+  static const textSecondary = Color(0xFF475569);
+  static const textSecondaryDark = Color(0xB3FFFFFF); // 70%
+  static const textTertiary = Color(0xFF64748B);
+  static const textTertiaryDark = Color(0x80FFFFFF); // 50%
+  static const iconPrimary = Color(0xFF475569);
+  static const iconPrimaryDark = Color(0xB3FFFFFF); // 70%
+  static const actionPrimaryBg = Color(0xFFFFFFFF);
+  static const actionPrimaryBgDark = Color(0xFF2C2C2E);
+  static const shadowCard = Color(0x26475569); // 15%
+  static const shadowCardDark = Color(0x66000000); // 40%
+  static const borderSubtle = Color(0x4DFFFFFF); // 30%
+  static const borderSubtleDark = Color(0x1AFFFFFF); // 10%
+  static const inputBg = Color(0xFFFEFEFE);
+  static const inputBgDark = Color(0xFF1A1A1A);
+  static const inputBorder = Color(0xFFE2E8F0);
+  static const inputBorderDark = Color(0xFF3C4043);
+  static const inputBorderFocus = Color(0xFF3B82F6);
+  static const inputBorderFocusDark = Color(0xFFF8F9FA);
+
+  final bool isDark;
+
+  const _ScreenColors(this.isDark);
+
+  Color get bg => isDark ? bgPrimaryDark : bgPrimary;
+  Color get bgSec => isDark ? bgSecondaryDark : bgSecondary;
+  Color get surface => isDark ? surfacePrimaryDark : surfacePrimary;
+  Color get textPri => isDark ? textPrimaryDark : textPrimary;
+  Color get textSec => isDark ? textSecondaryDark : textSecondary;
+  Color get textTer => isDark ? textTertiaryDark : textTertiary;
+  Color get iconPri => isDark ? iconPrimaryDark : iconPrimary;
+  Color get actionBg => isDark ? actionPrimaryBgDark : actionPrimaryBg;
+  Color get shadow => isDark ? shadowCardDark : shadowCard;
+  Color get border => isDark ? borderSubtleDark : borderSubtle;
+  Color get inputBackground => isDark ? inputBgDark : inputBg;
+  Color get inputBorderColor => isDark ? inputBorderDark : inputBorder;
+  Color get inputFocusBorder => isDark ? inputBorderFocusDark : inputBorderFocus;
 }

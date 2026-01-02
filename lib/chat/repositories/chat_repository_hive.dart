@@ -536,4 +536,143 @@ class ChatRepositoryHive implements ChatRepository {
     if (content.length <= maxLength) return content;
     return '${content.substring(0, maxLength)}...';
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DOCTOR THREAD OPERATIONS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Gets or creates a DOCTOR chat thread.
+  ///
+  /// Thread ID = DoctorRelationship ID (1:1 mapping).
+  /// Uses ChatThreadType.doctor to distinguish from caregiver threads.
+  Future<ChatResult<ChatThreadModel>> getOrCreateDoctorThread({
+    required String relationshipId,
+    required String patientId,
+    required String doctorId,
+  }) async {
+    debugPrint('[ChatRepositoryHive] getOrCreateDoctorThread for relationship: $relationshipId');
+    _telemetry.increment('chat.doctor_thread.get_or_create.attempt');
+
+    try {
+      // Thread ID = DoctorRelationship ID (1:1 mapping)
+      final threadId = relationshipId;
+
+      // Check if thread exists
+      final existing = _threadsBox.get(threadId);
+      if (existing != null) {
+        // Verify it's a doctor thread (safety check)
+        if (existing.threadType != ChatThreadType.doctor) {
+          debugPrint('[ChatRepositoryHive] Thread exists but is not a doctor thread!');
+          return ChatResult.failure(
+            ChatErrorCodes.validationError,
+            'Thread exists but is not a doctor thread. ID collision detected.',
+          );
+        }
+        debugPrint('[ChatRepositoryHive] Doctor thread exists: $threadId');
+        _telemetry.increment('chat.doctor_thread.get_or_create.existing');
+        return ChatResult.success(existing);
+      }
+
+      // Create new doctor thread using named constructor
+      final now = DateTime.now().toUtc();
+      final thread = ChatThreadModel.doctor(
+        id: threadId,
+        relationshipId: relationshipId,
+        patientId: patientId,
+        doctorId: doctorId,
+        createdAt: now,
+        lastMessageAt: now,
+      );
+
+      // Validate before saving
+      thread.validate();
+
+      // Save to Hive
+      await _threadsBox.put(threadId, thread);
+
+      debugPrint('[ChatRepositoryHive] Doctor thread created: $threadId');
+      _telemetry.increment('chat.doctor_thread.get_or_create.created');
+
+      return ChatResult.success(thread);
+    } catch (e) {
+      debugPrint('[ChatRepositoryHive] getOrCreateDoctorThread failed: $e');
+      _telemetry.increment('chat.doctor_thread.get_or_create.error');
+
+      if (e is ChatValidationError) {
+        return ChatResult.failure(ChatErrorCodes.validationError, e.message);
+      }
+      return ChatResult.failure(ChatErrorCodes.storageError, 'Failed to create doctor thread: $e');
+    }
+  }
+
+  /// Gets all DOCTOR threads for a user.
+  ///
+  /// Filters threads by ChatThreadType.doctor and participant.
+  Future<ChatResult<List<ChatThreadModel>>> getDoctorThreadsForUser(String uid) async {
+    debugPrint('[ChatRepositoryHive] getDoctorThreadsForUser: $uid');
+
+    try {
+      final threads = _threadsBox.values
+          .where((t) => t.threadType == ChatThreadType.doctor)
+          .where((t) => t.patientId == uid || t.doctorId == uid)
+          .where((t) => !t.isArchived)
+          .toList();
+
+      // Sort by lastMessageAt descending
+      threads.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
+
+      debugPrint('[ChatRepositoryHive] Found ${threads.length} doctor threads for $uid');
+      return ChatResult.success(threads);
+    } catch (e) {
+      debugPrint('[ChatRepositoryHive] getDoctorThreadsForUser failed: $e');
+      return ChatResult.failure(ChatErrorCodes.storageError, 'Failed to get doctor threads: $e');
+    }
+  }
+
+  /// Watches DOCTOR threads for a user.
+  ///
+  /// Streams updates when doctor threads change.
+  Stream<List<ChatThreadModel>> watchDoctorThreadsForUser(String uid) {
+    return _threadsBox.watch().map((_) {
+      return _threadsBox.values
+          .where((t) => t.threadType == ChatThreadType.doctor)
+          .where((t) => t.patientId == uid || t.doctorId == uid)
+          .where((t) => !t.isArchived)
+          .toList()
+        ..sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
+    });
+  }
+
+  /// Gets all CAREGIVER threads for a user (backward compatible).
+  ///
+  /// Filters threads by ChatThreadType.caregiver and participant.
+  Future<ChatResult<List<ChatThreadModel>>> getCaregiverThreadsForUser(String uid) async {
+    try {
+      final threads = _threadsBox.values
+          .where((t) => t.threadType == ChatThreadType.caregiver)
+          .where((t) => t.patientId == uid || t.caregiverId == uid)
+          .where((t) => !t.isArchived)
+          .toList();
+
+      // Sort by lastMessageAt descending
+      threads.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
+
+      return ChatResult.success(threads);
+    } catch (e) {
+      debugPrint('[ChatRepositoryHive] getCaregiverThreadsForUser failed: $e');
+      return ChatResult.failure(ChatErrorCodes.storageError, 'Failed to get caregiver threads: $e');
+    }
+  }
+
+  /// Watches CAREGIVER threads for a user.
+  Stream<List<ChatThreadModel>> watchCaregiverThreadsForUser(String uid) {
+    return _threadsBox.watch().map((_) {
+      return _threadsBox.values
+          .where((t) => t.threadType == ChatThreadType.caregiver)
+          .where((t) => t.patientId == uid || t.caregiverId == uid)
+          .where((t) => !t.isArchived)
+          .toList()
+        ..sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
+    });
+  }
 }

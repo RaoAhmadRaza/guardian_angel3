@@ -32,7 +32,8 @@ final threadParticipantNamesProvider = FutureProvider.family<String, ChatThreadM
 
     // TODO: Fetch from user profile service
     // For now, return a placeholder
-    return otherUid.isNotEmpty ? 'User ${otherUid.substring(0, 6)}...' : 'Unknown';
+    final safeOtherUid = otherUid ?? 'unknown';
+    return safeOtherUid.isNotEmpty ? 'User ${safeOtherUid.substring(0, 6)}...' : 'Unknown';
   },
 );
 

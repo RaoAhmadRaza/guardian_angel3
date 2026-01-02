@@ -19,9 +19,14 @@ import 'adapters/caregiver_user_adapter.dart';
 import 'adapters/caregiver_details_adapter.dart';
 import 'adapters/patient_user_adapter.dart';
 import 'adapters/patient_details_adapter.dart';
+import 'adapters/doctor_user_adapter.dart';
+import 'adapters/doctor_details_adapter.dart';
+import 'adapters/doctor_relationship_adapter.dart';
 import 'adapters/relationship_adapter.dart';
 // Chat adapters
 import 'adapters/chat_adapter.dart';
+// Health Data Persistence adapters
+import 'adapters/stored_health_reading_adapter.dart';
 import '../models/vitals_model.dart';
 import '../models/room_model.dart';
 import '../models/pending_op.dart';
@@ -34,10 +39,15 @@ import '../onboarding/models/caregiver_user_model.dart';
 import '../onboarding/models/caregiver_details_model.dart';
 import '../onboarding/models/patient_user_model.dart';
 import '../onboarding/models/patient_details_model.dart';
+import '../onboarding/models/doctor_user_model.dart';
+import '../onboarding/models/doctor_details_model.dart';
 import '../relationships/models/relationship_model.dart';
+import '../relationships/models/doctor_relationship_model.dart';
 // Chat models
 import '../chat/models/chat_thread_model.dart';
 import '../chat/models/chat_message_model.dart';
+// Health Data Persistence models
+import '../health/models/stored_health_reading.dart';
 // Additional adapters required by schema validation
 import '../models/sync_failure.dart';
 import '../services/models/transaction_record.dart';
@@ -143,6 +153,20 @@ class HiveService {
     if (!Hive.isAdapterRegistered(TypeIds.patientDetails)) {
       Hive.registerAdapter(PatientDetailsAdapter());
     }
+    // Doctor adapters (51-52)
+    if (!Hive.isAdapterRegistered(TypeIds.doctorUser)) {
+      Hive.registerAdapter(DoctorUserAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.doctorDetails)) {
+      Hive.registerAdapter(DoctorDetailsAdapter());
+    }
+    // Doctor-Patient Relationship adapters (53-54)
+    if (!Hive.isAdapterRegistered(TypeIds.doctorRelationship)) {
+      Hive.registerAdapter(DoctorRelationshipAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.doctorRelationshipStatus)) {
+      Hive.registerAdapter(DoctorRelationshipStatusAdapter());
+    }
     // Relationship adapters (45-46)
     if (!Hive.isAdapterRegistered(TypeIds.relationship)) {
       Hive.registerAdapter(RelationshipAdapter());
@@ -162,6 +186,13 @@ class HiveService {
     }
     if (!Hive.isAdapterRegistered(TypeIds.chatMessageLocalStatus)) {
       Hive.registerAdapter(ChatMessageLocalStatusAdapter());
+    }
+    // Health Data Persistence adapters (55-56)
+    if (!Hive.isAdapterRegistered(TypeIds.storedHealthReading)) {
+      Hive.registerAdapter(StoredHealthReadingAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.storedHealthReadingType)) {
+      Hive.registerAdapter(StoredHealthReadingTypeAdapter());
     }
 
     final key = await _getOrCreateKey();
@@ -371,13 +402,21 @@ class HiveService {
     await _openBoxSafely<CaregiverDetailsModel>(BoxRegistry.caregiverDetailsBox, cipher: cipher);
     await _openBoxSafely<PatientUserModel>(BoxRegistry.patientUserBox, cipher: cipher);
     await _openBoxSafely<PatientDetailsModel>(BoxRegistry.patientDetailsBox, cipher: cipher);
+    await _openBoxSafely<DoctorUserModel>(BoxRegistry.doctorUserBox, cipher: cipher);
+    await _openBoxSafely<DoctorDetailsModel>(BoxRegistry.doctorDetailsBox, cipher: cipher);
     
     // Relationships box (encrypted - contains PII)
     await _openBoxSafely<RelationshipModel>(BoxRegistry.relationshipsBox, cipher: cipher);
     
+    // Doctor-Patient Relationships box (encrypted - contains PII)
+    await _openBoxSafely<DoctorRelationshipModel>(BoxRegistry.doctorRelationshipsBox, cipher: cipher);
+    
     // Chat boxes (encrypted - contains conversation content)
     await _openBoxSafely<ChatThreadModel>(BoxRegistry.chatThreadsBox, cipher: cipher);
     await _openBoxSafely<ChatMessageModel>(BoxRegistry.chatMessagesBox, cipher: cipher);
+    
+    // Health Data Persistence box (encrypted - HIPAA sensitive health data)
+    await _openBoxSafely<StoredHealthReading>(BoxRegistry.healthReadingsBox, cipher: cipher);
     
     sw.stop();
     _telemetry.time('hive.open.duration_ms', () => sw.elapsed);

@@ -1,10 +1,20 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'providers/theme_provider.dart';
-import 'services/session_service.dart';
 import 'services/demo_mode_service.dart';
+import 'services/session_service.dart';
+import 'services/patient_service.dart';
 import 'main.dart';
+import 'settings/about_screen.dart';
+import 'settings/device_settings_screen.dart';
+import 'settings/emergency_contacts_screen.dart';
+import 'settings/guardians_screen.dart';
+import 'settings/health_thresholds_screen.dart';
+import 'settings/help_support_screen.dart';
+import 'settings/notifications_settings_screen.dart';
+import 'settings/profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -15,11 +25,26 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDemoMode = false;
+  String _patientName = 'User';
+  int _patientAge = 0;
+  String _patientGender = 'male';
 
   @override
   void initState() {
     super.initState();
     _loadDemoModeState();
+    _loadPatientData();
+  }
+
+  Future<void> _loadPatientData() async {
+    final patientData = await PatientService.instance.getPatientData();
+    if (mounted) {
+      setState(() {
+        _patientName = patientData['fullName'] ?? 'User';
+        _patientAge = patientData['age'] ?? 0;
+        _patientGender = patientData['gender'] ?? 'male';
+      });
+    }
   }
 
   Future<void> _loadDemoModeState() async {
@@ -63,116 +88,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildSettingsHeader(BuildContext context, bool isDarkMode) {
-    return Row(
-      children: [
-        GestureDetector(
-          onTap: () {
-            HapticFeedback.lightImpact();
-            Navigator.of(context).maybePop();
-          },
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: isDarkMode
-                  ? Colors.white.withOpacity(0.1)
-                  : const Color(0xFF2A2A2A).withOpacity(0.05),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              Icons.arrow_back_ios_new,
-              color: isDarkMode ? Colors.white : const Color(0xFF2A2A2A),
-              size: 18,
-            ),
-          ),
+    return Center(
+      child: Text(
+        'Settings',
+        style: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.w700,
+          color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
         ),
-        const SizedBox(width: 16),
-        Text(
-          'Settings',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-            color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
   Widget _buildUserProfileCard(bool isDarkMode) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2C2C2E) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDarkMode
-              ? Colors.white.withOpacity(0.1)
-              : Colors.white.withOpacity(0.3),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color:
-                isDarkMode ? Colors.black.withOpacity(0.4) : const Color(0xFF475569).withOpacity(0.06),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
+    final ageText = _patientAge > 0 ? 'Age: $_patientAge' : 'Age: --';
+    final avatarPath = _patientGender.toLowerCase() == 'female' 
+        ? 'images/female.jpg' 
+        : 'images/male.jpg';
+
+    return Column(
+      children: [
+        Center(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(50),
             child: Container(
-              width: 56,
-              height: 56,
+              width: 100,
+              height: 100,
               color: Colors.grey.withOpacity(0.08),
               child: Image.asset(
-                'images/male.jpg',
+                avatarPath,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) => Container(
                   color: const Color(0xFF3B82F6).withOpacity(0.15),
                   child: const Icon(
                     Icons.person,
                     color: Color(0xFF3B82F6),
-                    size: 28,
+                    size: 50,
                   ),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'JACOB',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Age: 68',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDarkMode ? Colors.white.withOpacity(0.6) : const Color(0xFF475569),
-                  ),
-                ),
-              ],
-            ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          _patientName,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
           ),
-          Icon(
-            Icons.chevron_right,
-            color: isDarkMode ? Colors.white.withOpacity(0.4) : const Color(0xFF475569).withOpacity(0.4),
-            size: 20,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          ageText,
+          style: TextStyle(
+            fontSize: 16,
+            color: isDarkMode ? Colors.white.withOpacity(0.6) : const Color(0xFF475569),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -180,15 +155,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Other settings',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: isDarkMode ? Colors.white.withOpacity(0.8) : const Color(0xFF475569),
-          ),
-        ),
-        const SizedBox(height: 16),
         Container(
           decoration: BoxDecoration(
             color: isDarkMode ? const Color(0xFF2C2C2E) : Colors.white,
@@ -213,6 +179,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 isDarkMode: isDarkMode,
                 onTap: () {
                   HapticFeedback.lightImpact();
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
+                },
+              ),
+              _buildSettingsDivider(isDarkMode),
+              _buildSettingsItem(
+                icon: Icons.security,
+                title: 'My Guardians',
+                isDarkMode: isDarkMode,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const GuardiansScreen()));
+                },
+              ),
+              _buildSettingsDivider(isDarkMode),
+              _buildSettingsItem(
+                icon: Icons.contact_phone_outlined,
+                title: 'Emergency Contacts',
+                isDarkMode: isDarkMode,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const EmergencyContactsScreen()));
+                },
+              ),
+              _buildSettingsDivider(isDarkMode),
+              _buildSettingsItem(
+                icon: Icons.monitor_heart_outlined,
+                title: 'Health Thresholds',
+                isDarkMode: isDarkMode,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const HealthThresholdsScreen()));
+                },
+              ),
+              _buildSettingsDivider(isDarkMode),
+              _buildSettingsItem(
+                icon: Icons.watch_outlined,
+                title: 'My Device',
+                isDarkMode: isDarkMode,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const DeviceSettingsScreen()));
                 },
               ),
               _buildSettingsDivider(isDarkMode),
@@ -231,6 +238,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 isDarkMode: isDarkMode,
                 onTap: () {
                   HapticFeedback.lightImpact();
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsSettingsScreen()));
                 },
               ),
               _buildSettingsDivider(isDarkMode),
@@ -265,6 +273,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 isDarkMode: isDarkMode,
                 onTap: () {
                   HapticFeedback.lightImpact();
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutScreen()));
                 },
               ),
               _buildSettingsDivider(isDarkMode),
@@ -274,6 +283,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 isDarkMode: isDarkMode,
                 onTap: () {
                   HapticFeedback.lightImpact();
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpSupportScreen()));
                 },
               ),
               _buildSettingsDivider(isDarkMode),

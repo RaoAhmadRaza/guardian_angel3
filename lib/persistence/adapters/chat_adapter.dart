@@ -13,6 +13,21 @@ import '../../chat/models/chat_message_model.dart';
 import '../type_ids.dart';
 
 /// Hive adapter for ChatThreadModel.
+/// 
+/// Field mapping (backward compatible):
+/// 0: id
+/// 1: relationshipId
+/// 2: patientId
+/// 3: caregiverId (nullable for doctor threads)
+/// 4: createdAt
+/// 5: lastMessageAt
+/// 6: lastMessagePreview
+/// 7: lastMessageSenderId
+/// 8: unreadCount
+/// 9: isArchived
+/// 10: isMuted
+/// 11: doctorId (NEW - nullable for caregiver threads)
+/// 12: threadType (NEW - 'caregiver' | 'doctor')
 class ChatThreadAdapter extends TypeAdapter<ChatThreadModel> {
   @override
   final int typeId = TypeIds.chatThread;
@@ -24,11 +39,18 @@ class ChatThreadAdapter extends TypeAdapter<ChatThreadModel> {
     for (int i = 0; i < numFields; i++) {
       fields[reader.readByte()] = reader.read();
     }
+    
+    // Parse thread type (default to caregiver for backward compatibility)
+    final threadTypeStr = fields[12] as String?;
+    final threadType = threadTypeStr != null 
+        ? ChatThreadTypeExtension.fromString(threadTypeStr)
+        : ChatThreadType.caregiver;
+    
     return ChatThreadModel(
       id: fields[0] as String? ?? '',
       relationshipId: fields[1] as String? ?? '',
       patientId: fields[2] as String? ?? '',
-      caregiverId: fields[3] as String? ?? '',
+      caregiverId: fields[3] as String?,
       createdAt: _parseDateTime(fields[4] as String?),
       lastMessageAt: _parseDateTime(fields[5] as String?),
       lastMessagePreview: fields[6] as String?,
@@ -36,13 +58,15 @@ class ChatThreadAdapter extends TypeAdapter<ChatThreadModel> {
       unreadCount: fields[8] as int? ?? 0,
       isArchived: fields[9] as bool? ?? false,
       isMuted: fields[10] as bool? ?? false,
+      doctorId: fields[11] as String?,
+      threadType: threadType,
     );
   }
 
   @override
   void write(BinaryWriter writer, ChatThreadModel obj) {
     writer
-      ..writeByte(11) // number of fields
+      ..writeByte(13) // number of fields (increased from 11 to 13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -64,7 +88,11 @@ class ChatThreadAdapter extends TypeAdapter<ChatThreadModel> {
       ..writeByte(9)
       ..write(obj.isArchived)
       ..writeByte(10)
-      ..write(obj.isMuted);
+      ..write(obj.isMuted)
+      ..writeByte(11)
+      ..write(obj.doctorId)
+      ..writeByte(12)
+      ..write(obj.threadType.value);
   }
 
   DateTime _parseDateTime(String? v) =>

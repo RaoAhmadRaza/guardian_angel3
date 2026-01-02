@@ -1,8 +1,0 @@
-{
-  "name": "Guardian Angel",
-  "description": "A safety-first, voice-centric communication hub designed for elderly users to connect with caregivers, medical professionals, and an AI companion.",
-  "requestFramePermissions": [
-    "microphone",
-    "geolocation"
-  ]
-}

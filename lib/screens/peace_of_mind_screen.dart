@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'peace_of_mind/peace_of_mind_state.dart';
 import 'peace_of_mind/peace_of_mind_data_provider.dart';
+import 'package:guardian_angel_fyp/screens/wellness_center_screen.dart';
 
 class PeaceOfMindScreen extends StatefulWidget {
   const PeaceOfMindScreen({super.key});
@@ -404,7 +405,7 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
                           width: 32,
                           height: 4,
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade400.withOpacity(0.2),
+                            color: Colors.grey.shade600,
                             borderRadius: BorderRadius.circular(100),
                           ),
                         ),
@@ -413,8 +414,8 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
                           "Pull down to close",
                           style: GoogleFonts.inter(
                             fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade400.withOpacity(0.5),
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey.shade600,
                           ),
                         ),
                       ],
@@ -452,7 +453,7 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
                       style: GoogleFonts.inter(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade400,
+                        color: Colors.grey.shade600,
                         letterSpacing: 1.0,
                       ),
                     ),
@@ -465,7 +466,7 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
                       style: GoogleFonts.inter(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade400,
+                        color: Colors.grey.shade600,
                         letterSpacing: 1.0,
                       ),
                     ),
@@ -510,7 +511,56 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
                 ],
               ),
             ),
-            const SizedBox(height: 40),
+            
+            const SizedBox(height: 24),
+
+            // Thought Exercises Button
+            GestureDetector(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const WellnessCenterScreen(),
+                  ),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: Colors.white.withOpacity(0.4)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      CupertinoIcons.sparkles,
+                      size: 16,
+                      color: Colors.grey.shade700,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      "Thought Exercises",
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 32),
 
             // Mic Button with Aura
             Stack(
@@ -616,7 +666,7 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: Colors.grey.shade400,
+                  color: Colors.grey.shade600,
                 ),
               ),
             ),

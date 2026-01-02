@@ -18,6 +18,7 @@ import 'home automation/main.dart' show HomeAutomationScreen;
 import 'main.dart';
 import 'settings_screen.dart';
 import 'widgets/overlay_nav_bar.dart';
+import 'screens/patient_home_screen.dart';
 import 'screens/patient_home/patient_home_state.dart';
 import 'screens/patient_home/patient_home_data_provider.dart';
 
@@ -289,6 +290,8 @@ class _NextScreenState extends State<NextScreen> {
             const SizedBox(height: 20),
             _buildSafetyStatusContainer(isDarkMode),
             const SizedBox(height: 20),
+            _buildEmptyPlaceholderCard(isDarkMode),
+            const SizedBox(height: 20),
             _buildDoctorContactCard(isDarkMode),
             const SizedBox(height: 20),
             _buildAutomationGrid(isDarkMode),
@@ -350,7 +353,7 @@ class _NextScreenState extends State<NextScreen> {
                   // Heart icon - only animate if real vitals data exists
                   child: _homeState.vitals.hasData
                     ? TweenAnimationBuilder<double>(
-                        duration: Duration(milliseconds: 1200 + (_homeState.vitals.heartRate * 8)),
+                        duration: Duration(milliseconds: (1200 + (_homeState.vitals.heartRate * 8)).toInt()),
                         tween: Tween<double>(begin: 0.98, end: 1.02),
                         builder: (context, scale, child) {
                           return Transform.scale(
@@ -486,7 +489,7 @@ class _NextScreenState extends State<NextScreen> {
   /// Get heart metrics card decoration for dark theme
   BoxDecoration _getHeartCardDecorationDark() {
     return BoxDecoration(
-      color: const Color(0xFF2C2C2E), // Slightly lighter than main container for contrast
+      color: const Color(0xFF1C1C1E), // Slightly lighter than main container for contrast
       borderRadius: BorderRadius.circular(20),
       border: Border.all(
         color: Colors.white.withOpacity(0.1),
@@ -557,7 +560,7 @@ class _NextScreenState extends State<NextScreen> {
                             // Heart pressure icon - only animate if real vitals data exists
                             child: _homeState.vitals.hasData
                               ? TweenAnimationBuilder<double>(
-                                  duration: Duration(milliseconds: 1000 + (_homeState.vitals.heartRate * 5)),
+                                  duration: Duration(milliseconds: (1000 + (_homeState.vitals.heartRate * 5)).toInt()),
                                   tween: Tween<double>(begin: 0.95, end: 1.05),
                                   builder: (context, scale, child) {
                                     return Transform.scale(
@@ -657,7 +660,7 @@ class _NextScreenState extends State<NextScreen> {
                             // Heart rhythm icon - only animate if real vitals data exists
                             child: _homeState.vitals.hasData
                               ? TweenAnimationBuilder<double>(
-                                  duration: Duration(milliseconds: 900 + (_homeState.vitals.heartRate * 6)),
+                                  duration: Duration(milliseconds: (900 + (_homeState.vitals.heartRate * 6)).toInt()),
                                   tween: Tween<double>(begin: 0.9, end: 1.1),
                                   builder: (context, scale, child) {
                                     return Transform.scale(
@@ -726,6 +729,148 @@ class _NextScreenState extends State<NextScreen> {
     );
   }
 
+  /// Safe Zones card with monitoring status
+  Widget _buildEmptyPlaceholderCard(bool isDarkMode) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: isDarkMode
+          ? _getHeartCardDecorationDark()
+          : _getHeartCardDecorationLight(),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Left side - Content
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Shield icon in circular container
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.1) // surface-glass
+                        : const Color(0xFFF5F5F7), // bg-secondary light
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    CupertinoIcons.shield,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.7) // icon-primary dark
+                        : const Color(0xFF475569), // icon-primary light
+                    size: 24,
+                  ),
+                ),
+                
+                const SizedBox(height: 16), // space-lg
+                
+                // Title - "Safe Zones"
+                Text(
+                  'Safe Zones',
+                  style: TextStyle(
+                    fontSize: 24, // display-md
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.4,
+                    color: isDarkMode 
+                        ? Colors.white // text-primary dark
+                        : const Color(0xFF0F172A), // text-primary light
+                  ),
+                ),
+                
+                const SizedBox(height: 4), // space-xs
+                
+                // Subtitle - Monitoring status
+                Text(
+                  'Monitoring active • 2 mins ago',
+                  style: TextStyle(
+                    fontSize: 14, // body-sm
+                    fontWeight: FontWeight.w400,
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.5) // text-tertiary dark
+                        : const Color(0xFF64748B), // text-tertiary light
+                  ),
+                ),
+                
+                const SizedBox(height: 20), // space-xl
+                
+                // Dashboard button
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isDarkMode
+                        ? const Color(0xFF2C2C2E) // action-primary-bg dark
+                        : Colors.white, // action-primary-bg light
+                    borderRadius: BorderRadius.circular(20), // radius-xl
+                    border: Border.all(
+                      color: isDarkMode
+                          ? Colors.white.withOpacity(0.1)
+                          : const Color(0xFFE2E8F0),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: isDarkMode
+                            ? Colors.black.withOpacity(0.2)
+                            : Colors.black.withOpacity(0.08),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    'Dashboard',
+                    style: TextStyle(
+                      fontSize: 14, // body-md
+                      fontWeight: FontWeight.w600,
+                      color: isDarkMode
+                          ? Colors.white.withOpacity(0.8) // action-primary-fg dark
+                          : const Color(0xFF475569), // action-primary-fg light
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Right side - Map location image
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.only(top:40.0),
+              child: Center(
+                child: Image.network(
+                  'https://i.postimg.cc/5y0sR6Wg/Pngtree-3d-map-location-icon-isolate-18770054.png',
+                  height: 150,
+                  width: 150,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    height: 150,
+                    width: 150,
+                    decoration: BoxDecoration(
+                      color: isDarkMode
+                          ? Colors.white.withOpacity(0.05)
+                          : const Color(0xFFF5F5F7),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(
+                      CupertinoIcons.location_solid,
+                      color: isDarkMode
+                          ? Colors.white.withOpacity(0.3)
+                          : const Color(0xFF94A3B8),
+                      size: 48,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
   /// Safety Status container
   Widget _buildSafetyStatusContainer(bool isDarkMode) {
     return Container(
@@ -1503,7 +1648,12 @@ class _NextScreenState extends State<NextScreen> {
                     borderRadius: BorderRadius.circular(20),
                     onTap: () {
                       // Handle see more action
-                      print('See more medications tapped');
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PatientHomeScreen(),
+                        ),
+                      );
                     },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(

@@ -1,8 +1,0 @@
-{
-  "name": "Guardian Angel - Doctor Portal",
-  "description": "A clinical-grade portal for physicians to review patient vitals, manage reports, and communicate with caregivers within the Guardian Angel ecosystem.",
-  "requestFramePermissions": [
-    "camera",
-    "microphone"
-  ]
-}

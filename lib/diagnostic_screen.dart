@@ -99,10 +99,12 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
 
   // AI Analysis Showcase Container with Expandable Design
   Widget _buildAIShowcaseContainer(bool isDarkMode) {
-    // Get display values from state
+    // Display values from state
     final rhythmDisplay = _state.heartRhythm ?? 'Not analyzed yet';
-    final confidenceDisplay = _state.aiConfidenceDisplay;
     final statusDisplay = _state.aiStatusMessage ?? 'No data available for analysis';
+    final confidenceValue = _state.aiConfidence;
+    final confidencePercent = confidenceValue != null ? (confidenceValue * 100).toInt() : null;
+    final confidenceDisplay = confidencePercent != null ? '$confidencePercent%' : '--%';
     
     return AnimatedContainer(
       duration: const Duration(milliseconds: 800),
@@ -168,8 +170,8 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                         Icons.psychology_rounded,
                         size: 24,
                         color: isDarkMode
-                            ? Colors.white.withOpacity(_state.hasAIAnalysis ? 0.7 : 0.4)
-                            : const Color(0xFF475569).withOpacity(_state.hasAIAnalysis ? 1.0 : 0.5),
+                            ? Colors.white.withOpacity(0.7)
+                            : const Color(0xFF475569),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -210,16 +212,16 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                             _aiAnalysisController.reset();
                             _aiAnalysisController.forward();
                           } else if (!_isAIContainerExpanded) {
-                            _hasExpandedOnce = false;
+                            _aiAnalysisController.reverse(from: 1.0);
                           }
                         });
-                        HapticFeedback.lightImpact();
                       },
                       child: Container(
-                        padding: const EdgeInsets.all(12),
+                        width: 32,
+                        height: 32,
                         decoration: BoxDecoration(
                           color: isDarkMode
-                              ? Colors.white.withOpacity(0.1)
+                              ? Colors.white.withOpacity(0.06)
                               : const Color(0xFFF5F5F7),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
@@ -1065,6 +1067,12 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
         borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.06)
+              : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: isDarkMode
@@ -1099,7 +1107,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                             child: Icon(
                               CupertinoIcons.heart_fill,
                               color: isDarkMode
-                                  ? Colors.white.withOpacity(0.7)
+                                  ? Colors.white.withOpacity(0.75)
                                   : const Color(0xFF475569),
                               size: 24,
                             ),
@@ -1134,7 +1142,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: isDarkMode
-                            ? const Color(0xFF374151).withOpacity(0.7)
+                            ? Colors.white.withOpacity(0.08)
                             : const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -1171,8 +1179,8 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
               Text(
                 heartRateDisplay,
                 style: TextStyle(
-                  fontSize: 56,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 58,
+                  fontWeight: FontWeight.w800,
                   color: isDarkMode 
                       ? (hasHeartData ? Colors.white : Colors.white.withOpacity(0.4))
                       : (hasHeartData ? const Color(0xFF0F172A) : const Color(0xFF94A3B8)),
@@ -1181,7 +1189,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
               ),
               const SizedBox(width: 8),
               Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: 10),
                 child: Text(
                   'bpm',
                   style: TextStyle(
@@ -1200,7 +1208,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: isDarkMode
-                      ? const Color(0xFF374151).withOpacity(0.7)
+                      ? Colors.white.withOpacity(0.08)
                       : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -1222,14 +1230,34 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
 
           // ECG Wave visualization or empty state
           if (hasHeartData && _state.ecgSamples != null && _state.ecgSamples!.isNotEmpty)
-            Container(
+            SizedBox(
               height: 120,
               width: double.infinity,
-              child: CustomPaint(
-                painter: ECGPainter(
-                  data: _state.ecgSamples!,
-                  animationValue: _ecgAnimationController.value,
-                  isDarkMode: isDarkMode,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: ECGPainter(
+                          data: _state.ecgSamples!,
+                          animationValue: _ecgAnimationController.value,
+                          isDarkMode: isDarkMode,
+                        ),
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.center,
+                      child: Container(
+                        width: 2,
+                        height: double.infinity,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFACC15),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             )
@@ -1239,7 +1267,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
               width: double.infinity,
               decoration: BoxDecoration(
                 color: isDarkMode
-                    ? Colors.white.withOpacity(0.05)
+                    ? Colors.white.withOpacity(0.04)
                     : const Color(0xFFF8FAFC),
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -1277,7 +1305,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
   Widget _buildRRIntervalCard(bool isDarkMode) {
     final hasRRData = _state.rrIntervals != null && _state.rrIntervals!.isNotEmpty;
     final rrDisplay = hasRRData ? '${_state.rrIntervals!.first} ms' : '-- ms';
-    final rrProgress = hasRRData ? 0.7 : 0.0; // Use actual calculation when data exists
+    final rrProgress = hasRRData ? 0.7 : 0.0; // TODO: replace with real RR normalization
     
     return Container(
       width: double.infinity,
@@ -1313,8 +1341,8 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                 child: Icon(
                   CupertinoIcons.waveform_path_ecg,
                   color: isDarkMode
-                      ? Colors.white.withOpacity(hasRRData ? 0.7 : 0.4)
-                      : (hasRRData ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                      ? Colors.white.withOpacity(0.7)
+                      : const Color(0xFF475569),
                   size: 24,
                 ),
               ),
@@ -1328,9 +1356,8 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
-                        color: isDarkMode 
-                            ? (hasRRData ? Colors.white : Colors.white.withOpacity(0.4))
-                            : (hasRRData ? const Color(0xFF0F172A) : const Color(0xFF94A3B8)),
+                        color:
+                            isDarkMode ? Colors.white : const Color(0xFF0F172A),
                       ),
                     ),
                     Text(
@@ -1384,34 +1411,27 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
 
           const SizedBox(height: 20),
 
-          // Interval values or empty state
+          // Interval values
           if (hasRRData)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: _state.rrIntervals!.map((interval) {
-                return Text(
-                  '${interval}ms',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: isDarkMode
-                        ? Colors.white.withOpacity(0.8)
-                        : const Color(0xFF475569),
-                  ),
-                );
-              }).toList(),
-            )
-          else
-            Center(
-              child: Text(
-                'No interval data available',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: isDarkMode
-                      ? Colors.white.withOpacity(0.5)
-                      : const Color(0xFF94A3B8),
-                ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _state.rrIntervals!.asMap().entries.map((entry) {
+                  final isLast = entry.key == _state.rrIntervals!.length - 1;
+                  return Padding(
+                    padding: EdgeInsets.only(right: isLast ? 0 : 8),
+                    child: Text(
+                      '${entry.value}ms',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: isDarkMode
+                            ? Colors.white.withOpacity(0.8)
+                            : const Color(0xFF475569),
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
             ),
         ],
@@ -2000,6 +2020,59 @@ class ECGPainter extends CustomPainter {
     required this.isDarkMode,
   });
 
+  double _hashNoise01(int n) {
+    // Deterministic pseudo-random in [0, 1). No state, stable per index.
+    n = (n ^ 0xDEADBEEF) * 2654435761;
+    n = (n ^ (n >> 16)) * 2246822519;
+    n = (n ^ (n >> 13)) * 3266489917;
+    n = n ^ (n >> 16);
+    return (n & 0x7FFFFFFF) / 0x80000000;
+  }
+
+  double _noiseSigned(int n) => (_hashNoise01(n) - 0.5) * 2.0;
+
+  /// Produces a stable, organic-looking ECG trace (visual only).
+  /// The goal is to match the reference screenshot: irregular baseline with
+  /// occasional sharp spikes and small noisy clusters.
+  double _organicSample(int i, int total, double t) {
+    final n = _noiseSigned(i);
+    final slow = math.sin((i / 22.0) + t * 2.2) * 0.20;
+    final wander = math.sin((i / 75.0) + t * 0.9) * 0.12;
+
+    // Base noise floor.
+    var value = (slow + wander) * 0.35 + n * 0.10;
+
+    // Place sparse impulses (spikes) at pseudo-random intervals.
+    // Use a deterministic spacing so it doesn't look periodic.
+    final seed = 9000 + total;
+    final spacing = 92 + (_hashNoise01(seed) * 28).round(); // ~92..120
+    final phase = (_hashNoise01(seed + 1) * spacing).round();
+
+    final k = (i + phase) % spacing;
+    // QRS-like: quick up, immediate down, settle.
+    if (k == 0) {
+      value += 1.35;
+    } else if (k == 1) {
+      value -= 0.55;
+    } else if (k == 2) {
+      value += 0.22;
+    }
+
+    // Add occasional noisy bursts to mimic irregular segments.
+    final burstEvery = 260 + (_hashNoise01(seed + 2) * 90).round();
+    final burstPhase = (_hashNoise01(seed + 3) * burstEvery).round();
+    final b = (i + burstPhase) % burstEvery;
+    if (b >= 0 && b < 18) {
+      final envelope = (1.0 - (b / 18.0));
+      value += _noiseSigned(seed + i * 7) * 0.55 * envelope;
+    }
+
+    // Clamp to a safe range.
+    if (value > 1.6) value = 1.6;
+    if (value < -1.2) value = -1.2;
+    return value;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
@@ -2035,32 +2108,37 @@ class ECGPainter extends CustomPainter {
 
     // Draw ECG wave
     if (data.isNotEmpty) {
-      final stepX = size.width / data.length;
+      final total = data.length;
+      final stepX = size.width / (total - 1);
+      final amplitudePx = size.height * 0.42;
+      final t = animationValue;
+      // Larger values => waveform features appear farther apart.
+      final spacingFactor = 7.0;
 
-      for (int i = 0; i < data.length; i++) {
+      double pointY(int i) {
+        // Render an organic trace (visual), not a strictly periodic pattern.
+        final sample = _organicSample((i * spacingFactor).round(), total, t);
+        return baseY - (sample * amplitudePx);
+      }
+
+      path.moveTo(0, pointY(0));
+      for (int i = 1; i < total; i++) {
+        final xPrev = (i - 1) * stepX;
+        final yPrev = pointY(i - 1);
         final x = i * stepX;
-        final y = baseY - (data[i] * size.height * 0.3);
-
-        if (i == 0) {
-          path.moveTo(x, y);
-        } else {
-          path.lineTo(x, y);
+        final y = pointY(i);
+        final midX = (xPrev + x) / 2;
+        final midY = (yPrev + y) / 2;
+        path.quadraticBezierTo(xPrev, yPrev, midX, midY);
+        if (i == total - 1) {
+          path.quadraticBezierTo(midX, midY, x, y);
         }
       }
 
       canvas.drawPath(path, paint);
 
-      // Draw moving indicator line
-      final indicatorX = size.width * animationValue;
-      final indicatorPaint = Paint()
-        ..color = isDarkMode ? const Color(0xFFFFBE0B) : const Color(0xFFD97706)
-        ..strokeWidth = 2.0;
-
-      canvas.drawLine(
-        Offset(indicatorX, 0),
-        Offset(indicatorX, size.height),
-        indicatorPaint,
-      );
+      // Intentionally omit a moving indicator line; the UI overlay provides
+      // the centered marker to match the reference design.
     }
   }
 

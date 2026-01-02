@@ -14,6 +14,71 @@ import 'community_discovery_screen.dart';
 import 'patient_chat/patient_chat_state.dart';
 import 'patient_chat/patient_chat_data_provider.dart';
 
+// --- THEME COLORS ---
+
+class _ChatColors {
+  final bool isDark;
+
+  _ChatColors(this.isDark);
+
+  static _ChatColors of(BuildContext context) {
+    return _ChatColors(Theme.of(context).brightness == Brightness.dark);
+  }
+
+  // 1. Foundation
+  Color get bgPrimary => isDark ? const Color(0xFF0F0F0F) : const Color(0xFFFDFDFD);
+  Color get bgSecondary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF5F5F7);
+  Color get surfacePrimary => isDark ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF);
+  Color get surfaceSecondary => isDark ? const Color(0xFF2C2C2E) : const Color(0xFFFFFFFF);
+  Color get surfaceGlass => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : Colors.white.withOpacity(0.5); // Fallback for light
+  Color get borderSubtle => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFFFFFFF).withOpacity(0.30);
+  List<BoxShadow> get shadowCard => isDark 
+      ? [BoxShadow(color: const Color(0xFF000000).withOpacity(0.40), blurRadius: 16, offset: const Offset(0, 6))]
+      : [BoxShadow(color: const Color(0xFF475569).withOpacity(0.15), blurRadius: 16, offset: const Offset(0, 6))];
+
+  // 2. Containers
+  Color get containerDefault => isDark ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF);
+  Color get containerHighlight => isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF5F5F7);
+  Color get containerSlot => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF5F5F7);
+  Color get containerSlotAlt => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFE0E0E2);
+  Color get overlayModal => isDark ? const Color(0xFF1A1A1A).withOpacity(0.80) : const Color(0xFFFFFFFF).withOpacity(0.80);
+
+  // 3. Typography
+  Color get textPrimary => isDark ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A);
+  Color get textSecondary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.70) : const Color(0xFF475569);
+  Color get textTertiary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.50) : const Color(0xFF64748B);
+  Color get textInverse => isDark ? const Color(0xFF0F172A) : const Color(0xFFFFFFFF);
+  Color get textLink => isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB);
+
+  // 4. Iconography
+  Color get iconPrimary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.70) : const Color(0xFF475569);
+  Color get iconSecondary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.40) : const Color(0xFF94A3B8);
+  Color get iconBgPrimary => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFF5F5F7);
+  Color get iconBgActive => isDark ? const Color(0xFFFFFFFF).withOpacity(0.10) : const Color(0xFFFFFFFF);
+
+  // 5. Interactive
+  Color get actionPrimaryBg => isDark ? const Color(0xFF2C2C2E) : const Color(0xFFFFFFFF);
+  Color get actionPrimaryFg => isDark ? const Color(0xFFFFFFFF).withOpacity(0.80) : const Color(0xFF475569);
+  Color get actionHover => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF8FAFC);
+  Color get actionPressed => isDark ? const Color(0xFF000000).withOpacity(0.20) : const Color(0xFFE2E8F0);
+  Color get actionDisabledBg => isDark ? const Color(0xFFFFFFFF).withOpacity(0.05) : const Color(0xFFF1F5F9);
+  Color get actionDisabledFg => isDark ? const Color(0xFFFFFFFF).withOpacity(0.30) : const Color(0xFF94A3B8);
+
+  // 6. Status
+  Color get statusSuccess => isDark ? const Color(0xFF34D399) : const Color(0xFF059669);
+  Color get statusWarning => isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
+  Color get statusError => isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626);
+  Color get statusInfo => isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB);
+  Color get statusNeutral => isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+
+  // 7. Input
+  Color get inputBg => isDark ? const Color(0xFF1A1A1A) : const Color(0xFFFEFEFE);
+  Color get inputBorder => isDark ? const Color(0xFF3C4043) : const Color(0xFFE2E8F0);
+  Color get inputBorderFocus => isDark ? const Color(0xFFF8F9FA) : const Color(0xFF3B82F6);
+  Color get controlActive => isDark ? const Color(0xFFF5F5F5) : const Color(0xFF2563EB);
+  Color get controlTrack => isDark ? const Color(0xFF3C4043) : const Color(0xFFE2E8F0);
+}
+
 // --- TYPES (NO MOCK DATA) ---
 
 enum ViewType { AI_COMPANION, CAREGIVER, DOCTOR, SYSTEM, PEACE_OF_MIND, COMMUNITY }
@@ -63,6 +128,7 @@ class ProgressRing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = _ChatColors.of(context);
     return SizedBox(
       width: size,
       height: size,
@@ -76,7 +142,7 @@ class ProgressRing extends StatelessWidget {
             child: CircularProgressIndicator(
               value: 1.0,
               strokeWidth: stroke,
-              color: Colors.grey.withOpacity(0.2), // text-gray-400 with opacity
+              color: colors.controlTrack, // text-gray-400 with opacity
             ),
           ),
           // Progress Circle
@@ -197,9 +263,10 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
 
   @override
   Widget build(BuildContext context) {
+    final colors = _ChatColors.of(context);
     // Background color transition
     return Scaffold(
-      backgroundColor: _isSOSOpen ? Colors.grey[200] : const Color(0xFFF2F2F7),
+      backgroundColor: _isSOSOpen ? colors.bgSecondary : colors.bgPrimary,
       body: SafeArea(
         bottom: false,
         child: Stack(
@@ -211,7 +278,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                 SliverAppBar(
                   pinned: true,
                   backgroundColor: _isScrolled 
-                      ? const Color(0xFFF2F2F7).withOpacity(0.8) 
+                      ? colors.bgPrimary.withOpacity(0.8) 
                       : Colors.transparent,
                   elevation: 0,
                   toolbarHeight: 50,
@@ -228,10 +295,10 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                           opacity: _isScrolled ? 1.0 : 0.0,
                           child: Text(
                             _greeting,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w600,
-                              color: Colors.black,
+                              color: colors.textPrimary,
                             ),
                           ),
                         ),
@@ -264,6 +331,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   }
 
   Widget _buildMainHeader() {
+    final colors = _ChatColors.of(context);
     final now = DateTime.now();
     // Format: FRIDAY, DECEMBER 20
     final dateStr = "${_getDayName(now.weekday)}, ${_getMonthName(now.month)} ${now.day}";
@@ -279,21 +347,21 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
             children: [
               Text(
                 dateStr.toUpperCase(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey,
+                  color: colors.textSecondary,
                   letterSpacing: 1.2,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 _greeting,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 34,
                   fontFamily: 'Serif', // Uses system serif
                   fontWeight: FontWeight.w400,
-                  color: Color(0xFF111827), // gray-900
+                  color: colors.textPrimary,
                   height: 1.1,
                 ),
               ),
@@ -303,10 +371,10 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Colors.grey[200]!.withOpacity(0.5),
+              color: colors.bgSecondary,
               shape: BoxShape.circle,
             ),
-            child: const Icon(CupertinoIcons.person_fill, color: Colors.grey, size: 20),
+            child: Icon(CupertinoIcons.person_fill, color: colors.iconPrimary, size: 20),
           ),
         ],
       ),
@@ -314,6 +382,10 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   }
 
   Widget _buildDynamicIsland() {
+    final colors = _ChatColors.of(context);
+    final islandColor = colors.isDark ? colors.surfaceSecondary : colors.textPrimary;
+    final contentColor = colors.isDark ? colors.textPrimary : colors.textInverse;
+
     return Center(
       child: GestureDetector(
         onTap: () {
@@ -326,15 +398,9 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
           margin: const EdgeInsets.only(top: 8, bottom: 24),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.9),
+            color: islandColor,
             borderRadius: BorderRadius.circular(100),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
+            boxShadow: colors.shadowCard,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -346,11 +412,11 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: Colors.greenAccent[400],
+                    color: colors.statusSuccess,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.greenAccent[400]!.withOpacity(0.5),
+                        color: colors.statusSuccess.withOpacity(0.5),
                         blurRadius: 10,
                       ),
                     ],
@@ -358,10 +424,10 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                 ),
               ),
               const SizedBox(width: 12),
-              const Text(
+              Text(
                 'Guardian Angel',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: contentColor,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
@@ -369,7 +435,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
               const SizedBox(width: 6),
               const Icon(CupertinoIcons.sparkles, color: Color(0xFFD8B4FE), size: 12), // purple-300
               const SizedBox(width: 4),
-              Icon(CupertinoIcons.chevron_right, color: Colors.white.withOpacity(0.5), size: 12),
+              Icon(CupertinoIcons.chevron_right, color: contentColor.withOpacity(0.5), size: 12),
             ],
           ),
         ),
@@ -378,6 +444,8 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   }
 
   Widget _buildSOSButton() {
+    final colors = _ChatColors.of(context);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
       child: GestureDetector(
@@ -391,12 +459,12 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
           padding: const EdgeInsets.all(16),
           margin: const EdgeInsets.only(bottom: 32),
           decoration: BoxDecoration(
-            color: _isSOSOpen ? const Color(0xFFDC2626) : Colors.white, // red-600
+            color: _isSOSOpen ? colors.statusError : colors.surfacePrimary,
             borderRadius: BorderRadius.circular(16),
-            border: _isSOSOpen ? null : Border.all(color: const Color(0xFFFEE2E2).withOpacity(0.5)), // red-100
+            border: _isSOSOpen ? null : Border.all(color: colors.statusError.withOpacity(0.2)),
             boxShadow: _isSOSOpen 
-                ? [BoxShadow(color: const Color(0xFFDC2626).withOpacity(0.4), blurRadius: 20, offset: const Offset(0, 10))]
-                : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))],
+                ? [BoxShadow(color: colors.statusError.withOpacity(0.4), blurRadius: 20, offset: const Offset(0, 10))]
+                : colors.shadowCard,
           ),
           child: Row(
             children: [
@@ -404,12 +472,12 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: _isSOSOpen ? Colors.white : const Color(0xFFFEF2F2), // red-50
+                  color: _isSOSOpen ? colors.surfacePrimary : colors.statusError.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   CupertinoIcons.exclamationmark_triangle_fill,
-                  color: _isSOSOpen ? const Color(0xFFDC2626) : const Color(0xFFEF4444), // red-500
+                  color: _isSOSOpen ? colors.statusError : colors.statusError,
                   size: 20,
                 ),
               ),
@@ -422,14 +490,14 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: _isSOSOpen ? Colors.white : const Color(0xFF111827),
+                      color: _isSOSOpen ? colors.textInverse : colors.textPrimary,
                     ),
                   ),
                   Text(
                     'Tap for immediate help',
                     style: TextStyle(
                       fontSize: 13,
-                      color: _isSOSOpen ? const Color(0xFFFEE2E2) : Colors.grey[500],
+                      color: _isSOSOpen ? colors.textInverse.withOpacity(0.8) : colors.textSecondary,
                     ),
                   ),
                 ],
@@ -442,6 +510,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   }
 
   Widget _buildCareTeamRail() {
+    final colors = _ChatColors.of(context);
     // Use state-driven care team instead of INITIAL_SESSIONS
     final List<ChatSession> careTeam = _state?.careTeam ?? [];
     final hasCareTeam = careTeam.isNotEmpty;
@@ -454,12 +523,12 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Care Team',
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF111827),
+                  color: colors.textPrimary,
                 ),
               ),
               // Hide "See All" when no care team members
@@ -472,12 +541,12 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                       ),
                     );
                   },
-                  child: const Text(
+                  child: Text(
                     'See All',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: Color(0xFF2563EB), // blue-600
+                      color: colors.textLink,
                     ),
                   ),
                 ),
@@ -511,6 +580,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   /// Empty state for care team section
   /// Shows guidance message and add button for first-time users
   Widget _buildEmptyCareTeamState() {
+    final colors = _ChatColors.of(context);
     return Container(
       height: 110,
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -521,10 +591,10 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colors.surfacePrimary,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: const Color(0xFFE5E7EB), // gray-200
+                  color: colors.borderSubtle,
                   width: 1,
                 ),
               ),
@@ -532,12 +602,12 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'No caregivers or doctors added yet',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
-                      color: Color(0xFF6B7280), // gray-500
+                      color: colors.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -545,7 +615,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                     'Add your care team to stay connected',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey[400],
+                      color: colors.textTertiary,
                     ),
                   ),
                 ],
@@ -561,6 +631,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   }
 
   Widget _buildCareTeamMember(ChatSession session) {
+    final colors = _ChatColors.of(context);
     final isDoctor = session.type == ViewType.DOCTOR;
     
     return GestureDetector(
@@ -587,19 +658,13 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                 width: 72,
                 height: 72,
                 decoration: BoxDecoration(
-                  color: isDoctor ? const Color(0xFFEFF6FF) : const Color(0xFFF3F4F6), // blue-50 : gray-100
+                  color: isDoctor ? colors.statusInfo.withOpacity(0.1) : colors.bgSecondary,
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: isDoctor ? const Color(0xFFDBEAFE) : Colors.white, // blue-100 : white
+                    color: isDoctor ? colors.statusInfo.withOpacity(0.2) : colors.surfacePrimary,
                     width: 2,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 2,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
+                  boxShadow: colors.shadowCard,
                 ),
                 alignment: Alignment.center,
                 child: isDoctor && session.imageUrl != null
@@ -609,7 +674,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                           width: 72,
                           height: 72,
                           fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) => Text(session.name[0], style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
+                          errorBuilder: (c, e, s) => Text(session.name[0], style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: colors.statusInfo)),
                         ),
                       )
                     : Text(
@@ -617,7 +682,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: isDoctor ? const Color(0xFF2563EB) : const Color(0xFF6B7280), // blue-600 : gray-500
+                          color: isDoctor ? colors.statusInfo : colors.textSecondary,
                         ),
                       ),
               ),
@@ -630,7 +695,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                   child: Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.greenAccent.withOpacity(0.3), width: 3),
+                      border: Border.all(color: colors.statusSuccess.withOpacity(0.3), width: 3),
                     ),
                   ),
                 ),
@@ -641,16 +706,16 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF3B82F6), // blue-500
+                      color: colors.statusInfo,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFF2F2F7), width: 2),
+                      border: Border.all(color: colors.bgPrimary, width: 2),
                     ),
                     constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
                     alignment: Alignment.center,
                     child: Text(
                       '${session.unreadCount}',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colors.textInverse,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                       ),
@@ -662,10 +727,10 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
           const SizedBox(height: 8),
           Text(
             session.name.split(' ')[0],
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: Color(0xFF4B5563), // gray-600
+              color: colors.textSecondary,
             ),
           ),
         ],
@@ -674,6 +739,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   }
 
   Widget _buildAddMemberButton() {
+    final colors = _ChatColors.of(context);
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(
@@ -689,31 +755,31 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: const Color(0xFFE5E7EB).withOpacity(0.5), // gray-200/50
+              color: colors.containerSlotAlt,
               shape: BoxShape.circle,
               border: Border.all(
-                color: const Color(0xFFD1D5DB), // gray-300
+                color: colors.borderSubtle,
                 width: 2,
                 style: BorderStyle.solid,
               ),
             ),
             alignment: Alignment.center,
-            child: const Text(
+            child: Text(
               '+',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w300,
-                color: Color(0xFF9CA3AF), // gray-400
+                color: colors.textTertiary,
               ),
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Add',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: Color(0xFF9CA3AF), // gray-400
+              color: colors.textTertiary,
             ),
           ),
         ],
@@ -722,19 +788,20 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   }
 
   Widget _buildBentoGrid() {
+    final colors = _ChatColors.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(left: 4, bottom: 12),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 12),
             child: Text(
               'Wellness & Community',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF111827),
+                color: colors.textPrimary,
               ),
             ),
           ),
@@ -753,6 +820,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   }
 
   Widget _buildMedicationCard() {
+    final colors = _ChatColors.of(context);
     // Use state-driven medication status
     final medicationStatus = _state?.medicationStatus;
     final progress = medicationStatus?.progressPercent ?? 0;
@@ -777,15 +845,9 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
         height: 160, // Aspect square approx
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: colors.surfacePrimary,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 2,
-              offset: const Offset(0, 1),
-            ),
-          ],
+          boxShadow: colors.shadowCard,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -796,18 +858,18 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
               children: [
                 Container(
                   padding: const EdgeInsets.all(6),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF9FAFB), // gray-50
+                  decoration: BoxDecoration(
+                    color: colors.containerHighlight,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(CupertinoIcons.capsule_fill, size: 16, color: Color(0xFF6B7280)),
+                  child: Icon(CupertinoIcons.capsule_fill, size: 16, color: colors.textTertiary),
                 ),
-                const Text(
+                Text(
                   'TODAY',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF9CA3AF),
+                    color: colors.textTertiary,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -815,27 +877,27 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
             ),
             ProgressRing(
               progress: progress.toDouble(),
-              color: const Color(0xFF10B981), // emerald-500
+              color: colors.statusSuccess,
               icon: CupertinoIcons.checkmark_circle_fill,
               size: 48,
             ),
             Column(
               children: [
-                const Text(
+                Text(
                   'Medication',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF111827),
+                    color: colors.textPrimary,
                     height: 1.1,
                   ),
                 ),
                 Text(
                   statusText,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF9CA3AF), // gray-400
+                    color: colors.textTertiary,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -849,6 +911,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   }
 
   Widget _buildPeaceCard() {
+    final colors = _ChatColors.of(context);
     // Use state-driven peace status
     final peaceStatus = _state?.peaceStatus;
     final progress = peaceStatus?.progressPercent ?? 0;
@@ -867,15 +930,9 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
         height: 160,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: colors.surfacePrimary,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 2,
-              offset: const Offset(0, 1),
-            ),
-          ],
+          boxShadow: colors.shadowCard,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -911,21 +968,21 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
             ),
             Column(
               children: [
-                const Text(
+                Text(
                   'Daily Peace',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF111827),
+                    color: colors.textPrimary,
                     height: 1.1,
                   ),
                 ),
                 Text(
                   statusText,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF9CA3AF),
+                    color: colors.textTertiary,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -939,6 +996,7 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   }
 
   Widget _buildCommunityCard() {
+    final colors = _ChatColors.of(context);
     // Use state-driven community status
     final communityStatus = _state?.communityStatus;
     final statusText = communityStatus?.status ?? 'Join the community';
@@ -954,15 +1012,9 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: colors.surfacePrimary,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 2,
-              offset: const Offset(0, 1),
-            ),
-          ],
+          boxShadow: colors.shadowCard,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -982,28 +1034,28 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Community Groups',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF111827),
+                        color: colors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       statusText,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF9CA3AF), // gray-400
+                        color: colors.textTertiary,
                       ),
                     ),
                   ],
                 ),
               ],
             ),
-            const Icon(CupertinoIcons.chevron_right, color: Color(0xFFD1D5DB), size: 20),
+            Icon(CupertinoIcons.chevron_right, color: colors.iconSecondary, size: 20),
           ],
         ),
       ),

@@ -157,8 +157,9 @@ final chatListItemsProvider = FutureProvider<List<ChatListItem>>((ref) async {
         
         // Get other user's details
         // For now, generate a simple display name from UID
-        final displayEnd = otherUid.length > 6 ? 6 : otherUid.length;
-        String displayName = 'User ${otherUid.substring(0, displayEnd)}';
+        final safeOtherUid = otherUid ?? 'unknown';
+        final displayEnd = safeOtherUid.length > 6 ? 6 : safeOtherUid.length;
+        String displayName = 'User ${safeOtherUid.substring(0, displayEnd)}';
         String? mood;
         String? vitals;
         

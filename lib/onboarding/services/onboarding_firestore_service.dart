@@ -19,6 +19,8 @@ import '../models/caregiver_user_model.dart';
 import '../models/caregiver_details_model.dart';
 import '../models/patient_user_model.dart';
 import '../models/patient_details_model.dart';
+import '../models/doctor_user_model.dart';
+import '../models/doctor_details_model.dart';
 import 'onboarding_local_service.dart';
 
 /// Result of a Firestore mirror operation.
@@ -63,6 +65,7 @@ class OnboardingFirestoreService {
   /// Firestore collection names
   static const String _caregiverCollection = 'caregiver_users';
   static const String _patientCollection = 'patient_users';
+  static const String _doctorCollection = 'doctors';
 
   // ═══════════════════════════════════════════════════════════════════════════
   // STEP 5A: CAREGIVER FIRESTORE MIRROR
@@ -246,12 +249,106 @@ class OnboardingFirestoreService {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // STEP 7: DOCTOR FIRESTORE MIRROR
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Mirrors complete doctor data to Firestore.
+  /// 
+  /// This is STEP 7 - only called when local doctor tables are complete.
+  /// Creates/updates doctors/{uid} document.
+  Future<FirestoreMirrorResult> mirrorDoctorToFirestore(String uid) async {
+    debugPrint('[OnboardingFirestoreService] STEP 7: Mirroring doctor to Firestore for uid: $uid');
+    
+    // GUARD: Ensure local onboarding is complete
+    if (!_localService.isDoctorOnboardingComplete(uid)) {
+      debugPrint('[OnboardingFirestoreService] ERROR: Doctor onboarding not complete - aborting Firestore write');
+      return FirestoreMirrorResult.failure(
+        errorCode: 'incomplete_onboarding',
+        errorMessage: 'Cannot mirror to Firestore: local doctor onboarding is not complete',
+      );
+    }
+
+    try {
+      // Get all local data
+      final userBase = _localService.getUserBase(uid);
+      final doctorUser = _localService.getDoctorUser(uid);
+      final doctorDetails = _localService.getDoctorDetails(uid);
+
+      if (userBase == null || doctorUser == null || doctorDetails == null) {
+        return FirestoreMirrorResult.failure(
+          errorCode: 'missing_data',
+          errorMessage: 'Missing local data for Firestore mirror',
+        );
+      }
+
+      // Build Firestore document
+      final docData = _buildDoctorDocument(userBase, doctorUser, doctorDetails);
+
+      // Write to Firestore with merge
+      await _firestore
+          .collection(_doctorCollection)
+          .doc(uid)
+          .set(docData, SetOptions(merge: true));
+
+      debugPrint('[OnboardingFirestoreService] Doctor mirrored to Firestore successfully');
+      return FirestoreMirrorResult.success();
+    } on FirebaseException catch (e) {
+      debugPrint('[OnboardingFirestoreService] Firestore error: ${e.code} - ${e.message}');
+      return FirestoreMirrorResult.failure(
+        errorCode: e.code,
+        errorMessage: e.message ?? 'Unknown Firestore error',
+      );
+    } catch (e) {
+      debugPrint('[OnboardingFirestoreService] Unexpected error: $e');
+      return FirestoreMirrorResult.failure(
+        errorCode: 'unknown',
+        errorMessage: e.toString(),
+      );
+    }
+  }
+
+  /// Builds doctor Firestore document from local data.
+  Map<String, dynamic> _buildDoctorDocument(
+    UserBaseModel userBase,
+    DoctorUserModel doctorUser,
+    DoctorDetailsModel doctorDetails,
+  ) {
+    return {
+      // From User Base Table
+      'uid': userBase.uid,
+      'email': userBase.email,
+      'full_name': userBase.fullName,
+      'profile_image_url': userBase.profileImageUrl,
+      
+      // From Doctor User Table
+      'role': doctorUser.role,
+      
+      // From Doctor Details Table
+      'doctor_full_name': doctorDetails.fullName,
+      'doctor_email': doctorDetails.email,
+      'phone_number': doctorDetails.phoneNumber,
+      'specialization': doctorDetails.specialization,
+      'license_number': doctorDetails.licenseNumber,
+      'years_of_experience': doctorDetails.yearsOfExperience,
+      'clinic_or_hospital_name': doctorDetails.clinicOrHospitalName,
+      'address': doctorDetails.address,
+      'is_verified': doctorDetails.isVerified,
+      
+      // Metadata
+      'is_complete': true,
+      'created_at': userBase.createdAt.toIso8601String(),
+      'updated_at': FieldValue.serverTimestamp(),
+      'synced_at': FieldValue.serverTimestamp(),
+    }..removeWhere((k, v) => v == null);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // RETRY / SYNC UTILITIES
   // ═══════════════════════════════════════════════════════════════════════════
 
   /// Attempts to mirror completed onboarding to Firestore.
   /// 
-  /// Automatically determines caregiver vs patient and mirrors accordingly.
+  /// Automatically determines caregiver vs patient vs doctor and mirrors accordingly.
   /// Returns success only if local is complete AND Firestore write succeeds.
   Future<FirestoreMirrorResult> mirrorIfComplete(String uid) async {
     final state = _localService.getOnboardingState(uid);
@@ -262,6 +359,10 @@ class OnboardingFirestoreService {
     
     if (state == OnboardingState.patientComplete) {
       return mirrorPatientToFirestore(uid);
+    }
+    
+    if (state == OnboardingState.doctorComplete) {
+      return mirrorDoctorToFirestore(uid);
     }
     
     debugPrint('[OnboardingFirestoreService] Onboarding not complete, skipping Firestore mirror');
