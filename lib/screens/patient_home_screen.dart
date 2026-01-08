@@ -5,10 +5,10 @@ import 'dart:ui';
 import 'profile_sheet.dart';
 import 'medication_detail_screen.dart';
 import 'history_screen.dart';
+import 'dashboard_screen.dart';
 import 'drip_alert_screen.dart';
 import 'add_medication_modal.dart';
 import 'calendar_overlay.dart';
-import 'safe_zones_screen.dart';
 
 class PatientHomeScreen extends StatefulWidget {
   const PatientHomeScreen({super.key});
@@ -216,7 +216,7 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
                             Navigator.push(
                               context,
                               CupertinoPageRoute(
-                                builder: (context) => const SafeZonesScreen(),
+                                builder: (context) => const DashboardScreen(),
                               ),
                             );
                           },
@@ -386,9 +386,6 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
                       const SizedBox(height: 24),
                     ],
 
-                    _buildSafeZonesCard(),
-                    const SizedBox(height: 24),
-
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -451,11 +448,6 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
                         ],
                       ),
                     ),
-
-                    const SizedBox(height: 24),
-
-                    // Safe Zones Card (newly added)
-                    _buildSafeZonesCard(),
                   ],
                 ),
               ),
@@ -804,94 +796,4 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
     );
   }
 
-  Widget _buildSafeZonesCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF5F5F7),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  CupertinoIcons.shield_fill,
-                  color: Color(0xFF475569),
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Safe Zones',
-                    style: GoogleFonts.inter(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF0F172A),
-                    ),
-                  ),
-                  Text(
-                    'Monitoring active • 2 mins ago',
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: const Color(0xFF64748B),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                CupertinoPageRoute(
-                  builder: (context) => const SafeZonesScreen(),
-                ),
-              );
-            },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Center(
-                child: Text(
-                  'Dashboard',
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

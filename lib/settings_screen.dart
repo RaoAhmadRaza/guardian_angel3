@@ -9,6 +9,7 @@ import 'services/patient_service.dart';
 import 'main.dart';
 import 'settings/about_screen.dart';
 import 'settings/device_settings_screen.dart';
+import 'settings/doctors_screen.dart';
 import 'settings/emergency_contacts_screen.dart';
 import 'settings/guardians_screen.dart';
 import 'settings/health_thresholds_screen.dart';
@@ -190,6 +191,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () {
                   HapticFeedback.lightImpact();
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const GuardiansScreen()));
+                },
+              ),
+              _buildSettingsDivider(isDarkMode),
+              _buildSettingsItem(
+                icon: Icons.medical_services_outlined,
+                title: 'My Doctors',
+                isDarkMode: isDarkMode,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const DoctorsScreen()));
                 },
               ),
               _buildSettingsDivider(isDarkMode),

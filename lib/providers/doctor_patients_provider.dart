@@ -6,6 +6,7 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../relationships/models/doctor_relationship_model.dart';
 import '../relationships/services/doctor_relationship_service.dart';
@@ -90,20 +91,19 @@ final doctorPatientListProvider = FutureProvider<List<DoctorPatientItem>>((ref) 
           }
         }
         
-        // Build patient item
-        // TODO: Enrich with actual patient profile data when available
-        final displayEnd = relationship.patientId.length > 6 ? 6 : relationship.patientId.length;
+        // Fetch real patient profile data from Firestore
+        final patientInfo = await _fetchPatientInfo(relationship.patientId);
         
         items.add(DoctorPatientItem(
           relationshipId: relationship.id,
           patientId: relationship.patientId,
-          patientName: 'Patient ${relationship.patientId.substring(0, displayEnd)}',
-          photo: null, // Would come from patient profile
-          age: null, // Would come from patient profile
-          conditions: [], // Would come from shared health data
+          patientName: patientInfo.name,
+          photo: patientInfo.photo,
+          age: patientInfo.age,
+          conditions: patientInfo.conditions,
           lastActivity: _formatLastActivity(relationship.updatedAt),
           isStable: true, // Would come from health monitoring
-          caregiverName: null, // Would come from relationship data
+          caregiverName: patientInfo.caregiverName,
           hasChatPermission: relationship.hasPermission('chat'),
           chatThread: chatThread,
           unreadMessages: unreadCount,
@@ -116,6 +116,98 @@ final doctorPatientListProvider = FutureProvider<List<DoctorPatientItem>>((ref) 
     error: (_, __) => [],
   );
 });
+
+/// Helper class for patient info fetched from Firestore.
+class _PatientInfo {
+  final String name;
+  final String? photo;
+  final int? age;
+  final List<String> conditions;
+  final String? caregiverName;
+  
+  const _PatientInfo({
+    required this.name,
+    this.photo,
+    this.age,
+    this.conditions = const [],
+    this.caregiverName,
+  });
+}
+
+/// Fetches patient profile information from Firestore.
+/// 
+/// Tries patient_users collection first (where patient onboarding data lives),
+/// then falls back to users collection.
+Future<_PatientInfo> _fetchPatientInfo(String patientId) async {
+  final firestore = FirebaseFirestore.instance;
+  
+  try {
+    // Try patient_users collection first (onboarding data)
+    final patientDoc = await firestore
+        .collection('patient_users')
+        .doc(patientId)
+        .get();
+    
+    if (patientDoc.exists && patientDoc.data() != null) {
+      final data = patientDoc.data()!;
+      return _PatientInfo(
+        name: data['full_name'] as String? ?? 
+              data['name'] as String? ?? 
+              'Patient ${patientId.substring(0, patientId.length > 6 ? 6 : patientId.length)}',
+        photo: data['photo_url'] as String?,
+        age: data['age'] as int?,
+        conditions: _parseConditions(data['medical_history']),
+        caregiverName: null, // Would need separate lookup
+      );
+    }
+    
+    // Fall back to users collection
+    final userDoc = await firestore
+        .collection('users')
+        .doc(patientId)
+        .get();
+    
+    if (userDoc.exists && userDoc.data() != null) {
+      final data = userDoc.data()!;
+      return _PatientInfo(
+        name: data['display_name'] as String? ?? 
+              data['full_name'] as String? ?? 
+              data['name'] as String? ?? 
+              'Patient ${patientId.substring(0, patientId.length > 6 ? 6 : patientId.length)}',
+        photo: data['photo_url'] as String?,
+        age: data['age'] as int?,
+        conditions: [],
+        caregiverName: null,
+      );
+    }
+  } catch (e) {
+    // Silent fail - return default
+  }
+  
+  // Return default if nothing found
+  return _PatientInfo(
+    name: 'Patient ${patientId.substring(0, patientId.length > 6 ? 6 : patientId.length)}',
+  );
+}
+
+/// Parses medical conditions from medical_history field.
+List<String> _parseConditions(dynamic medicalHistory) {
+  if (medicalHistory == null) return [];
+  
+  if (medicalHistory is List) {
+    return medicalHistory.map((e) => e.toString()).take(3).toList();
+  }
+  
+  if (medicalHistory is String && medicalHistory.isNotEmpty) {
+    // Parse comma-separated or JSON-like string
+    if (medicalHistory.contains(',')) {
+      return medicalHistory.split(',').map((s) => s.trim()).take(3).toList();
+    }
+    return [medicalHistory];
+  }
+  
+  return [];
+}
 
 /// Provider for pending invites (patients waiting for doctor to accept).
 final pendingDoctorInvitesProvider = FutureProvider<List<DoctorRelationshipModel>>((ref) async {

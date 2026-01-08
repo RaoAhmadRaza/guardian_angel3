@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
@@ -1380,7 +1381,10 @@ class _WatchConnectionScreenState extends State<WatchConnectionScreen>
         onPressed = () async {
           HapticFeedback.lightImpact();
           // Start user session when they complete watch connection
-          await SessionService.instance.startSession(userType: 'patient');
+          // Get the current user's UID
+          final uid = FirebaseAuth.instance.currentUser?.uid ?? 
+                      await SessionService.instance.getCurrentUid();
+          await SessionService.instance.startSession(userType: 'patient', uid: uid);
 
           // Debug prints to check what data is being passed to NextScreen
           print(

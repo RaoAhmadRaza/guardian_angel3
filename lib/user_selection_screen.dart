@@ -9,6 +9,7 @@ import 'providers/theme_provider.dart';
 import 'patient_age_selection_screen.dart';
 import 'guardian_details_screen.dart';
 import 'doctor_details_screen.dart';
+import 'services/session_service.dart';
 import 'onboarding/services/onboarding_local_service.dart';
 
 enum UserRole { patient, guardian, doctor, developer }
@@ -767,10 +768,16 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
                                       HapticFeedback.mediumImpact();
                                       
                                       // STEP 2: Save role to Local Table (OFFLINE-FIRST)
-                                      // Try Firebase Auth first, fallback to local storage for simulator mode
+                                      // Try Firebase Auth first, then SessionService, fallback to local storage
                                       String? uid = FirebaseAuth.instance.currentUser?.uid;
                                       
-                                      // Fallback for simulator mode: get UID from local storage
+                                      // Fallback: get UID from SessionService (set during auth)
+                                      if (uid == null || uid.isEmpty) {
+                                        uid = await SessionService.instance.getCurrentUid();
+                                        debugPrint('[UserSelectionScreen] Using UID from SessionService: $uid');
+                                      }
+                                      
+                                      // Last resort fallback for simulator mode
                                       if (uid == null || uid.isEmpty) {
                                         uid = OnboardingLocalService.instance.getLastSavedUid();
                                         debugPrint('[UserSelectionScreen] Using fallback UID from local storage: $uid');

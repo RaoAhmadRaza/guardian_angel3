@@ -1,7 +1,0 @@
-{
-  "requestFramePermissions": [
-    "geolocation"
-  ],
-  "description": "Guardian Angel - Senior-Friendly Geofencing App",
-  "name": "App"
-}

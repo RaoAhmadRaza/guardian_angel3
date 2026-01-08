@@ -4,6 +4,7 @@ class SessionService {
   static const String _sessionKey = 'user_session_timestamp';
   static const String _loginStatusKey = 'user_logged_in';
   static const String _userTypeKey = 'user_type';
+  static const String _userUidKey = 'current_user_uid';
   static const int _sessionDurationDays = 2;
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -62,7 +63,10 @@ class SessionService {
   }
 
   /// Start a new user session
-  Future<void> startSession({String userType = 'patient'}) async {
+  /// 
+  /// [userType] is 'patient', 'caregiver', or 'doctor'
+  /// [uid] is the Firebase Auth UID for the current user (REQUIRED for multi-user support)
+  Future<void> startSession({String userType = 'patient', String? uid}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final currentTimestamp = DateTime.now().millisecondsSinceEpoch;
@@ -70,9 +74,15 @@ class SessionService {
       await prefs.setInt(_sessionKey, currentTimestamp);
       await prefs.setBool(_loginStatusKey, true);
       await prefs.setString(_userTypeKey, userType);
+      
+      // Store the current user's UID - critical for multi-user support
+      if (uid != null && uid.isNotEmpty) {
+        await prefs.setString(_userUidKey, uid);
+        print('👤 SessionService: Stored UID: $uid');
+      }
 
       print(
-          '🎉 SessionService: New session started at ${DateTime.now()} for $userType');
+          '🎉 SessionService: New session started at ${DateTime.now()} for $userType (uid: $uid)');
     } catch (e) {
       print('❌ SessionService Error starting session: $e');
     }
@@ -86,6 +96,7 @@ class SessionService {
       await prefs.remove(_sessionKey);
       await prefs.setBool(_loginStatusKey, false);
       await prefs.remove(_userTypeKey);
+      await prefs.remove(_userUidKey);
 
       print('👋 SessionService: Session ended');
     } catch (e) {
@@ -106,6 +117,23 @@ class SessionService {
     }
   }
 
+  /// Get the current user's UID from the session.
+  /// 
+  /// This is the CORRECT way to get the current user's UID when
+  /// FirebaseAuth.instance.currentUser might be null (e.g., slow auth sync).
+  /// Returns null if no session exists.
+  Future<String?> getCurrentUid() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final uid = prefs.getString(_userUidKey);
+      print('👤 SessionService: Current UID: $uid');
+      return uid;
+    } catch (e) {
+      print('❌ SessionService Error getting current UID: $e');
+      return null;
+    }
+  }
+
   /// Reset session (for debug purposes)
   Future<void> resetSession() async {
     try {
@@ -114,6 +142,7 @@ class SessionService {
       await prefs.remove(_sessionKey);
       await prefs.remove(_loginStatusKey);
       await prefs.remove(_userTypeKey);
+      await prefs.remove(_userUidKey);
 
       print('🔄 SessionService: Session reset (debug)');
     } catch (e) {
@@ -140,12 +169,15 @@ class SessionService {
         daysSinceSession = DateTime.now().difference(sessionDate).inDays;
       }
 
+      final uid = prefs.getString(_userUidKey) ?? 'not set';
+
       return {
         'isLoggedIn': isLoggedIn,
         'sessionDate': sessionDateStr,
         'daysSinceSession': daysSinceSession,
         'sessionValid': await hasValidSession(),
         'userType': userType,
+        'uid': uid,
       };
     } catch (e) {
       return {'error': e.toString()};

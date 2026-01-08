@@ -1,0 +1,7 @@
+{
+  "name": "Guardian Angel Newspaper",
+  "description": "A calm, curated daily reading companion designed for elderly users to stay mentally engaged and informed without stress.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

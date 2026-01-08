@@ -14,6 +14,7 @@ import 'onboarding/services/onboarding_local_service.dart';
 import 'services/session_service.dart';
 import 'next_screen.dart';
 import 'caregiver_main_screen.dart';
+import 'profile/user_profile_remote_service.dart';
 
 class TimeLuxLoginScreen extends StatefulWidget {
   const TimeLuxLoginScreen({super.key});
@@ -54,40 +55,8 @@ class _TimeLuxLoginScreenState extends State<TimeLuxLoginScreen> {
           ),
         );
         
-        // Check if user has already completed onboarding
-        final uid = result.user!.uid;
-        final onboardingState = OnboardingLocalService.instance.getOnboardingState(uid);
-        debugPrint('[LoginScreen] Onboarding state for $uid: $onboardingState');
-        
-        if (onboardingState == OnboardingState.caregiverComplete) {
-          // User already completed caregiver onboarding - go to caregiver home
-          await SessionService.instance.startSession(userType: 'caregiver');
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const CaregiverMainScreen(),
-            ),
-          );
-        } else if (onboardingState == OnboardingState.patientComplete) {
-          // User already completed patient onboarding - go to patient home
-          await SessionService.instance.startSession(userType: 'patient');
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const NextScreen(),
-            ),
-          );
-        } else {
-          // User needs to complete onboarding - go to Role Selection Screen (Step 2)
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const UserSelectionScreen(),
-            ),
-          );
-        }
+        // Determine where to navigate based on user's role
+        await _navigateBasedOnRole(result.user!.uid);
       } else if (result.errorCode != 'cancelled') {
         _showError(result.errorMessage ?? 'Google sign-in failed');
       }
@@ -127,40 +96,8 @@ class _TimeLuxLoginScreenState extends State<TimeLuxLoginScreen> {
           ),
         );
         
-        // Check if user has already completed onboarding
-        final uid = result.user!.uid;
-        final onboardingState = OnboardingLocalService.instance.getOnboardingState(uid);
-        debugPrint('[LoginScreen] Onboarding state for $uid: $onboardingState');
-        
-        if (onboardingState == OnboardingState.caregiverComplete) {
-          // User already completed caregiver onboarding - go to caregiver home
-          await SessionService.instance.startSession(userType: 'caregiver');
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const CaregiverMainScreen(),
-            ),
-          );
-        } else if (onboardingState == OnboardingState.patientComplete) {
-          // User already completed patient onboarding - go to patient home
-          await SessionService.instance.startSession(userType: 'patient');
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const NextScreen(),
-            ),
-          );
-        } else {
-          // User needs to complete onboarding - go to Role Selection Screen (Step 2)
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const UserSelectionScreen(),
-            ),
-          );
-        }
+        // Determine where to navigate based on user's role
+        await _navigateBasedOnRole(result.user!.uid);
       } else if (result.errorCode != 'cancelled') {
         _showError(result.errorMessage ?? 'Apple sign-in failed');
       }
@@ -173,6 +110,82 @@ class _TimeLuxLoginScreenState extends State<TimeLuxLoginScreen> {
         setState(() => isAppleLoading = false);
       }
     }
+  }
+
+  /// Determines the user's role and navigates to the appropriate screen.
+  /// 
+  /// Priority:
+  /// 1. Check local onboarding state (for users who signed up on this device)
+  /// 2. Check Firestore profile (for users who signed up on another device)
+  /// 3. If neither found, go to role selection (new user)
+  Future<void> _navigateBasedOnRole(String uid) async {
+    debugPrint('[LoginScreen] Determining role for user: $uid');
+    
+    // FIRST: Check local onboarding state
+    final onboardingState = OnboardingLocalService.instance.getOnboardingState(uid);
+    debugPrint('[LoginScreen] Local onboarding state: $onboardingState');
+    
+    if (onboardingState == OnboardingState.caregiverComplete) {
+      debugPrint('[LoginScreen] Local state: caregiver complete - navigating to caregiver home');
+      await SessionService.instance.startSession(userType: 'caregiver', uid: uid);
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const CaregiverMainScreen()),
+      );
+      return;
+    } else if (onboardingState == OnboardingState.patientComplete) {
+      debugPrint('[LoginScreen] Local state: patient complete - navigating to patient home');
+      await SessionService.instance.startSession(userType: 'patient', uid: uid);
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const NextScreen()),
+      );
+      return;
+    }
+    
+    // SECOND: Check Firestore for existing profile (user may have signed up on another device)
+    debugPrint('[LoginScreen] Local state incomplete, checking Firestore...');
+    try {
+      final profileService = UserProfileRemoteService();
+      final existingProfile = await profileService.fetchProfile(uid);
+      
+      if (existingProfile != null && existingProfile.role.isNotEmpty) {
+        debugPrint('[LoginScreen] Found Firestore profile with role: ${existingProfile.role}');
+        
+        if (existingProfile.role == 'caregiver') {
+          await SessionService.instance.startSession(userType: 'caregiver', uid: uid);
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const CaregiverMainScreen()),
+          );
+          return;
+        } else if (existingProfile.role == 'patient') {
+          await SessionService.instance.startSession(userType: 'patient', uid: uid);
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const NextScreen()),
+          );
+          return;
+        } else if (existingProfile.role == 'doctor') {
+          // TODO: Navigate to doctor screen when implemented
+          debugPrint('[LoginScreen] Doctor role detected, navigating to role selection for now');
+        }
+      }
+    } catch (e) {
+      debugPrint('[LoginScreen] Error fetching Firestore profile: $e');
+    }
+    
+    // THIRD: No profile found - user needs to complete onboarding
+    debugPrint('[LoginScreen] No existing profile found, redirecting to role selection');
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const UserSelectionScreen()),
+    );
   }
 
   /// STEP 1: Saves auth basics to Local User Base Table (OFFLINE-FIRST).

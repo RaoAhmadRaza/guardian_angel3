@@ -107,21 +107,61 @@ class RelationshipFirestoreService {
   /// Finds a relationship by invite code in Firestore.
   /// 
   /// Used as fallback when local lookup fails.
+  /// Tries multiple formats: with hyphen, without hyphen, uppercase.
   Future<RelationshipModel?> findByInviteCode(String inviteCode) async {
+    debugPrint('[RelationshipFirestoreService] Looking up invite code: "$inviteCode"');
+    
+    // Normalize: remove spaces, uppercase
+    final normalized = inviteCode.trim().toUpperCase();
+    
+    // Try different formats the code might be stored as
+    final codesToTry = <String>{
+      normalized,
+      normalized.replaceAll('-', ''), // Without hyphen: ABC123
+      // Add hyphen if missing (format: ABC-123)
+      if (!normalized.contains('-') && normalized.length == 6)
+        '${normalized.substring(0, 3)}-${normalized.substring(3)}',
+      // Original input just in case
+      inviteCode.trim(),
+    };
+    
+    debugPrint('[RelationshipFirestoreService] Will try these formats: $codesToTry');
+    
     try {
-      final query = await _collection
-          .where('invite_code', isEqualTo: inviteCode)
-          .limit(1)
-          .get();
+      for (final code in codesToTry) {
+        debugPrint('[RelationshipFirestoreService] Trying invite code: "$code"');
+        
+        final query = await _collection
+            .where('invite_code', isEqualTo: code)
+            .limit(1)
+            .get();
 
-      if (query.docs.isEmpty) return null;
+        debugPrint('[RelationshipFirestoreService] Query for "$code" returned ${query.docs.length} docs');
+        
+        if (query.docs.isNotEmpty) {
+          final doc = query.docs.first;
+          debugPrint('[RelationshipFirestoreService] Found doc ID: ${doc.id}');
+          debugPrint('[RelationshipFirestoreService] Doc data keys: ${doc.data().keys.toList()}');
+          debugPrint('[RelationshipFirestoreService] Doc invite_code: ${doc.data()['invite_code']}');
+          
+          if (doc.data().isNotEmpty) {
+            return RelationshipModel.fromJson(doc.data());
+          }
+        }
+      }
       
-      final doc = query.docs.first;
-      if (doc.data().isEmpty) return null;
+      // If no match found, log all relationships for debugging
+      debugPrint('[RelationshipFirestoreService] No match found. Listing all relationships for debug...');
+      final allDocs = await _collection.limit(10).get();
+      for (final doc in allDocs.docs) {
+        debugPrint('[RelationshipFirestoreService] Available: id=${doc.id}, invite_code=${doc.data()['invite_code']}');
+      }
       
-      return RelationshipModel.fromJson(doc.data());
-    } catch (e) {
+      debugPrint('[RelationshipFirestoreService] No documents found for any format of invite code');
+      return null;
+    } catch (e, stack) {
       debugPrint('[RelationshipFirestoreService] Find by invite code failed: $e');
+      debugPrint('[RelationshipFirestoreService] Stack: $stack');
       _telemetry.increment('relationship.firestore.find_invite.error');
       return null;
     }

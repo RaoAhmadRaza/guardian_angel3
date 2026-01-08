@@ -13,6 +13,10 @@ import 'theme/animation_performance.dart';
 import 'user_selection_screen.dart';
 import 'firebase/auth/phone_auth_provider.dart';
 import 'onboarding/services/onboarding_local_service.dart';
+import 'services/session_service.dart';
+import 'profile/user_profile_remote_service.dart';
+import 'next_screen.dart';
+import 'caregiver_main_screen.dart';
 
 class OTPVerificationScreen extends StatefulWidget {
   final String phoneNumber;
@@ -176,13 +180,21 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen>
     );
 
     if (widget.isFromSignup) {
+      // New signup - go to role selection
       Navigator.of(context).pushReplacement(
         AppMotion.slideTransition(page: const UserSelectionScreen()),
       );
     } else {
-      Navigator.of(context).pushReplacement(
-        AppMotion.slideTransition(page: const UserVerificationScreen()),
-      );
+      // Login - determine role and navigate appropriately
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await _navigateBasedOnRole(user.uid);
+      } else {
+        // Fallback to role selection if no user
+        Navigator.of(context).pushReplacement(
+          AppMotion.slideTransition(page: const UserSelectionScreen()),
+        );
+      }
     }
   }
   
@@ -247,14 +259,17 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen>
       ),
     );
 
+    // Generate the same mock UID as used in _saveSimulatorUserBaseLocally
+    final mockUid = 'SIMULATOR_${widget.phoneNumber.replaceAll(RegExp(r'[^0-9]'), '')}';
+
     if (widget.isFromSignup) {
+      // New signup - go to role selection
       Navigator.of(context).pushReplacement(
         AppMotion.slideTransition(page: const UserSelectionScreen()),
       );
     } else {
-      Navigator.of(context).pushReplacement(
-        AppMotion.slideTransition(page: const UserVerificationScreen()),
-      );
+      // Login - determine role and navigate appropriately
+      await _navigateBasedOnRole(mockUid);
     }
   }
 
@@ -278,6 +293,74 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen>
       debugPrint('[OTPVerificationScreen] SIMULATOR Step 1 FAILED: $e');
       return false;
     }
+  }
+
+  /// Determines the user's role and navigates to the appropriate screen.
+  /// 
+  /// Priority:
+  /// 1. Check local onboarding state (for users who signed up on this device)
+  /// 2. Check Firestore profile (for users who signed up on another device)
+  /// 3. If neither found, go to role selection (new user)
+  Future<void> _navigateBasedOnRole(String uid) async {
+    debugPrint('[OTPVerificationScreen] Determining role for user: $uid');
+    
+    // FIRST: Check local onboarding state
+    final onboardingState = OnboardingLocalService.instance.getOnboardingState(uid);
+    debugPrint('[OTPVerificationScreen] Local onboarding state: $onboardingState');
+    
+    if (onboardingState == OnboardingState.caregiverComplete) {
+      debugPrint('[OTPVerificationScreen] Local state: caregiver complete');
+      await SessionService.instance.startSession(userType: 'caregiver', uid: uid);
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        AppMotion.slideTransition(page: const CaregiverMainScreen()),
+      );
+      return;
+    } else if (onboardingState == OnboardingState.patientComplete) {
+      debugPrint('[OTPVerificationScreen] Local state: patient complete');
+      await SessionService.instance.startSession(userType: 'patient', uid: uid);
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        AppMotion.slideTransition(page: const NextScreen()),
+      );
+      return;
+    }
+    
+    // SECOND: Check Firestore for existing profile
+    debugPrint('[OTPVerificationScreen] Local state incomplete, checking Firestore...');
+    try {
+      final profileService = UserProfileRemoteService();
+      final existingProfile = await profileService.fetchProfile(uid);
+      
+      if (existingProfile != null && existingProfile.role.isNotEmpty) {
+        debugPrint('[OTPVerificationScreen] Found Firestore profile with role: ${existingProfile.role}');
+        
+        if (existingProfile.role == 'caregiver') {
+          await SessionService.instance.startSession(userType: 'caregiver', uid: uid);
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            AppMotion.slideTransition(page: const CaregiverMainScreen()),
+          );
+          return;
+        } else if (existingProfile.role == 'patient') {
+          await SessionService.instance.startSession(userType: 'patient', uid: uid);
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            AppMotion.slideTransition(page: const NextScreen()),
+          );
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint('[OTPVerificationScreen] Error fetching Firestore profile: $e');
+    }
+    
+    // THIRD: No profile found - user needs to complete onboarding
+    debugPrint('[OTPVerificationScreen] No existing profile found, redirecting to role selection');
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      AppMotion.slideTransition(page: const UserSelectionScreen()),
+    );
   }
 
   /// Check if running on iOS Simulator

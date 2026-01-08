@@ -101,6 +101,7 @@ dependencies:
   # Development tools
   storybook_flutter: ^0.14.1
   # overlay_nav_bar removed
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:

@@ -320,6 +320,41 @@ class DoctorRelationshipRepositoryHive implements DoctorRelationshipRepository {
     }
   }
 
+  /// Saves a relationship directly to local storage.
+  /// 
+  /// Used for syncing from Firestore when a relationship exists remotely
+  /// but not locally (e.g., patient created invite on another device).
+  Future<DoctorRelationshipResult<void>> saveLocally(DoctorRelationshipModel relationship) async {
+    debugPrint('[DoctorRelationshipRepositoryHive] Saving relationship locally: ${relationship.id}');
+    
+    try {
+      // Validate before saving
+      relationship.validate();
+      
+      // Save to Hive
+      await _box.put(relationship.id, relationship);
+      
+      debugPrint('[DoctorRelationshipRepositoryHive] Relationship saved locally: ${relationship.id}');
+      _telemetry.increment('doctor_relationship.save_local.success');
+      
+      return DoctorRelationshipResult.success(null);
+    } catch (e) {
+      debugPrint('[DoctorRelationshipRepositoryHive] Save locally failed: $e');
+      _telemetry.increment('doctor_relationship.save_local.error');
+      
+      if (e is DoctorRelationshipValidationError) {
+        return DoctorRelationshipResult.failure(
+          DoctorRelationshipErrorCodes.validationError,
+          e.message,
+        );
+      }
+      return DoctorRelationshipResult.failure(
+        DoctorRelationshipErrorCodes.storageError,
+        'Failed to save relationship locally: $e',
+      );
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // PRIVATE HELPERS
   // ═══════════════════════════════════════════════════════════════════════════

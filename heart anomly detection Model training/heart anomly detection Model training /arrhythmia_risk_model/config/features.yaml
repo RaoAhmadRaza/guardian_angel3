@@ -1,0 +1,205 @@
+# Guardian Angel - HRV Feature Definitions
+# =============================================================================
+# This file documents all HRV features used in the arrhythmia risk model.
+# Each feature includes clinical relevance and computation method.
+
+# =============================================================================
+# TIME-DOMAIN FEATURES
+# =============================================================================
+# Standard HRV measures computed directly from RR intervals
+
+time_domain:
+  mean_rr:
+    name: "Mean RR Interval"
+    unit: "ms"
+    description: "Average duration between consecutive R-peaks"
+    clinical_relevance: "Inversely related to heart rate; baseline cardiac rhythm indicator"
+    computation: "mean(RR)"
+    
+  sdnn:
+    name: "SDNN"
+    unit: "ms"
+    description: "Standard deviation of all NN (normal-to-normal) intervals"
+    clinical_relevance: "Overall HRV; reflects all cyclic components; reduced in cardiac disease"
+    computation: "std(NN)"
+    reference_range:
+      normal: ">100 ms (24h)"
+      reduced: "<50 ms"
+    
+  rmssd:
+    name: "RMSSD"
+    unit: "ms"
+    description: "Root mean square of successive RR interval differences"
+    clinical_relevance: "Parasympathetic activity marker; vagal tone indicator"
+    computation: "sqrt(mean(diff(RR)^2))"
+    reference_range:
+      normal: "27-75 ms"
+      
+  pnn50:
+    name: "pNN50"
+    unit: "%"
+    description: "Percentage of successive intervals differing by >50ms"
+    clinical_relevance: "Parasympathetic modulation; correlates with RMSSD"
+    computation: "100 * count(|diff(RR)| > 50) / total_intervals"
+    
+  pnn20:
+    name: "pNN20"
+    unit: "%"
+    description: "Percentage of successive intervals differing by >20ms"
+    clinical_relevance: "More sensitive version of pNN50 for short recordings"
+    computation: "100 * count(|diff(RR)| > 20) / total_intervals"
+    
+  mean_hr:
+    name: "Mean Heart Rate"
+    unit: "bpm"
+    description: "Average heart rate derived from RR intervals"
+    clinical_relevance: "Basic cardiovascular status; affected by multiple systems"
+    computation: "60000 / mean(RR)"
+    
+  std_hr:
+    name: "HR Standard Deviation"
+    unit: "bpm"
+    description: "Standard deviation of instantaneous heart rate"
+    clinical_relevance: "Heart rate variability in rate units"
+    computation: "std(60000 / RR)"
+    
+  cv_rr:
+    name: "Coefficient of Variation"
+    unit: "%"
+    description: "Normalized measure of RR variability"
+    clinical_relevance: "Heart rate-independent variability measure"
+    computation: "100 * std(RR) / mean(RR)"
+
+# =============================================================================
+# FREQUENCY-DOMAIN FEATURES
+# =============================================================================
+# Spectral analysis of RR interval time series
+
+frequency_domain:
+  vlf_power:
+    name: "VLF Power"
+    unit: "ms²"
+    description: "Power in very low frequency band (0.003-0.04 Hz)"
+    clinical_relevance: "Thermoregulation, RAAS, peripheral vasomotor; long-term regulation"
+    computation: "integral(PSD, 0.003-0.04 Hz)"
+    note: "Requires >5 min recording; interpretation debated"
+    
+  lf_power:
+    name: "LF Power"
+    unit: "ms²"
+    description: "Power in low frequency band (0.04-0.15 Hz)"
+    clinical_relevance: "Mixed sympathetic and parasympathetic; baroreflex sensitivity"
+    computation: "integral(PSD, 0.04-0.15 Hz)"
+    
+  hf_power:
+    name: "HF Power"
+    unit: "ms²"
+    description: "Power in high frequency band (0.15-0.4 Hz)"
+    clinical_relevance: "Parasympathetic activity; respiratory sinus arrhythmia"
+    computation: "integral(PSD, 0.15-0.4 Hz)"
+    
+  lf_hf_ratio:
+    name: "LF/HF Ratio"
+    unit: "ratio"
+    description: "Ratio of LF to HF power"
+    clinical_relevance: "Sympathovagal balance (interpretation debated)"
+    computation: "lf_power / hf_power"
+    note: "Traditional interpretation as sympathetic marker is oversimplified"
+    
+  total_power:
+    name: "Total Power"
+    unit: "ms²"
+    description: "Total spectral power (≤0.4 Hz)"
+    clinical_relevance: "Overall variability magnitude"
+    computation: "integral(PSD, 0-0.4 Hz)"
+    
+  lf_nu:
+    name: "LF Normalized Units"
+    unit: "n.u."
+    description: "LF power in normalized units"
+    clinical_relevance: "Relative LF contribution, reduced VLF influence"
+    computation: "100 * lf_power / (lf_power + hf_power)"
+    
+  hf_nu:
+    name: "HF Normalized Units"
+    unit: "n.u."
+    description: "HF power in normalized units"
+    clinical_relevance: "Relative HF contribution"
+    computation: "100 * hf_power / (lf_power + hf_power)"
+
+# =============================================================================
+# NON-LINEAR FEATURES
+# =============================================================================
+# Complexity and non-linear dynamics of HRV
+
+nonlinear:
+  sd1:
+    name: "Poincaré SD1"
+    unit: "ms"
+    description: "Standard deviation perpendicular to line-of-identity in Poincaré plot"
+    clinical_relevance: "Short-term variability; correlates with RMSSD"
+    computation: "std(RR[n+1] - RR[n]) / sqrt(2)"
+    
+  sd2:
+    name: "Poincaré SD2"
+    unit: "ms"
+    description: "Standard deviation along line-of-identity in Poincaré plot"
+    clinical_relevance: "Long-term variability; correlates with SDNN"
+    computation: "std(RR[n+1] + RR[n]) / sqrt(2)"
+    
+  sd1_sd2_ratio:
+    name: "SD1/SD2 Ratio"
+    unit: "ratio"
+    description: "Ratio of short-term to long-term variability"
+    clinical_relevance: "Balance between short and long-term HRV components"
+    computation: "sd1 / sd2"
+    
+  sample_entropy:
+    name: "Sample Entropy"
+    unit: "dimensionless"
+    description: "Measure of signal complexity and unpredictability"
+    clinical_relevance: "Reduced in pathological states; complexity loss in disease"
+    computation: "SampEn(m=2, r=0.2*std)"
+    parameters:
+      embedding_dimension: 2
+      tolerance: "0.2 * std(RR)"
+      
+  approximate_entropy:
+    name: "Approximate Entropy"
+    unit: "dimensionless"
+    description: "Regularity measure; older version of Sample Entropy"
+    clinical_relevance: "System complexity; decreased in cardiovascular disease"
+    computation: "ApEn(m=2, r=0.2*std)"
+    parameters:
+      embedding_dimension: 2
+      tolerance: "0.2 * std(RR)"
+
+# =============================================================================
+# FEATURE SELECTION NOTES
+# =============================================================================
+# Guidelines for feature use in arrhythmia screening model
+
+feature_selection_notes:
+  recommended_minimum:
+    - "sdnn"
+    - "rmssd"
+    - "pnn50"
+    - "lf_power"
+    - "hf_power"
+    - "lf_hf_ratio"
+    - "sd1"
+    - "sample_entropy"
+    
+  correlation_groups:
+    vagal_markers: ["rmssd", "pnn50", "hf_power", "sd1"]
+    overall_hrv: ["sdnn", "total_power", "sd2"]
+    complexity: ["sample_entropy", "approximate_entropy"]
+    
+  recording_requirements:
+    short_term: "5 minutes minimum"
+    long_term: "24 hours for full VLF interpretation"
+    
+  artifacts_sensitivity:
+    high: ["pnn50", "rmssd", "entropy measures"]
+    moderate: ["sdnn", "frequency domain"]
+    note: "Robust preprocessing critical before feature extraction"

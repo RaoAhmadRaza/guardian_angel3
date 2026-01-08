@@ -21,7 +21,7 @@ class DoctorRelationshipService {
   static final DoctorRelationshipService _instance = DoctorRelationshipService._();
   static DoctorRelationshipService get instance => _instance;
 
-  final DoctorRelationshipRepository _repository = DoctorRelationshipRepositoryHive();
+  final DoctorRelationshipRepositoryHive _repository = DoctorRelationshipRepositoryHive();
   final DoctorRelationshipFirestoreService _firestore = DoctorRelationshipFirestoreService.instance;
 
   /// Creates a new patient-doctor invite.
@@ -62,7 +62,8 @@ class DoctorRelationshipService {
   /// 
   /// Flow:
   /// 1. Validate and update in Hive (local)
-  /// 2. Mirror to Firestore (non-blocking)
+  /// 2. If not found locally, check Firestore and sync
+  /// 3. Mirror to Firestore (non-blocking)
   /// 
   /// Returns the updated relationship.
   Future<DoctorRelationshipResult<DoctorRelationshipModel>> acceptDoctorInvite({
@@ -70,10 +71,14 @@ class DoctorRelationshipService {
     required String doctorId,
   }) async {
     debugPrint('[DoctorRelationshipService] Accepting doctor invite: $inviteCode');
+    
+    // Normalize the invite code for matching
+    final normalizedCode = _normalizeInviteCode(inviteCode);
+    debugPrint('[DoctorRelationshipService] Normalized code: $normalizedCode');
 
     // Step 1: Accept locally
     final result = await _repository.acceptDoctorInvite(
-      inviteCode: inviteCode,
+      inviteCode: normalizedCode,
       doctorId: doctorId,
     );
 
@@ -81,11 +86,50 @@ class DoctorRelationshipService {
       // If local lookup fails, try Firestore as fallback
       if (result.errorCode == DoctorRelationshipErrorCodes.invalidInviteCode) {
         debugPrint('[DoctorRelationshipService] Local lookup failed, trying Firestore');
-        final firestoreRelationship = await _firestore.findByInviteCode(inviteCode);
+        
+        // Try multiple formats in Firestore
+        DoctorRelationshipModel? firestoreRelationship;
+        final codesToTry = _getCodeVariants(inviteCode);
+        
+        for (final code in codesToTry) {
+          firestoreRelationship = await _firestore.findByInviteCode(code);
+          if (firestoreRelationship != null) {
+            debugPrint('[DoctorRelationshipService] Found in Firestore with code: $code');
+            break;
+          }
+        }
         
         if (firestoreRelationship != null) {
-          // Found in Firestore - sync locally and retry
-          debugPrint('[DoctorRelationshipService] Found in Firestore but local sync not implemented');
+          debugPrint('[DoctorRelationshipService] Found in Firestore, syncing locally...');
+          
+          // Save to local storage first
+          final syncResult = await _repository.saveLocally(firestoreRelationship);
+          if (!syncResult.success) {
+            debugPrint('[DoctorRelationshipService] Local sync failed: ${syncResult.errorMessage}');
+            return DoctorRelationshipResult.failure(
+              DoctorRelationshipErrorCodes.storageError,
+              'Failed to sync relationship locally',
+            );
+          }
+          
+          // Now retry the accept with the correct invite code
+          final retryResult = await _repository.acceptDoctorInvite(
+            inviteCode: firestoreRelationship.inviteCode,
+            doctorId: doctorId,
+          );
+          
+          if (retryResult.success && retryResult.data != null) {
+            // Mirror to Firestore
+            _firestore.mirrorRelationship(retryResult.data!).then((_) {
+              debugPrint('[DoctorRelationshipService] Firestore mirror complete (after sync)');
+            }).catchError((e) {
+              debugPrint('[DoctorRelationshipService] Firestore mirror failed: $e');
+            });
+            
+            return retryResult;
+          }
+          
+          return retryResult;
         }
       }
       
@@ -101,6 +145,35 @@ class DoctorRelationshipService {
     });
 
     return result;
+  }
+  
+  /// Normalizes an invite code for consistent matching.
+  String _normalizeInviteCode(String code) {
+    return code.toUpperCase().trim();
+  }
+  
+  /// Gets all variants of an invite code to try.
+  List<String> _getCodeVariants(String code) {
+    final normalized = _normalizeInviteCode(code);
+    final variants = <String>{normalized};
+    
+    // Try without hyphen
+    if (normalized.contains('-')) {
+      variants.add(normalized.replaceAll('-', ''));
+    }
+    
+    // Try with DOC- prefix if not present
+    if (!normalized.startsWith('DOC-')) {
+      variants.add('DOC-$normalized');
+      variants.add('DOC-${normalized.replaceAll('-', '')}');
+    }
+    
+    // Try without DOC- prefix
+    if (normalized.startsWith('DOC-')) {
+      variants.add(normalized.substring(4));
+    }
+    
+    return variants.toList();
   }
 
   /// Gets relationships for a user.

@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'colors.dart';
 import 'providers/theme_provider.dart';
 import 'theme/motion.dart';
+import 'services/session_service.dart';
 import 'onboarding/services/onboarding_local_service.dart';
 
 // New Patient Details Screen import
@@ -22,8 +23,8 @@ class PatientAgeSelectionScreen extends StatefulWidget {
 }
 
 class _PatientAgeSelectionScreenState extends State<PatientAgeSelectionScreen> {
-  int selectedValue = 25;
-  final int minValue = 1;
+  int selectedValue = 60;
+  final int minValue = 50;
   final int maxValue = 120;
 
   late FixedExtentScrollController scrollController;
@@ -127,10 +128,16 @@ class _PatientAgeSelectionScreenState extends State<PatientAgeSelectionScreen> {
   /// Navigates to patient details screen with smooth transition.
   /// STEP 4B: Updates Patient User with validated age (OFFLINE-FIRST).
   Future<void> _navigateToPatientDetails() async {
-    // Get current user ID - try Firebase Auth first, fallback to local storage
+    // Get current user ID - try Firebase Auth first, then SessionService
     String? uid = FirebaseAuth.instance.currentUser?.uid;
     
-    // Fallback for simulator mode: get UID from local storage
+    // Fallback: get UID from SessionService (set during auth)
+    if (uid == null || uid.isEmpty) {
+      uid = await SessionService.instance.getCurrentUid();
+      debugPrint('[PatientAgeSelectionScreen] Using UID from SessionService: $uid');
+    }
+    
+    // Last resort fallback for simulator mode
     if (uid == null || uid.isEmpty) {
       uid = OnboardingLocalService.instance.getLastSavedUid();
       debugPrint('[PatientAgeSelectionScreen] Using fallback UID from local storage: $uid');

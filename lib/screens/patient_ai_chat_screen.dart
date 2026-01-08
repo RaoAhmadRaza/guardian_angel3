@@ -8,6 +8,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'patient_ai_chat/patient_ai_chat_state.dart';
 import 'patient_ai_chat/patient_ai_chat_data_provider.dart';
+import '../services/guardian_ai_service.dart';
 
 // --- THEME COLORS ---
 
@@ -89,6 +90,9 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
   PatientAIChatState? _state;
   final PatientAIChatDataProvider _dataProvider = PatientAIChatDataProvider();
   
+  // Guardian AI Service
+  final GuardianAIService _aiService = GuardianAIService();
+  
   // Local UI state (not persisted)
   bool _isMenuOpen = false;
   
@@ -135,22 +139,22 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
     super.dispose();
   }
 
-  void _handleSend([String? message]) {
+  void _handleSend([String? message]) async {
     if (_state == null) return;
     final text = message ?? _textController.text;
     if (text.trim().isEmpty) return;
     
-    final newMessage = ChatMessage(
-      id: DateTime.now().toString(),
+    final userMessage = ChatMessage(
+      id: 'user_${DateTime.now().millisecondsSinceEpoch}',
       text: text,
       sender: 'user',
       timestamp: DateTime.now(),
-      status: 'sending',
+      status: 'sent',
     );
     
     setState(() {
       _state = _state!.copyWith(
-        messages: [..._state!.messages, newMessage],
+        messages: [..._state!.messages, userMessage],
         isAITyping: true,
       );
       _textController.clear();
@@ -158,15 +162,51 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
     
     _scrollToBottom();
 
-    // TODO: Replace with real AI service call
-    // For now, just mark as not typing after delay (no fake response)
-    Future.delayed(const Duration(seconds: 2), () {
+    // Call Guardian AI Service
+    try {
+      final response = await _aiService.sendMessage(text);
+      
       if (mounted) {
+        final aiMessage = ChatMessage(
+          id: 'ai_${DateTime.now().millisecondsSinceEpoch}',
+          text: response.text,
+          sender: 'ai',
+          timestamp: DateTime.now(),
+          status: response.isError ? 'error' : 'delivered',
+        );
+        
         setState(() {
-          _state = _state!.copyWith(isAITyping: false);
+          _state = _state!.copyWith(
+            messages: [..._state!.messages, aiMessage],
+            isAITyping: false,
+          );
         });
+        
+        _scrollToBottom();
+        
+        // Persist the conversation (save each message)
+        _dataProvider.saveMessage(aiMessage);
       }
-    });
+    } catch (e) {
+      if (mounted) {
+        final errorMessage = ChatMessage(
+          id: 'ai_error_${DateTime.now().millisecondsSinceEpoch}',
+          text: "I'm sorry, dear. I had trouble understanding that. Could you please try again? I'm here for you! 💙",
+          sender: 'ai',
+          timestamp: DateTime.now(),
+          status: 'error',
+        );
+        
+        setState(() {
+          _state = _state!.copyWith(
+            messages: [..._state!.messages, errorMessage],
+            isAITyping: false,
+          );
+        });
+        
+        _scrollToBottom();
+      }
+    }
   }
 
   void _scrollToBottom() {

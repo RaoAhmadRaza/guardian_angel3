@@ -74,6 +74,73 @@ class AIConfidenceBreakdown {
   });
 }
 
+/// Arrhythmia risk analysis data from ML model.
+class ArrhythmiaRiskData {
+  /// Risk probability (0.0 - 1.0)
+  final double riskProbability;
+
+  /// Risk level classification: "low", "moderate", "elevated", "high"
+  final String riskLevel;
+
+  /// When this analysis was performed
+  final DateTime analyzedAt;
+
+  /// Whether this result came from cache
+  final bool fromCache;
+
+  /// Model inference latency in milliseconds
+  final int? inferenceLatencyMs;
+
+  /// Number of RR intervals used in analysis
+  final int? dataPointsAnalyzed;
+
+  const ArrhythmiaRiskData({
+    required this.riskProbability,
+    required this.riskLevel,
+    required this.analyzedAt,
+    this.fromCache = false,
+    this.inferenceLatencyMs,
+    this.dataPointsAnalyzed,
+  });
+
+  /// Display string for risk level (capitalized)
+  String get riskLevelDisplay {
+    return '${riskLevel[0].toUpperCase()}${riskLevel.substring(1)}';
+  }
+
+  /// Display string for risk probability as percentage
+  String get riskPercentageDisplay {
+    return '${(riskProbability * 100).toStringAsFixed(1)}%';
+  }
+
+  /// Whether risk is elevated (moderate or higher)
+  bool get isElevated => riskProbability >= 0.3;
+
+  /// Whether risk is critical (high)
+  bool get isCritical => riskProbability >= 0.7;
+}
+
+/// Arrhythmia analysis status for UI display
+enum ArrhythmiaAnalysisStatus {
+  /// No analysis has been performed
+  notAnalyzed,
+
+  /// Analysis is in progress
+  analyzing,
+
+  /// Analysis completed successfully
+  completed,
+
+  /// Need more RR interval data
+  insufficientData,
+
+  /// Inference service is unavailable
+  serviceUnavailable,
+
+  /// Analysis failed with error
+  failed,
+}
+
 /// Complete diagnostic screen state
 class DiagnosticState {
   // === DEVICE STATUS ===
@@ -142,6 +209,17 @@ class DiagnosticState {
   /// Whether user has any previous diagnostic reports
   final bool hasDiagnosticHistory;
 
+  // === ARRHYTHMIA ANALYSIS (ML Model) ===
+
+  /// Current arrhythmia risk analysis data
+  final ArrhythmiaRiskData? arrhythmiaRisk;
+
+  /// Current arrhythmia analysis status
+  final ArrhythmiaAnalysisStatus arrhythmiaStatus;
+
+  /// Error message if arrhythmia analysis failed
+  final String? arrhythmiaErrorMessage;
+
   const DiagnosticState({
     required this.hasDeviceConnected,
     required this.hasAnyDiagnosticData,
@@ -161,6 +239,9 @@ class DiagnosticState {
     this.temperature,
     this.sleep,
     this.hasDiagnosticHistory = false,
+    this.arrhythmiaRisk,
+    this.arrhythmiaStatus = ArrhythmiaAnalysisStatus.notAnalyzed,
+    this.arrhythmiaErrorMessage,
   });
 
   /// Initial state for first-time users - NO DATA
@@ -171,6 +252,7 @@ class DiagnosticState {
       hasAnyDiagnosticData: false,
       hasDiagnosticHistory: false,
       hasCriticalAlert: false,
+      arrhythmiaStatus: ArrhythmiaAnalysisStatus.notAnalyzed,
       // All other fields are null by default
     );
   }
@@ -229,6 +311,39 @@ class DiagnosticState {
   /// Whether AI analysis is available
   bool get hasAIAnalysis => aiConfidence != null && heartRhythm != null;
 
+  /// Whether arrhythmia analysis completed successfully
+  bool get hasArrhythmiaAnalysis =>
+      arrhythmiaStatus == ArrhythmiaAnalysisStatus.completed &&
+      arrhythmiaRisk != null;
+
+  /// Whether arrhythmia analysis is in progress
+  bool get isArrhythmiaAnalyzing =>
+      arrhythmiaStatus == ArrhythmiaAnalysisStatus.analyzing;
+
+  /// Arrhythmia risk display string
+  String get arrhythmiaRiskDisplay {
+    if (arrhythmiaRisk == null) return '--';
+    return arrhythmiaRisk!.riskLevelDisplay;
+  }
+
+  /// Arrhythmia risk status message for UI
+  String get arrhythmiaStatusMessage {
+    switch (arrhythmiaStatus) {
+      case ArrhythmiaAnalysisStatus.notAnalyzed:
+        return 'Not analyzed';
+      case ArrhythmiaAnalysisStatus.analyzing:
+        return 'Analyzing...';
+      case ArrhythmiaAnalysisStatus.completed:
+        return arrhythmiaRisk?.fromCache == true ? 'Cached result' : 'Analyzed';
+      case ArrhythmiaAnalysisStatus.insufficientData:
+        return 'Need more data';
+      case ArrhythmiaAnalysisStatus.serviceUnavailable:
+        return 'Service offline';
+      case ArrhythmiaAnalysisStatus.failed:
+        return 'Analysis failed';
+    }
+  }
+
   /// Whether emergency actions should be shown (NEVER for first-time users)
   bool get shouldShowEmergencyActions {
     // Only show if we have real data AND critical thresholds are exceeded
@@ -257,6 +372,9 @@ class DiagnosticState {
     TemperatureData? temperature,
     SleepQualityData? sleep,
     bool? hasDiagnosticHistory,
+    ArrhythmiaRiskData? arrhythmiaRisk,
+    ArrhythmiaAnalysisStatus? arrhythmiaStatus,
+    String? arrhythmiaErrorMessage,
   }) {
     return DiagnosticState(
       hasDeviceConnected: hasDeviceConnected ?? this.hasDeviceConnected,
@@ -277,6 +395,9 @@ class DiagnosticState {
       temperature: temperature ?? this.temperature,
       sleep: sleep ?? this.sleep,
       hasDiagnosticHistory: hasDiagnosticHistory ?? this.hasDiagnosticHistory,
+      arrhythmiaRisk: arrhythmiaRisk ?? this.arrhythmiaRisk,
+      arrhythmiaStatus: arrhythmiaStatus ?? this.arrhythmiaStatus,
+      arrhythmiaErrorMessage: arrhythmiaErrorMessage ?? this.arrhythmiaErrorMessage,
     );
   }
 }

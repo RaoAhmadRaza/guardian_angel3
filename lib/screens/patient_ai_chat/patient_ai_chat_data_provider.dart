@@ -6,6 +6,7 @@
 /// NO FAKE DATA - Returns null/empty when data doesn't exist.
 
 import 'package:guardian_angel_fyp/screens/patient_ai_chat/patient_ai_chat_state.dart';
+import 'package:guardian_angel_fyp/services/guardian_ai_service.dart';
 
 /// Singleton data provider for patient AI chat screen
 class PatientAIChatDataProvider {
@@ -51,7 +52,7 @@ class PatientAIChatDataProvider {
     return [
       ChatMessage(
         id: 'welcome',
-        text: "I'm here whenever you're ready.",
+        text: GuardianAIService.getWelcomeMessage(),
         sender: 'ai',
         timestamp: DateTime.now(),
         status: 'sent',

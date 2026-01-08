@@ -1,0 +1,183 @@
+# Guardian Angel - Arrhythmia Risk Screening Model Configuration
+# =============================================================================
+
+project:
+  name: "guardian_angel_arrhythmia_screening"
+  version: "0.1.0"
+  description: "XGBoost-based arrhythmia risk screening using HRV features"
+
+# =============================================================================
+# PATHS
+# =============================================================================
+paths:
+  data:
+    raw: "data/raw"
+    processed: "data/processed"
+    features: "data/features"
+  models:
+    checkpoints: "models/checkpoints"
+    exported: "models/exported"
+  logs: "logs"
+
+# =============================================================================
+# DATA PROCESSING
+# =============================================================================
+data:
+  # MIT-BIH Arrhythmia Database
+  source: "mitdb"
+  sampling_frequency: 360  # Hz (MIT-BIH standard)
+  
+  # RR interval extraction
+  rr_extraction:
+    min_rr_ms: 300         # Minimum valid RR interval (ms)
+    max_rr_ms: 2000        # Maximum valid RR interval (ms)
+    ectopic_threshold: 0.2 # 20% deviation for ectopic beat detection
+  
+  # Windowing for feature extraction (wearable-aligned)
+  windowing:
+    window_size_sec: 60    # 60-second windows (wearable-compatible)
+    window_step_sec: 30    # 30-second overlap for near-real-time
+    min_beats_per_window: 40   # ~40 beats in 60s at 40 BPM minimum
+
+# =============================================================================
+# FEATURE EXTRACTION
+# =============================================================================
+features:
+  # Time-domain HRV features
+  time_domain:
+    enabled: true
+    metrics:
+      - "mean_rr"      # Mean RR interval
+      - "sdnn"         # Standard deviation of NN intervals
+      - "rmssd"        # Root mean square of successive differences
+      - "pnn50"        # Percentage of successive differences > 50ms
+      - "pnn20"        # Percentage of successive differences > 20ms
+      - "mean_hr"      # Mean heart rate
+      - "std_hr"       # Standard deviation of heart rate
+      - "cv_rr"        # Coefficient of variation of RR
+  
+  # Frequency-domain HRV features
+  frequency_domain:
+    enabled: true
+    method: "welch"    # Welch's periodogram
+    metrics:
+      - "vlf_power"    # Very low frequency power (0.003-0.04 Hz)
+      - "lf_power"     # Low frequency power (0.04-0.15 Hz)
+      - "hf_power"     # High frequency power (0.15-0.4 Hz)
+      - "lf_hf_ratio"  # LF/HF ratio
+      - "total_power"  # Total spectral power
+      - "lf_nu"        # LF normalized units
+      - "hf_nu"        # HF normalized units
+    
+    # Frequency bands (Hz)
+    bands:
+      vlf: [0.003, 0.04]
+      lf: [0.04, 0.15]
+      hf: [0.15, 0.4]
+  
+  # Non-linear HRV features
+  nonlinear:
+    enabled: true
+    metrics:
+      - "sd1"          # Poincaré SD1
+      - "sd2"          # Poincaré SD2
+      - "sd1_sd2_ratio"
+      - "sample_entropy"
+      - "approximate_entropy"
+    
+    # Entropy parameters
+    entropy:
+      embedding_dim: 2
+      tolerance_factor: 0.2  # r = 0.2 * std(RR)
+
+# =============================================================================
+# MODEL TRAINING
+# =============================================================================
+training:
+  # Random seed for reproducibility
+  random_seed: 42
+  
+  # Data splitting
+  split:
+    test_size: 0.2
+    validation_size: 0.15
+    stratify: true
+    patient_wise: true  # CRITICAL: Prevent data leakage
+  
+  # XGBoost hyperparameters (conservative defaults for screening)
+  xgboost:
+    objective: "binary:logistic"
+    eval_metric: "auc"
+    n_estimators: 200
+    max_depth: 5
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_weight: 5
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    scale_pos_weight: 1  # Adjust for class imbalance
+    
+    # Early stopping
+    early_stopping_rounds: 30
+    
+    # CPU-only (no GPU)
+    tree_method: "hist"
+    device: "cpu"
+  
+  # Cross-validation
+  cross_validation:
+    n_folds: 5
+    shuffle: true
+
+# =============================================================================
+# EVALUATION
+# =============================================================================
+evaluation:
+  metrics:
+    - "accuracy"
+    - "precision"
+    - "recall"
+    - "f1_score"
+    - "roc_auc"
+    - "pr_auc"
+    - "specificity"
+    - "sensitivity"
+  
+  # Threshold optimization
+  threshold:
+    optimize_for: "f1_score"  # Or "sensitivity" for screening
+    min_sensitivity: 0.90     # Screening requires high sensitivity
+  
+  # Calibration
+  calibration:
+    enabled: true
+    method: "isotonic"
+
+# =============================================================================
+# EXPORT
+# =============================================================================
+export:
+  formats:
+    - "json"    # XGBoost native JSON
+    - "pkl"     # Scikit-learn pipeline
+  
+  # Mobile deployment
+  mobile:
+    quantize: false          # No quantization by default
+    include_metadata: true
+    
+  # Model metadata
+  metadata:
+    include_feature_importance: true
+    include_training_config: true
+    include_evaluation_metrics: true
+
+# =============================================================================
+# LOGGING
+# =============================================================================
+logging:
+  level: "INFO"
+  format: "{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}"
+  rotation: "10 MB"
+  retention: "30 days"

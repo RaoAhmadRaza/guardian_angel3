@@ -29,6 +29,16 @@ class RelationshipRepositoryHive implements RelationshipRepository {
   /// Access the relationships box.
   Box<RelationshipModel> get _box => _boxAccessor.relationships();
 
+  /// Saves a relationship directly to local Hive storage.
+  /// 
+  /// Used for syncing relationships from Firestore to local storage.
+  /// This bypasses normal validation since the data is already validated.
+  Future<void> saveToLocal(RelationshipModel relationship) async {
+    debugPrint('[RelationshipRepositoryHive] Saving to local: ${relationship.id}');
+    await _box.put(relationship.id, relationship);
+    debugPrint('[RelationshipRepositoryHive] Saved to local: ${relationship.id}');
+  }
+
   @override
   Future<RelationshipResult<RelationshipModel>> createPatientInvite({
     required String patientId,
@@ -308,12 +318,38 @@ class RelationshipRepositoryHive implements RelationshipRepository {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /// Synchronously finds a relationship by invite code.
+  /// Handles case-insensitive matching and different formats (with/without hyphen).
   RelationshipModel? _findByInviteCodeSync(String inviteCode) {
+    // Normalize the input
+    final normalized = inviteCode.trim().toUpperCase();
+    final withoutHyphen = normalized.replaceAll('-', '');
+    final withHyphen = withoutHyphen.length == 6 
+        ? '${withoutHyphen.substring(0, 3)}-${withoutHyphen.substring(3)}'
+        : normalized;
+    
+    debugPrint('[RelationshipRepositoryHive] Looking for invite code: "$inviteCode"');
+    debugPrint('[RelationshipRepositoryHive] Normalized formats: "$normalized", "$withoutHyphen", "$withHyphen"');
+    debugPrint('[RelationshipRepositoryHive] Total relationships in box: ${_box.length}');
+    
     try {
-      return _box.values.firstWhere(
-        (r) => r.inviteCode == inviteCode,
-      );
-    } catch (_) {
+      for (final r in _box.values) {
+        final storedCode = r.inviteCode.trim().toUpperCase();
+        final storedWithoutHyphen = storedCode.replaceAll('-', '');
+        
+        debugPrint('[RelationshipRepositoryHive] Checking stored code: "${r.inviteCode}" (normalized: "$storedCode")');
+        
+        // Match against various formats
+        if (storedCode == normalized ||
+            storedCode == withHyphen ||
+            storedWithoutHyphen == withoutHyphen) {
+          debugPrint('[RelationshipRepositoryHive] MATCH FOUND! id=${r.id}');
+          return r;
+        }
+      }
+      debugPrint('[RelationshipRepositoryHive] No match found in local storage');
+      return null;
+    } catch (e) {
+      debugPrint('[RelationshipRepositoryHive] Error finding invite code: $e');
       return null;
     }
   }

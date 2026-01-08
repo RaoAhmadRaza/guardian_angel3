@@ -1,0 +1,97 @@
+======================================================================
+ARRHYTHMIA RISK SCREENING MODEL - TRAINING REPORT
+======================================================================
+Generated: 2026-01-03 04:42:17
+
+DATASET
+----------------------------------------
+Source: MIT-BIH Arrhythmia Database
+Records used: 44
+Excluded (paced): ['102', '104', '107', '217']
+Total windows: 2560
+Features per window: 15
+
+LABELING CRITERIA
+----------------------------------------
+
+ARRHYTHMIA RISK LABELING CRITERIA
+=================================
+Label = 1 (ELEVATED RISK) if ANY of:
+  1. PVC burden > 5% (default threshold)
+  2. Supraventricular ectopy > 10% (default threshold)
+  3. Ventricular run detected (≥3 consecutive V beats)
+
+Label = 0 (LOW RISK) otherwise
+
+Beat Classifications:
+  Normal: N, L, R, e, j, B (sinus rhythm variants)
+  Ventricular: V (PVC), ! (flutter), E (escape), F (fusion)
+  Supraventricular: A (PAC), a, S, J (junctional)
+
+This is SCREENING for elevated risk, not diagnosis.
+Clinical follow-up required for any positive screens.
+
+
+DATA SPLIT (Patient-Wise)
+----------------------------------------
+Train: 30 patients, 1736 samples
+Val:   6 patients, 353 samples
+Test:  8 patients, 471 samples
+
+Train class distribution:
+  Risk (1): 596 (34.3%)
+  Normal (0): 1140 (65.7%)
+
+MODEL CONFIGURATION
+----------------------------------------
+Algorithm: XGBoost
+n_estimators: 200
+max_depth: 4
+learning_rate: 0.05
+early_stopping_rounds: 20
+Best iteration: 165
+
+TEST SET RESULTS
+----------------------------------------
+
+TRAINING RESULTS
+================
+Best iteration: 165
+Training time: 0.3s
+
+TEST SET METRICS:
+  Accuracy:    0.8747
+  Precision:   0.8915
+  Recall:      0.7188  <- PRIMARY (catch at-risk cases)
+  Specificity: 0.9550
+  F1 Score:    0.7958
+  ROC-AUC:     0.9653
+
+CONFUSION MATRIX:
+  TN=297, FP=14
+  FN=45, TP=115
+
+
+FEATURE IMPORTANCE
+----------------------------------------
+FEATURE IMPORTANCE (by gain)
+========================================
+ 1. std_hr              : 75.5496
+ 2. cv_rr               : 29.4793
+ 3. mean_hr             : 15.2994
+ 4. rmssd               : 11.8964
+ 5. mean_rr             : 9.0484
+ 6. hf_power            : 7.6947
+ 7. lf_power            : 5.3500
+ 8. sdnn                : 5.3157
+ 9. total_power         : 5.2800
+10. pnn50               : 4.2502
+11. sample_entropy      : 3.9086
+12. lf_nu               : 3.3799
+13. lf_hf_ratio         : 3.1090
+14. pnn20               : 2.8251
+15. hf_nu               : 2.6031
+
+======================================================================
+END OF REPORT
+======================================================================

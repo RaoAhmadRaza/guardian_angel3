@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'colors.dart';
 import 'providers/theme_provider.dart';
 import 'theme/motion.dart';
+import 'services/session_service.dart';
 import 'onboarding/services/onboarding_local_service.dart';
 import 'onboarding/services/onboarding_firestore_service.dart';
 import 'relationships/services/doctor_relationship_service.dart';
@@ -135,10 +136,16 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
       // Provide success haptic feedback
       HapticFeedback.mediumImpact();
 
-      // Get current user ID - try Firebase Auth first, fallback to local storage
+      // Get current user ID - try Firebase Auth first, then SessionService
       String? uid = FirebaseAuth.instance.currentUser?.uid;
       
-      // Fallback for simulator mode: get UID from local storage
+      // Fallback: get UID from SessionService (set during auth)
+      if (uid == null || uid.isEmpty) {
+        uid = await SessionService.instance.getCurrentUid();
+        debugPrint('[DoctorDetailsScreen] Using UID from SessionService: $uid');
+      }
+      
+      // Last resort fallback for simulator mode
       if (uid == null || uid.isEmpty) {
         uid = OnboardingLocalService.instance.getLastSavedUid();
         debugPrint('[DoctorDetailsScreen] Using fallback UID from local storage: $uid');

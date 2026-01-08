@@ -61,40 +61,102 @@ class RelationshipService {
   /// Accepts an invite code.
   /// 
   /// Flow:
-  /// 1. Validate and update in Hive (local)
-  /// 2. Mirror to Firestore (non-blocking)
+  /// 1. Try to find and accept in Hive (local)
+  /// 2. If not found locally, check Firestore
+  /// 3. If found in Firestore, sync to local and accept
+  /// 4. Mirror updated relationship to Firestore (non-blocking)
   /// 
   /// Returns the updated relationship.
   Future<RelationshipResult<RelationshipModel>> acceptInvite({
     required String inviteCode,
     required String caregiverId,
   }) async {
-    debugPrint('[RelationshipService] Accepting invite: $inviteCode');
+    debugPrint('[RelationshipService] ========================================');
+    debugPrint('[RelationshipService] Accepting invite code: "$inviteCode"');
+    debugPrint('[RelationshipService] Caregiver ID: $caregiverId');
+    debugPrint('[RelationshipService] ========================================');
 
-    // Step 1: Accept locally
-    final result = await _repository.acceptInvite(
+    // Step 1: Try to accept locally first
+    debugPrint('[RelationshipService] Step 1: Trying local Hive lookup...');
+    var result = await _repository.acceptInvite(
       inviteCode: inviteCode,
       caregiverId: caregiverId,
     );
+    debugPrint('[RelationshipService] Local result: success=${result.success}, error=${result.errorCode}');
 
-    if (!result.success || result.data == null) {
-      // If local lookup fails, try Firestore as fallback
-      if (result.errorCode == RelationshipErrorCodes.invalidInviteCode) {
-        debugPrint('[RelationshipService] Local lookup failed, trying Firestore');
-        final firestoreRelationship = await _firestore.findByInviteCode(inviteCode);
+    // Step 2: If local lookup fails, try Firestore as fallback
+    if (!result.success && result.errorCode == RelationshipErrorCodes.invalidInviteCode) {
+      debugPrint('[RelationshipService] Step 2: Local lookup failed, trying Firestore...');
+      
+      final firestoreRelationship = await _firestore.findByInviteCode(inviteCode);
+      
+      if (firestoreRelationship != null) {
+        debugPrint('[RelationshipService] Found in Firestore: ${firestoreRelationship.id}');
+        debugPrint('[RelationshipService] Firestore invite_code: ${firestoreRelationship.inviteCode}');
+        debugPrint('[RelationshipService] Firestore status: ${firestoreRelationship.status}');
         
-        if (firestoreRelationship != null) {
-          // Found in Firestore - sync locally and retry
-          // For now, we'll return the error - full sync logic is out of scope
-          debugPrint('[RelationshipService] Found in Firestore but local sync not implemented');
+        // Check if already revoked
+        if (firestoreRelationship.status == RelationshipStatus.revoked) {
+          return RelationshipResult.failure(
+            RelationshipErrorCodes.relationshipRevoked,
+            'This invite has been revoked',
+          );
         }
+
+        // Check if already accepted by another caregiver
+        if (firestoreRelationship.status == RelationshipStatus.active) {
+          if (firestoreRelationship.caregiverId == caregiverId) {
+            // Same caregiver - idempotent success, sync locally
+            await _syncRelationshipToLocal(firestoreRelationship);
+            return RelationshipResult.success(firestoreRelationship);
+          }
+          return RelationshipResult.failure(
+            RelationshipErrorCodes.inviteAlreadyUsed,
+            'This invite has already been used',
+          );
+        }
+
+        // Check if caregiver already has an active relationship
+        final existingActive = await _repository.getActiveRelationshipForCaregiver(caregiverId);
+        if (existingActive.success && existingActive.data != null) {
+          return RelationshipResult.failure(
+            RelationshipErrorCodes.caregiverAlreadyLinked,
+            'You are already linked to another patient',
+          );
+        }
+
+        // Update the relationship
+        final now = DateTime.now().toUtc();
+        final updated = firestoreRelationship.copyWith(
+          caregiverId: caregiverId,
+          status: RelationshipStatus.active,
+          updatedAt: now,
+        );
+
+        // Save to local storage
+        await _syncRelationshipToLocal(updated);
+        
+        // Mirror to Firestore (non-blocking)
+        _firestore.mirrorRelationship(updated).then((_) {
+          debugPrint('[RelationshipService] Firestore mirror complete');
+        }).catchError((e) {
+          debugPrint('[RelationshipService] Firestore mirror failed (will retry): $e');
+        });
+
+        return RelationshipResult.success(updated);
       }
       
+      // Not found in Firestore either
+      debugPrint('[RelationshipService] Invite code not found in Firestore');
+      return result;
+    }
+
+    if (!result.success || result.data == null) {
       debugPrint('[RelationshipService] Accept failed: ${result.errorMessage}');
       return result;
     }
 
-    // Step 2: Mirror to Firestore (non-blocking)
+    // Step 3: Mirror to Firestore (non-blocking)
     _firestore.mirrorRelationship(result.data!).then((_) {
       debugPrint('[RelationshipService] Firestore mirror complete');
     }).catchError((e) {
@@ -102,6 +164,20 @@ class RelationshipService {
     });
 
     return result;
+  }
+
+  /// Syncs a relationship from Firestore to local Hive storage.
+  Future<void> _syncRelationshipToLocal(RelationshipModel relationship) async {
+    debugPrint('[RelationshipService] Syncing relationship to local: ${relationship.id}');
+    try {
+      // Use the repository's internal save method by casting
+      final hiveRepo = _repository as RelationshipRepositoryHive;
+      await hiveRepo.saveToLocal(relationship);
+      debugPrint('[RelationshipService] Local sync complete');
+    } catch (e) {
+      debugPrint('[RelationshipService] Local sync failed: $e');
+      // Don't fail the operation - Firestore is the source for this invite
+    }
   }
 
   /// Gets relationships for a user.

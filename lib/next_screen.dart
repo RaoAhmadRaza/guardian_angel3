@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'screens/safe_zones_screen.dart';
+import 'screens/newspaper_home_screen.dart';
+import 'screens/newspaper_loading_screen.dart';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
@@ -44,7 +48,6 @@ class _NextScreenState extends State<NextScreen> {
 
   // Screen state from local database
   PatientHomeState _homeState = PatientHomeState.loading();
-  bool _isLoading = true;
 
   // Demo mode subscription - reloads data when demo mode is toggled
   StreamSubscription<bool>? _demoModeSubscription;
@@ -85,14 +88,12 @@ class _NextScreenState extends State<NextScreen> {
       if (mounted) {
         setState(() {
           _homeState = state;
-          _isLoading = false;
         });
       }
     } catch (e) {
       debugPrint('[NextScreen] Error loading patient data: $e');
       if (mounted) {
         setState(() {
-          _isLoading = false;
         });
       }
     }
@@ -797,37 +798,47 @@ class _NextScreenState extends State<NextScreen> {
                 const SizedBox(height: 20), // space-xl
                 
                 // Dashboard button
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: isDarkMode
-                        ? const Color(0xFF2C2C2E) // action-primary-bg dark
-                        : Colors.white, // action-primary-bg light
-                    borderRadius: BorderRadius.circular(20), // radius-xl
-                    border: Border.all(
-                      color: isDarkMode
-                          ? Colors.white.withOpacity(0.1)
-                          : const Color(0xFFE2E8F0),
-                      width: 1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: isDarkMode
-                            ? Colors.black.withOpacity(0.2)
-                            : Colors.black.withOpacity(0.08),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      CupertinoPageRoute(
+                        builder: (context) => const SafeZonesScreen(),
                       ),
-                    ],
-                  ),
-                  child: Text(
-                    'Dashboard',
-                    style: TextStyle(
-                      fontSize: 14, // body-md
-                      fontWeight: FontWeight.w600,
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    decoration: BoxDecoration(
                       color: isDarkMode
-                          ? Colors.white.withOpacity(0.8) // action-primary-fg dark
-                          : const Color(0xFF475569), // action-primary-fg light
+                          ? const Color(0xFF2C2C2E) // action-primary-bg dark
+                          : Colors.white, // action-primary-bg light
+                      borderRadius: BorderRadius.circular(20), // radius-xl
+                      border: Border.all(
+                        color: isDarkMode
+                            ? Colors.white.withOpacity(0.1)
+                            : const Color(0xFFE2E8F0),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: isDarkMode
+                              ? Colors.black.withOpacity(0.2)
+                              : Colors.black.withOpacity(0.08),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      'Dashboard',
+                      style: TextStyle(
+                        fontSize: 14, // body-md
+                        fontWeight: FontWeight.w600,
+                        color: isDarkMode
+                            ? Colors.white.withOpacity(0.8) // action-primary-fg dark
+                            : const Color(0xFF475569), // action-primary-fg light
+                      ),
                     ),
                   ),
                 ),
@@ -1492,8 +1503,20 @@ class _NextScreenState extends State<NextScreen> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
-        child: Stack(
-          children: [
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              debugPrint('Newspaper card tapped');
+              Navigator.push(
+                context,
+                CupertinoPageRoute(
+                  builder: (context) => const NewspaperLoadingScreen(),
+                ),
+              );
+            },
+            child: Stack(
+              children: [
             // Premium background pattern
             Positioned.fill(
               child: CustomPaint(
@@ -1564,6 +1587,8 @@ class _NextScreenState extends State<NextScreen> {
               ),
             ),
           ],
+        ),
+          ),
         ),
       ),
     );

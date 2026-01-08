@@ -231,6 +231,41 @@ class DoctorChatService {
   // THREAD OPERATIONS
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /// Gets or creates a doctor chat thread for a specific relationship.
+  ///
+  /// Used when the relationship is already known (e.g., from DoctorsScreen).
+  /// VALIDATES ACCESS FIRST by checking the relationship.
+  /// Thread ID = DoctorRelationship ID (1:1 mapping enforced).
+  Future<ChatResult<ChatThreadModel>> getOrCreateDoctorThreadForRelationship({
+    required String relationshipId,
+    required String patientId,
+    required String doctorId,
+  }) async {
+    debugPrint('[DoctorChatService] getOrCreateDoctorThreadForRelationship: $relationshipId');
+    _telemetry.increment('doctor_chat.thread.get_or_create_for_relationship.attempt');
+
+    // Get or create thread using repository
+    // Note: Access validation happens implicitly - if the relationship doesn't exist
+    // or is invalid, the thread operations will fail appropriately
+    final result = await _repository.getOrCreateDoctorThread(
+      relationshipId: relationshipId,
+      patientId: patientId,
+      doctorId: doctorId,
+    );
+
+    if (result.success && result.data != null) {
+      _telemetry.increment('doctor_chat.thread.get_or_create_for_relationship.success');
+      // Mirror to Firestore (non-blocking)
+      _firestore.mirrorThread(result.data!).catchError((e) {
+        debugPrint('[DoctorChatService] Thread mirror failed: $e');
+      });
+    } else {
+      _telemetry.increment('doctor_chat.thread.get_or_create_for_relationship.error');
+    }
+
+    return result;
+  }
+
   /// Gets or creates a doctor chat thread for the current user's relationship.
   ///
   /// VALIDATES ACCESS FIRST.

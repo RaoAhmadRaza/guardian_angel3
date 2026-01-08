@@ -368,10 +368,16 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
                               child: TextButton(
                                 onPressed: () async {
                                   if (_formKey.currentState!.validate()) {
-                                    // Get current user ID - try Firebase Auth first, fallback to local storage
+                                    // Get current user ID - try Firebase Auth first, then SessionService
                                     String? uid = FirebaseAuth.instance.currentUser?.uid;
                                     
-                                    // Fallback for simulator mode: get UID from local storage
+                                    // Fallback: get UID from SessionService (set during auth)
+                                    if (uid == null || uid.isEmpty) {
+                                      uid = await SessionService.instance.getCurrentUid();
+                                      debugPrint('[GuardianDetailsScreen] Using UID from SessionService: $uid');
+                                    }
+                                    
+                                    // Last resort fallback for simulator mode
                                     if (uid == null || uid.isEmpty) {
                                       uid = OnboardingLocalService.instance.getLastSavedUid();
                                       debugPrint('[GuardianDetailsScreen] Using fallback UID from local storage: $uid');
@@ -419,12 +425,20 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
                                     });
 
                                     // STEP 6A: Accept relationship invite (if code provided)
-                                    final inviteCode = inviteCodeController.text.trim().toUpperCase();
+                                    final rawInviteCode = inviteCodeController.text;
+                                    final inviteCode = rawInviteCode.trim().toUpperCase();
+                                    debugPrint('[GuardianDetailsScreen] Raw invite code: "$rawInviteCode"');
+                                    debugPrint('[GuardianDetailsScreen] Normalized invite code: "$inviteCode"');
+                                    debugPrint('[GuardianDetailsScreen] Caregiver UID: $uid');
+                                    
                                     if (inviteCode.isNotEmpty) {
+                                      debugPrint('[GuardianDetailsScreen] Calling RelationshipService.acceptInvite...');
                                       final result = await RelationshipService.instance.acceptInvite(
                                         inviteCode: inviteCode,
                                         caregiverId: uid,
                                       );
+                                      
+                                      debugPrint('[GuardianDetailsScreen] acceptInvite result: success=${result.success}, errorCode=${result.errorCode}, errorMessage=${result.errorMessage}');
                                       
                                       if (!result.success) {
                                         debugPrint('[GuardianDetailsScreen] Step 6A: Invite acceptance failed: ${result.errorMessage}');
@@ -442,9 +456,9 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
                                       }
                                     }
 
-                                    // Start caregiver session
+                                    // Start caregiver session with UID
                                     await SessionService.instance
-                                        .startSession(userType: 'caregiver');
+                                        .startSession(userType: 'caregiver', uid: uid);
 
                                     // Navigate to Caregiver Main Screen
                                     Navigator.pushReplacement(

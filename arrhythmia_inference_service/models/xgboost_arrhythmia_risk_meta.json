@@ -1,0 +1,25 @@
+{
+  "feature_names": [
+    "mean_rr",
+    "sdnn",
+    "rmssd",
+    "pnn50",
+    "pnn20",
+    "mean_hr",
+    "std_hr",
+    "cv_rr",
+    "lf_power",
+    "hf_power",
+    "lf_hf_ratio",
+    "total_power",
+    "lf_nu",
+    "hf_nu",
+    "sample_entropy"
+  ],
+  "config": {
+    "n_estimators": 200,
+    "max_depth": 4,
+    "learning_rate": 0.05
+  },
+  "saved_at": "2026-01-03T04:42:17.738836"
+}
