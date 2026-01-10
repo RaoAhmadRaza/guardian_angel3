@@ -13,6 +13,8 @@ import '../models/doctor_relationship_model.dart';
 import '../repositories/doctor_relationship_repository.dart';
 import '../repositories/doctor_relationship_repository_hive.dart';
 import 'doctor_relationship_firestore_service.dart';
+import '../../chat/services/doctor_chat_service.dart';
+import '../../services/emergency_contact_service.dart';
 
 /// High-level service for doctor-patient relationship operations.
 class DoctorRelationshipService {
@@ -126,6 +128,12 @@ class DoctorRelationshipService {
               debugPrint('[DoctorRelationshipService] Firestore mirror failed: $e');
             });
             
+            // Auto-create chat thread for the new relationship (non-blocking)
+            _createChatThreadForRelationship(retryResult.data!);
+            
+            // Auto-add doctor as emergency contact for SMS alerts (non-blocking)
+            _addDoctorAsEmergencyContact(retryResult.data!);
+            
             return retryResult;
           }
           
@@ -143,6 +151,12 @@ class DoctorRelationshipService {
     }).catchError((e) {
       debugPrint('[DoctorRelationshipService] Firestore mirror failed (will retry): $e');
     });
+    
+    // Auto-create chat thread for the new relationship (non-blocking)
+    _createChatThreadForRelationship(result.data!);
+    
+    // Auto-add doctor as emergency contact for SMS alerts (non-blocking)
+    _addDoctorAsEmergencyContact(result.data!);
 
     return result;
   }
@@ -221,5 +235,73 @@ class DoctorRelationshipService {
   /// Watches relationships for a user.
   Stream<List<DoctorRelationshipModel>> watchRelationshipsForUser(String uid) {
     return _repository.watchRelationshipsForUser(uid);
+  }
+  
+  /// Creates a chat thread automatically when doctor relationship is accepted.
+  /// 
+  /// This ensures doctor and patient can immediately start chatting
+  /// without needing to navigate to chat first.
+  void _createChatThreadForRelationship(DoctorRelationshipModel relationship) {
+    debugPrint('[DoctorRelationshipService] Auto-creating chat thread for doctor relationship: ${relationship.id}');
+    
+    // Validate we have both parties
+    if (relationship.patientId.isEmpty || 
+        relationship.doctorId == null || 
+        relationship.doctorId!.isEmpty) {
+      debugPrint('[DoctorRelationshipService] Cannot create chat - missing patient or doctor ID');
+      return;
+    }
+    
+    // Check if chat permission is granted
+    if (!relationship.hasPermission('chat')) {
+      debugPrint('[DoctorRelationshipService] Chat permission not granted, skipping thread creation');
+      return;
+    }
+    
+    // Use DoctorChatService to create thread (non-blocking)
+    DoctorChatService.instance.getOrCreateDoctorThreadForRelationship(
+      relationshipId: relationship.id,
+      patientId: relationship.patientId,
+      doctorId: relationship.doctorId!,
+    ).then((result) {
+      if (result.success) {
+        debugPrint('[DoctorRelationshipService] Doctor chat thread created successfully: ${result.data?.id}');
+      } else {
+        debugPrint('[DoctorRelationshipService] Failed to create doctor chat thread: ${result.errorMessage}');
+      }
+    }).catchError((e) {
+      debugPrint('[DoctorRelationshipService] Doctor chat thread creation error: $e');
+    });
+  }
+  
+  /// Adds doctor as emergency contact automatically when relationship is accepted.
+  /// 
+  /// This ensures the doctor receives SMS alerts during SOS emergencies.
+  /// Fetches the doctor's phone number from Firestore and adds it to the
+  /// patient's emergency contacts.
+  void _addDoctorAsEmergencyContact(DoctorRelationshipModel relationship) {
+    debugPrint('[DoctorRelationshipService] Auto-adding doctor as emergency contact for relationship: ${relationship.id}');
+    
+    // Validate we have both parties
+    if (relationship.patientId.isEmpty || 
+        relationship.doctorId == null || 
+        relationship.doctorId!.isEmpty) {
+      debugPrint('[DoctorRelationshipService] Cannot add emergency contact - missing patient or doctor ID');
+      return;
+    }
+    
+    // Use EmergencyContactService to add doctor (non-blocking)
+    EmergencyContactService.instance.addLinkedDoctorAsEmergencyContact(
+      patientId: relationship.patientId,
+      doctorId: relationship.doctorId!,
+    ).then((success) {
+      if (success) {
+        debugPrint('[DoctorRelationshipService] Doctor added as emergency contact successfully');
+      } else {
+        debugPrint('[DoctorRelationshipService] Failed to add doctor as emergency contact');
+      }
+    }).catchError((e) {
+      debugPrint('[DoctorRelationshipService] Emergency contact addition error: $e');
+    });
   }
 }

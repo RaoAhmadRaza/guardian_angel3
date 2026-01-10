@@ -34,6 +34,10 @@ class GuardianAIService {
   // Maximum conversation history to maintain (to manage token limits)
   static const int _maxHistoryLength = 20;
   
+  /// Callback for history truncation events (Critical Issue #4)
+  /// UI can subscribe to this to show context warning
+  void Function(int messagesRemoved)? onHistoryTruncated;
+  
   /// System prompt that defines Guardian Angel AI's personality and boundaries
   static const String _systemPrompt = '''
 You are Guardian Angel AI, a warm, caring, and gentle AI companion designed specifically for elderly individuals. Your purpose is to provide comfort, support, and assistance to seniors.
@@ -98,8 +102,9 @@ REMEMBER:
   Future<GuardianAIResponse> sendMessage(String userMessage) async {
     // Check if API key is configured
     if (_apiKey == 'YOUR_OPENAI_API_KEY_HERE' || _apiKey.isEmpty) {
+      debugPrint('[GuardianAIService] API key not configured - service unavailable');
       return GuardianAIResponse(
-        text: "Hello dear, I'm Guardian Angel AI. I'm currently being set up to help you better. Please check back soon, or contact your caregiver if you need immediate assistance. Take care! 💙",
+        text: "Hello dear, I'm Guardian Angel AI. I'm currently unable to connect because the AI service hasn't been configured yet. Please contact your caregiver or app administrator for assistance. In the meantime, you can still use all other features of the app. Take care! 💙",
         isError: true,
         errorType: GuardianAIErrorType.apiKeyNotConfigured,
       );
@@ -205,11 +210,26 @@ REMEMBER:
   }
   
   /// Trim conversation history to maintain token limits
+  /// Notifies listeners when history is truncated (Critical Issue #4)
   void _trimHistory() {
+    int removedCount = 0;
     while (_conversationHistory.length > _maxHistoryLength) {
       _conversationHistory.removeAt(0);
+      removedCount++;
+    }
+    
+    // Notify UI about history truncation so it can warn user about context loss
+    if (removedCount > 0 && onHistoryTruncated != null) {
+      onHistoryTruncated!(removedCount);
+      debugPrint('[GuardianAIService] Trimmed $removedCount messages from history');
     }
   }
+  
+  /// Get current history count
+  int get historyCount => _conversationHistory.length;
+  
+  /// Check if history is near the limit
+  bool get isHistoryNearLimit => _conversationHistory.length >= _maxHistoryLength - 2;
   
   /// Get a welcome message for new users
   static String getWelcomeMessage() {

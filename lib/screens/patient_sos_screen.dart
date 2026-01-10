@@ -9,9 +9,17 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'patient_sos/patient_sos_state.dart';
 import 'patient_sos/patient_sos_data_provider.dart';
+import '../services/sos_alert_chat_service.dart';
 
 class PatientSOSScreen extends StatefulWidget {
-  const PatientSOSScreen({super.key});
+  /// The reason why the SOS was triggered.
+  /// Defaults to manual (user pressed SOS button).
+  final SosAlertReason alertReason;
+  
+  const PatientSOSScreen({
+    super.key,
+    this.alertReason = SosAlertReason.manual,
+  });
 
   @override
   State<PatientSOSScreen> createState() => _PatientSOSScreenState();
@@ -23,6 +31,11 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
   
   // Local UI state (cancel confirmation popup, slider)
   bool _showCancelConfirmation = false;
+  
+  // Issue #25: Grace period cancellation
+  bool _isCancelling = false;
+  int _cancelCountdown = 5;
+  Timer? _cancelTimer;
   
   // Slider State
   double _sliderValue = 0.0;
@@ -42,18 +55,56 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
       if (mounted) setState(() {});
     });
     
-    // Start the SOS session
-    _dataProvider.startSosSession();
+    // Start the SOS session with the alert reason
+    _dataProvider.startSosSession(alertReason: widget.alertReason);
   }
 
   @override
   void dispose() {
     _stateSubscription?.cancel();
+    _cancelTimer?.cancel();
     super.dispose();
   }
 
   /// Get current SOS state from provider
   PatientSosState get _state => _dataProvider.state;
+  
+  /// Issue #25: Start grace period countdown for cancellation
+  void _startCancellationGracePeriod() {
+    setState(() {
+      _isCancelling = true;
+      _cancelCountdown = 5;
+    });
+    
+    _cancelTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      
+      setState(() {
+        _cancelCountdown--;
+      });
+      
+      if (_cancelCountdown <= 0) {
+        timer.cancel();
+        // Actually cancel the SOS
+        _dataProvider.cancelSosSession();
+        Navigator.of(context).pop();
+      }
+    });
+  }
+  
+  /// Issue #25: Abort the cancellation and resume SOS
+  void _abortCancellation() {
+    _cancelTimer?.cancel();
+    setState(() {
+      _isCancelling = false;
+      _cancelCountdown = 5;
+      _showCancelConfirmation = false;
+      _sliderValue = 0.0;
+    });
+  }
 
   void _handleDragUpdate(DragUpdateDetails details, double maxWidth) {
     if (_showCancelConfirmation) return;
@@ -813,10 +864,15 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
                               Expanded(
                                 child: GestureDetector(
                                   onTap: () {
-                                    setState(() {
-                                      _showCancelConfirmation = false;
-                                      _sliderValue = 0;
-                                    });
+                                    // Issue #25: Abort cancellation if already in grace period
+                                    if (_isCancelling) {
+                                      _abortCancellation();
+                                    } else {
+                                      setState(() {
+                                        _showCancelConfirmation = false;
+                                        _sliderValue = 0;
+                                      });
+                                    }
                                   },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -826,7 +882,7 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
                                     ),
                                     child: Center(
                                       child: Text(
-                                        "No, Keep On",
+                                        _isCancelling ? "STOP! Keep On" : "No, Keep On",
                                         style: GoogleFonts.inter(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
@@ -841,19 +897,22 @@ class _PatientSOSScreenState extends State<PatientSOSScreen> with TickerProvider
                               Expanded(
                                 child: GestureDetector(
                                   onTap: () {
-                                    // Cancel the SOS session through the provider
-                                    _dataProvider.cancelSosSession();
-                                    Navigator.of(context).pop();
+                                    // Issue #25: Start grace period instead of immediate cancel
+                                    if (!_isCancelling) {
+                                      _startCancellationGracePeriod();
+                                    }
                                   },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(vertical: 12),
                                     decoration: BoxDecoration(
-                                      color: Colors.red,
+                                      color: _isCancelling ? Colors.orange : Colors.red,
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Center(
                                       child: Text(
-                                        "Yes, Cancel",
+                                        _isCancelling 
+                                            ? "Cancelling... $_cancelCountdown" 
+                                            : "Yes, Cancel",
                                         style: GoogleFonts.inter(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,

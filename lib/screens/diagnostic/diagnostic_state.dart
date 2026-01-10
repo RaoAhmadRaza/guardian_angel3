@@ -41,6 +41,22 @@ class TemperatureData {
   String get displayValue => '${value.toStringAsFixed(1)}°$unit';
 }
 
+/// Oxygen saturation (SpO2) data
+class OxygenSaturationData {
+  final int percent; // 0-100
+  final DateTime measurementTime;
+  final String? status; // "Normal", "Low", "Critical", etc.
+
+  const OxygenSaturationData({
+    required this.percent,
+    required this.measurementTime,
+    this.status,
+  });
+
+  /// Display string for oxygen saturation
+  String get displayValue => '$percent%';
+}
+
 /// Sleep quality data
 class SleepQualityData {
   final int qualityScore; // 0-100
@@ -195,11 +211,14 @@ class DiagnosticState {
 
   // === OTHER DIAGNOSTICS (all nullable) ===
   
-  /// Blood pressure data
+  /// Blood pressure data (kept for historical compatibility)
   final BloodPressureData? bloodPressure;
   
-  /// Body temperature data
+  /// Body temperature data (kept for historical compatibility)
   final TemperatureData? temperature;
+  
+  /// Oxygen saturation (SpO2) data - from HealthKit
+  final OxygenSaturationData? oxygenSaturation;
   
   /// Sleep quality data
   final SleepQualityData? sleep;
@@ -237,6 +256,7 @@ class DiagnosticState {
     this.hasCriticalAlert = false,
     this.bloodPressure,
     this.temperature,
+    this.oxygenSaturation,
     this.sleep,
     this.hasDiagnosticHistory = false,
     this.arrhythmiaRisk,
@@ -291,6 +311,14 @@ class DiagnosticState {
   String get temperatureStatus {
     if (temperature == null) return 'No data';
     return 'Measured';
+  }
+
+  /// Oxygen saturation status text
+  String get oxygenSaturationStatus {
+    if (oxygenSaturation == null) return 'No data';
+    if (oxygenSaturation!.percent >= 95) return 'Normal';
+    if (oxygenSaturation!.percent >= 90) return 'Low';
+    return 'Critical';
   }
 
   /// Sleep quality status text

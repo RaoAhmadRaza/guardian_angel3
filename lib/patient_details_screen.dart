@@ -14,6 +14,7 @@ import 'onboarding/services/onboarding_local_service.dart';
 import 'onboarding/services/onboarding_firestore_service.dart';
 import 'relationships/services/relationship_service.dart';
 import 'relationships/services/doctor_relationship_service.dart';
+import 'utils/input_validators.dart';
 
 /// Modern patient details screen with gender selection and form fields
 ///
@@ -735,15 +736,11 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           label: 'Full Name',
           hint: 'Enter your full name',
           prefixIcon: Icons.person_outline,
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Please enter your full name';
-            }
-            if (value.trim().length < 2) {
-              return 'Name must be at least 2 characters';
-            }
-            return null;
-          },
+          validator: InputValidators.validateName,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-']")),
+            LengthLimitingTextInputFormatter(100),
+          ],
           animationDelay: AppMotion.staggerDelay(5),
         ),
 
@@ -754,18 +751,14 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           controller: _phoneController,
           focusNode: _phoneFocusNode,
           label: 'Phone Number',
-          hint: 'Enter your phone number',
+          hint: 'Enter your phone number (e.g., +1 234 567 8900)',
           prefixIcon: Icons.phone_outlined,
           keyboardType: TextInputType.phone,
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Please enter your phone number';
-            }
-            if (value.trim().length < 10) {
-              return 'Please enter a valid phone number';
-            }
-            return null;
-          },
+          validator: InputValidators.validatePhone,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[\d\s\+\-\(\)]')),
+            LengthLimitingTextInputFormatter(20),
+          ],
           animationDelay: AppMotion.staggerDelay(6),
         ),
 
@@ -776,15 +769,13 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           controller: _addressController,
           focusNode: _addressFocusNode,
           label: 'Address',
-          hint: 'Enter your address',
+          hint: 'Enter your full address',
           prefixIcon: Icons.location_on_outlined,
           maxLines: 3,
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Please enter your address';
-            }
-            return null;
-          },
+          validator: InputValidators.validateAddress,
+          inputFormatters: [
+            LengthLimitingTextInputFormatter(500),
+          ],
           animationDelay: AppMotion.staggerDelay(7),
         ),
 
@@ -799,6 +790,10 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           prefixIcon: Icons.medical_information_outlined,
           maxLines: 4,
           isRequired: false,
+          validator: InputValidators.validateMedicalHistory,
+          inputFormatters: [
+            LengthLimitingTextInputFormatter(2000),
+          ],
           animationDelay: AppMotion.staggerDelay(8),
         ),
       ],
@@ -816,6 +811,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     int maxLines = 1,
     bool isRequired = true,
     String? Function(String?)? validator,
+    List<TextInputFormatter>? inputFormatters,
     Duration? animationDelay,
   }) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -837,6 +833,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
         keyboardType: keyboardType,
         maxLines: maxLines,
         validator: validator,
+        inputFormatters: inputFormatters,
         style: GoogleFonts.inter(
           fontSize: 16,
           fontWeight: FontWeight.w400,

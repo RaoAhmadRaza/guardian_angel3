@@ -4,6 +4,21 @@
 /// All fields are nullable to support first-time users with no data.
 library;
 
+/// Status of speech recognition and AI processing
+enum SpeechStatus {
+  /// Idle - ready for input
+  idle,
+  
+  /// Actively listening to speech
+  listening,
+  
+  /// Processing speech (transcribing or generating AI response)
+  processing,
+  
+  /// Error occurred during speech or AI
+  error,
+}
+
 /// Mood level enum for the mood slider
 enum MoodLevel {
   cloudy,
@@ -104,6 +119,26 @@ class PeaceOfMindState {
   
   /// Whether user is recording a reflection
   final bool isRecordingReflection;
+  
+  // === Voice Reflection Fields ===
+  
+  /// Current status of speech recognition/AI processing
+  final SpeechStatus speechStatus;
+  
+  /// Transcribed text from user's voice (if any)
+  final String? transcribedText;
+  
+  /// AI-generated poetic reflection (if any)
+  final String? aiGeneratedReflection;
+  
+  /// Error message if speech/AI failed
+  final String? errorMessage;
+  
+  /// Whether AI response was a fallback (offline/error)
+  final bool isAiFallback;
+  
+  /// Fallback reason message (if applicable)
+  final String? fallbackReason;
 
   const PeaceOfMindState({
     required this.mood,
@@ -111,6 +146,12 @@ class PeaceOfMindState {
     this.todayPrompt,
     this.isPlayingSound = false,
     this.isRecordingReflection = false,
+    this.speechStatus = SpeechStatus.idle,
+    this.transcribedText,
+    this.aiGeneratedReflection,
+    this.errorMessage,
+    this.isAiFallback = false,
+    this.fallbackReason,
   });
 
   /// Initial state for first-time users
@@ -134,6 +175,16 @@ class PeaceOfMindState {
     bool clearPrompt = false,
     bool? isPlayingSound,
     bool? isRecordingReflection,
+    SpeechStatus? speechStatus,
+    String? transcribedText,
+    bool clearTranscribedText = false,
+    String? aiGeneratedReflection,
+    bool clearAiGeneratedReflection = false,
+    String? errorMessage,
+    bool clearErrorMessage = false,
+    bool? isAiFallback,
+    String? fallbackReason,
+    bool clearFallbackReason = false,
   }) {
     return PeaceOfMindState(
       mood: mood ?? this.mood,
@@ -141,6 +192,12 @@ class PeaceOfMindState {
       todayPrompt: clearPrompt ? null : (todayPrompt ?? this.todayPrompt),
       isPlayingSound: isPlayingSound ?? this.isPlayingSound,
       isRecordingReflection: isRecordingReflection ?? this.isRecordingReflection,
+      speechStatus: speechStatus ?? this.speechStatus,
+      transcribedText: clearTranscribedText ? null : (transcribedText ?? this.transcribedText),
+      aiGeneratedReflection: clearAiGeneratedReflection ? null : (aiGeneratedReflection ?? this.aiGeneratedReflection),
+      errorMessage: clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
+      isAiFallback: isAiFallback ?? this.isAiFallback,
+      fallbackReason: clearFallbackReason ? null : (fallbackReason ?? this.fallbackReason),
     );
   }
 
@@ -155,11 +212,55 @@ class PeaceOfMindState {
 
   /// Whether a reflection prompt is available
   bool get hasPrompt => todayPrompt != null;
+  
+  /// Whether an AI-generated reflection is available
+  bool get hasAiReflection => aiGeneratedReflection != null && aiGeneratedReflection!.isNotEmpty;
+  
+  /// Whether any reflection content is available (AI or prompt)
+  bool get hasAnyReflection => hasAiReflection || hasPrompt;
+  
+  /// Whether the system is currently processing (listening or AI call)
+  bool get isProcessing => speechStatus == SpeechStatus.listening || speechStatus == SpeechStatus.processing;
+  
+  /// Whether there's an error to display
+  bool get hasError => errorMessage != null && errorMessage!.isNotEmpty;
 
   /// Display text for reflection card
-  /// Returns empty state message if no prompt
-  String get reflectionDisplayText => 
-      todayPrompt?.question ?? 'No reflection for today';
+  /// Prioritizes AI-generated reflection over static prompts
+  /// Shows status messages during processing
+  String get reflectionDisplayText {
+    switch (speechStatus) {
+      case SpeechStatus.listening:
+        return transcribedText?.isNotEmpty == true 
+            ? transcribedText! 
+            : 'Listening...';
+      case SpeechStatus.processing:
+        return 'Finding words of wisdom...';
+      case SpeechStatus.error:
+        return errorMessage ?? 'Something went wrong. Try again.';
+      case SpeechStatus.idle:
+        // Prioritize AI reflection, then prompt, then empty state
+        if (hasAiReflection) {
+          return aiGeneratedReflection!;
+        }
+        return todayPrompt?.question ?? 'Hold the mic to share your thoughts';
+    }
+  }
+  
+  /// Label for the reflection card header
+  /// Changes based on content type
+  String get reflectionCardLabel {
+    if (speechStatus == SpeechStatus.listening) {
+      return 'YOUR WORDS';
+    }
+    if (speechStatus == SpeechStatus.processing) {
+      return 'REFLECTING...';
+    }
+    if (hasAiReflection) {
+      return 'YOUR REFLECTION';
+    }
+    return 'DAILY REFLECTION';
+  }
 
   /// Slider value for mood (0-100)
   double get moodSliderValue => mood.toSliderValue();

@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../services/patient_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -11,12 +12,72 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   
-  final TextEditingController _nameController = TextEditingController(text: "John Doe");
-  final TextEditingController _emailController = TextEditingController(text: "john.doe@example.com");
-  final TextEditingController _phoneController = TextEditingController(text: "+1 (555) 123-4567");
-  final TextEditingController _addressController = TextEditingController(text: "123 Guardian Lane, Safe City, SC 12345");
+  // Critical Issue #8: Remove hardcoded values, initialize empty
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
 
   bool _isEditing = false;
+  bool _isLoading = true;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfileData();
+  }
+  
+  /// Load profile data from PatientService (Critical Issue #8)
+  Future<void> _loadProfileData() async {
+    try {
+      final patientData = await PatientService.instance.getPatientData();
+      
+      if (mounted) {
+        setState(() {
+          _nameController.text = patientData['fullName'] as String? ?? '';
+          _phoneController.text = patientData['phoneNumber'] as String? ?? '';
+          _addressController.text = patientData['address'] as String? ?? '';
+          // Email might be stored separately or from Firebase Auth
+          _emailController.text = patientData['email'] as String? ?? '';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[ProfileScreen] Error loading profile data: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+  
+  /// Save profile data to PatientService (Critical Issue #8)
+  Future<bool> _saveProfileData() async {
+    setState(() => _isSaving = true);
+    
+    try {
+      final existingData = await PatientService.instance.getPatientData();
+      
+      await PatientService.instance.savePatientData(
+        fullName: _nameController.text.trim(),
+        gender: existingData['gender'] as String? ?? 'male',
+        age: existingData['age'] as int? ?? 0,
+        phoneNumber: _phoneController.text.trim(),
+        address: _addressController.text.trim(),
+        medicalHistory: existingData['medicalHistory'] as String? ?? '',
+      );
+      
+      debugPrint('[ProfileScreen] Profile saved successfully');
+      return true;
+    } catch (e) {
+      debugPrint('[ProfileScreen] Error saving profile: $e');
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -50,31 +111,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: () {
+                onPressed: _isSaving ? null : () async {
                   if (_isEditing) {
                     if (_formKey.currentState!.validate()) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Profile updated successfully')),
-                      );
-                      setState(() => _isEditing = false);
+                      // Critical Issue #8: Actually save the data
+                      final success = await _saveProfileData();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(success 
+                                ? 'Profile updated successfully' 
+                                : 'Failed to save profile'),
+                          ),
+                        );
+                        if (success) {
+                          setState(() => _isEditing = false);
+                        }
+                      }
                     }
                   } else {
                     setState(() => _isEditing = true);
                   }
                 },
-                child: Text(
-                  _isEditing ? 'Done' : 'Edit',
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF007AFF),
-                  ),
-                ),
+                child: _isSaving
+                    ? const CupertinoActivityIndicator()
+                    : Text(
+                        _isEditing ? 'Done' : 'Edit',
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF007AFF),
+                        ),
+                      ),
               ),
             ],
           ),
           SliverToBoxAdapter(
-            child: Form(
+            child: _isLoading 
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(40),
+                      child: CupertinoActivityIndicator(),
+                    ),
+                  )
+                : Form(
               key: _formKey,
               child: Column(
                 children: [

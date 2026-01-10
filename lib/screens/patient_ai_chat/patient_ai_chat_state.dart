@@ -14,7 +14,9 @@ class ChatMessage {
   final String text;
   final String sender; // 'user' or 'ai'
   final DateTime timestamp;
-  final String status; // 'sending', 'sent', 'delivered', 'read'
+  final String status; // 'sending', 'sent', 'delivered', 'read', 'error'
+  // Issue #18: Store failed message text for retry
+  final String? failedMessageText;
 
   const ChatMessage({
     required this.id,
@@ -22,6 +24,7 @@ class ChatMessage {
     required this.sender,
     required this.timestamp,
     this.status = 'sent',
+    this.failedMessageText,
   });
   
   /// Check if this is a user message
@@ -29,6 +32,9 @@ class ChatMessage {
   
   /// Check if this is an AI message
   bool get isAI => sender == 'ai';
+  
+  /// Check if message failed and can be retried
+  bool get canRetry => status == 'error' && failedMessageText != null;
 }
 
 /// Preview of caregiver for quick action widget

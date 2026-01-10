@@ -36,6 +36,8 @@ class PeaceOfMindDataProvider {
   static const String _moodKey = 'saved_mood';
   static const String _soundscapeKey = 'active_soundscape';
   static const String _promptKey = 'today_prompt';
+  static const String _aiReflectionKey = 'ai_reflection';
+  static const String _aiReflectionTimestampKey = 'ai_reflection_timestamp';
 
   Box<dynamic>? _box;
 
@@ -77,13 +79,41 @@ class PeaceOfMindDataProvider {
         ? ReflectionPrompt.fromMap(Map<String, dynamic>.from(promptMap))
         : null;
     
+    // Load last AI-generated reflection (if from today)
+    final aiReflection = _getAiReflectionIfFromToday();
+
     return PeaceOfMindState(
       mood: mood,
       activeSoundscape: activeSoundscape,
       todayPrompt: todayPrompt,
       isPlayingSound: false, // Never auto-play
       isRecordingReflection: false,
+      aiGeneratedReflection: aiReflection,
     );
+  }
+  
+  /// Get AI reflection only if it was generated today
+  /// Returns null if reflection is from a previous day
+  String? _getAiReflectionIfFromToday() {
+    final reflection = _box?.get(_aiReflectionKey) as String?;
+    final timestampMillis = _box?.get(_aiReflectionTimestampKey) as int?;
+    
+    if (reflection == null || timestampMillis == null) {
+      return null;
+    }
+    
+    final savedDate = DateTime.fromMillisecondsSinceEpoch(timestampMillis);
+    final now = DateTime.now();
+    
+    // Check if same day
+    if (savedDate.year == now.year && 
+        savedDate.month == now.month && 
+        savedDate.day == now.day) {
+      return reflection;
+    }
+    
+    // Reflection is from a previous day, don't show it
+    return null;
   }
 
   /// Save mood value to local storage
@@ -115,12 +145,27 @@ class PeaceOfMindDataProvider {
     await initialize();
     await _box?.delete(_promptKey);
   }
+  
+  /// Save AI-generated reflection with timestamp
+  Future<void> saveAiReflection(String reflection) async {
+    await initialize();
+    await _box?.put(_aiReflectionKey, reflection);
+    await _box?.put(_aiReflectionTimestampKey, DateTime.now().millisecondsSinceEpoch);
+  }
+  
+  /// Clear saved AI reflection
+  Future<void> clearAiReflection() async {
+    await initialize();
+    await _box?.delete(_aiReflectionKey);
+    await _box?.delete(_aiReflectionTimestampKey);
+  }
 
   /// Check if user has any saved wellness data
   Future<bool> hasAnyData() async {
     await initialize();
     return _box?.get(_moodKey) != null ||
            _box?.get(_soundscapeKey) != null ||
-           _box?.get(_promptKey) != null;
+           _box?.get(_promptKey) != null ||
+           _box?.get(_aiReflectionKey) != null;
   }
 }

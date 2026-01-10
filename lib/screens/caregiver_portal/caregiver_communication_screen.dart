@@ -3,9 +3,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'providers/caregiver_portal_provider.dart';
-import 'caregiver_ai_chat_screen.dart';
 import 'caregiver_patient_chat_screen.dart';
-import 'caregiver_doctor_chat_screen.dart';
+import 'caregiver_call_screen.dart';
 
 class CaregiverCommunicationScreen extends ConsumerStatefulWidget {
   const CaregiverCommunicationScreen({super.key});
@@ -19,240 +18,210 @@ class _CaregiverCommunicationScreenState extends ConsumerState<CaregiverCommunic
 
   @override
   Widget build(BuildContext context) {
+    final portalState = ref.watch(caregiverPortalProvider);
+    final patients = portalState.linkedPatients;
+    
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Messages',
-                style: GoogleFonts.inter(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                  letterSpacing: -0.5,
+        child: RefreshIndicator(
+          onRefresh: () => ref.read(caregiverPortalProvider.notifier).refresh(),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Messages',
+                  style: GoogleFonts.inter(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                    letterSpacing: -0.5,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 32),
+                const SizedBox(height: 8),
+                Text(
+                  'Stay connected with your patients',
+                  style: GoogleFonts.inter(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF8E8E93),
+                  ),
+                ),
+                const SizedBox(height: 24),
 
-              // Custom Segmented Control
-              Container(
-                height: 48,
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE3E3E8),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    return Stack(
-                      children: [
-                        AnimatedAlign(
-                          alignment: _activeTab == 'Messages' ? Alignment.centerLeft : Alignment.centerRight,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOut,
-                          child: Container(
-                            width: (constraints.maxWidth - 12) / 2,
-                            height: double.infinity,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => setState(() => _activeTab = 'Messages'),
-                                behavior: HitTestBehavior.opaque,
-                                child: Center(
-                                  child: Text(
-                                    'Messages',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: _activeTab == 'Messages' ? Colors.black : const Color(0xFF8E8E93),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => setState(() => _activeTab = 'Calls'),
-                                behavior: HitTestBehavior.opaque,
-                                child: Center(
-                                  child: Text(
-                                    'Calls',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: _activeTab == 'Calls' ? Colors.black : const Color(0xFF8E8E93),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              if (_activeTab == 'Messages') ...[
-                // AI Guardian Thread
-                _buildMessageCard(
-                  onTap: () => Navigator.push(context, CupertinoPageRoute(builder: (context) => const CaregiverAIChatScreen())),
-                  icon: CupertinoIcons.shield_fill,
-                  iconColor: const Color(0xFF007AFF),
-                  iconBgColor: const Color(0xFFE5F1FF),
-                  title: 'AI Guardian',
-                  time: 'Now',
-                  message: "Analysis complete: Your patient's vitals are stable.",
-                ),
-                const SizedBox(height: 16),
-
-                // Patient Thread - Use real data from provider
-                Builder(builder: (context) {
-                  final portalState = ref.watch(caregiverPortalProvider);
-                  final patient = portalState.linkedPatient;
-                  final recentMessage = portalState.recentMessages.isNotEmpty 
-                      ? portalState.recentMessages.last 
-                      : null;
-                  
-                  if (!portalState.canChat) {
-                    // Chat not permitted
-                    return Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
+                // Custom Segmented Control
+                Container(
+                  height: 48,
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE3E3E8),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return Stack(
                         children: [
-                          Container(
-                            width: 64,
-                            height: 64,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF2F2F7),
-                              borderRadius: BorderRadius.circular(32),
+                          AnimatedAlign(
+                            alignment: _activeTab == 'Messages' ? Alignment.centerLeft : Alignment.centerRight,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOut,
+                            child: Container(
+                              width: (constraints.maxWidth - 12) / 2,
+                              height: double.infinity,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
                             ),
-                            child: const Icon(CupertinoIcons.lock_fill, color: Color(0xFF8E8E93), size: 28),
                           ),
-                          const SizedBox(width: 24),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Patient Chat',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.bold,
-                                    color: const Color(0xFF8E8E93),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => setState(() => _activeTab = 'Messages'),
+                                  behavior: HitTestBehavior.opaque,
+                                  child: Center(
+                                    child: Text(
+                                      'Messages',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: _activeTab == 'Messages' ? Colors.black : const Color(0xFF8E8E93),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Chat permission not granted',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w500,
-                                    color: const Color(0xFFC7C7CC),
+                              ),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => setState(() => _activeTab = 'Calls'),
+                                  behavior: HitTestBehavior.opaque,
+                                  child: Center(
+                                    child: Text(
+                                      'Calls',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: _activeTab == 'Calls' ? Colors.black : const Color(0xFF8E8E93),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ],
-                      ),
-                    );
-                  }
-                  
-                  return _buildMessageCard(
-                    onTap: () => Navigator.push(context, CupertinoPageRoute(builder: (context) => const CaregiverPatientChatScreen())),
-                    image: patient?.photoUrl,
-                    title: patient?.name ?? 'No Patient',
-                    time: recentMessage != null ? _formatMessageTime(recentMessage.createdAt) : '--',
-                    message: recentMessage?.content ?? 'No messages yet',
-                    isOnline: patient?.isOnline ?? false,
-                    unreadCount: portalState.unreadMessageCount,
-                  );
-                }),
-                const SizedBox(height: 16),
-
-                // Doctor Thread
-                _buildMessageCard(
-                  onTap: () => Navigator.push(context, CupertinoPageRoute(builder: (context) => const CaregiverDoctorChatScreen())),
-                  icon: CupertinoIcons.heart_circle_fill,
-                  iconColor: const Color(0xFFFF2D55),
-                  iconBgColor: const Color(0xFFFFF0F3),
-                  title: 'Dr. Aris Thorne',
-                  time: 'Tue',
-                  message: "The latest lab results look promising. Let's discuss.",
+                      );
+                    },
+                  ),
                 ),
-              ] else ...[
-                // Calls List
-                Builder(builder: (context) {
-                  final portalState = ref.watch(caregiverPortalProvider);
-                  final patient = portalState.linkedPatient;
-                  final patientName = patient?.name ?? 'Patient';
-                  
-                  return Column(
-                    children: [
-                      _buildCallCard(patientName, 'Outgoing', 'Yesterday', 'Missed', '0:00'),
-                      const SizedBox(height: 16),
-                      _buildCallCard('Dr. Aris Thorne', 'Incoming', 'Tue', 'Answered', '4:12'),
-                      const SizedBox(height: 16),
-                      _buildCallCard(patientName, 'FaceTime', 'Monday', 'Answered', '12:05'),
-                    ],
-                  );
-                }),
+                const SizedBox(height: 24),
+
+                if (_activeTab == 'Messages') ...[
+                  // Show all linked patients as message threads
+                  if (patients.isEmpty)
+                    _buildEmptyState()
+                  else
+                    ...patients.map((patientData) => Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: _buildPatientMessageCard(patientData),
+                    )),
+                ] else ...[
+                  // Calls List - Real call history from patients
+                  if (patients.isEmpty)
+                    _buildEmptyCallsState()
+                  else
+                    ...patients.map((patientData) => Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: _buildPatientCallCard(patientData),
+                    )),
+                ],
+                
+                const SizedBox(height: 100),
               ],
-              
-              const SizedBox(height: 100),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildMessageCard({
-    required VoidCallback onTap,
-    IconData? icon,
-    Color? iconColor,
-    Color? iconBgColor,
-    String? image,
-    required String title,
-    required String time,
-    required String message,
-    bool isOnline = false,
-    int unreadCount = 0,
-  }) {
+  Widget _buildPatientMessageCard(LinkedPatientData patientData) {
+    final patient = patientData.patient;
+    final recentMessage = patientData.recentMessages.isNotEmpty 
+        ? patientData.recentMessages.last 
+        : null;
+    final canChat = patientData.hasPermission('chat');
+    
+    if (!canChat) {
+      // Chat not permitted
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            _buildPatientAvatar(patient, showOnlineStatus: false),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    patient.name,
+                    style: GoogleFonts.inter(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF8E8E93),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(CupertinoIcons.lock_fill, color: Color(0xFFC7C7CC), size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Chat permission not granted',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFFC7C7CC),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
     return GestureDetector(
-      onTap: onTap,
+      onTap: () => Navigator.push(
+        context, 
+        CupertinoPageRoute(builder: (context) => const CaregiverPatientChatScreen()),
+      ),
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
@@ -268,45 +237,8 @@ class _CaregiverCommunicationScreenState extends ConsumerState<CaregiverCommunic
         ),
         child: Row(
           children: [
-            if (image != null)
-              Stack(
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8F4FD),
-                      borderRadius: BorderRadius.circular(32),
-                    ),
-                    child: const Icon(CupertinoIcons.person_fill, color: Color(0xFF007AFF), size: 28),
-                  ),
-                  if (isOnline)
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF34C759),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 4),
-                        ),
-                      ),
-                    ),
-                ],
-              )
-            else
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: iconBgColor,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Icon(icon, color: iconColor, size: 28),
-              ),
-            const SizedBox(width: 24),
+            _buildPatientAvatar(patient, showOnlineStatus: true),
+            const SizedBox(width: 20),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,16 +246,21 @@ class _CaregiverCommunicationScreenState extends ConsumerState<CaregiverCommunic
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        title,
-                        style: GoogleFonts.inter(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
+                      Expanded(
+                        child: Text(
+                          patient.name,
+                          style: GoogleFonts.inter(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       Text(
-                        time,
+                        recentMessage != null 
+                            ? _formatMessageTime(recentMessage.createdAt)
+                            : '',
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -334,7 +271,7 @@ class _CaregiverCommunicationScreenState extends ConsumerState<CaregiverCommunic
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    message,
+                    recentMessage?.content ?? 'No messages yet',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
@@ -347,7 +284,7 @@ class _CaregiverCommunicationScreenState extends ConsumerState<CaregiverCommunic
               ),
             ),
             const SizedBox(width: 12),
-            if (unreadCount > 0)
+            if (patientData.unreadMessageCount > 0)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -355,7 +292,9 @@ class _CaregiverCommunicationScreenState extends ConsumerState<CaregiverCommunic
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  unreadCount > 99 ? '99+' : '$unreadCount',
+                  patientData.unreadMessageCount > 99 
+                      ? '99+' 
+                      : '${patientData.unreadMessageCount}',
                   style: GoogleFonts.inter(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
@@ -371,9 +310,153 @@ class _CaregiverCommunicationScreenState extends ConsumerState<CaregiverCommunic
     );
   }
 
-  Widget _buildCallCard(String name, String type, String time, String status, String duration) {
+  Widget _buildPatientCallCard(LinkedPatientData patientData) {
+    final patient = patientData.patient;
+    
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context, 
+        CupertinoPageRoute(
+          builder: (context) => CaregiverCallScreen(
+            callerName: patient.name,
+            callerPhotoUrl: patient.photoUrl,
+          ),
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: const Color(0xFF34C759).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(
+                CupertinoIcons.phone_fill,
+                color: Color(0xFF34C759),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    patient.name,
+                    style: GoogleFonts.inter(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    patient.isOnline ? 'Available now' : 'Last seen ${_formatLastSeen(patient.lastSeen)}',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: patient.isOnline 
+                          ? const Color(0xFF34C759) 
+                          : const Color(0xFF8E8E93),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFF34C759),
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: const Icon(
+                CupertinoIcons.phone_fill,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPatientAvatar(PatientInfo patient, {required bool showOnlineStatus}) {
+    return Stack(
+      children: [
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: const Color(0xFFE8F4FD),
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: patient.photoUrl != null
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: Image.network(
+                    patient.photoUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Center(
+                      child: Text(
+                        patient.initials,
+                        style: GoogleFonts.inter(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF007AFF),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              : Center(
+                  child: Text(
+                    patient.initials,
+                    style: GoogleFonts.inter(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF007AFF),
+                    ),
+                  ),
+                ),
+        ),
+        if (showOnlineStatus && patient.isOnline)
+          Positioned(
+            bottom: 0,
+            right: 0,
+            child: Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                color: const Color(0xFF34C759),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 3),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(40),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -385,62 +468,100 @@ class _CaregiverCommunicationScreenState extends ConsumerState<CaregiverCommunic
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: 80,
+            height: 80,
             decoration: BoxDecoration(
               color: const Color(0xFFF2F2F7),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(40),
             ),
-            child: Icon(
-              type == 'FaceTime' ? CupertinoIcons.videocam_fill : CupertinoIcons.phone_fill,
-              color: Colors.black,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: GoogleFonts.inter(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: status == 'Missed' ? const Color(0xFFFF3B30) : Colors.black,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$type • $time',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFF8E8E93),
-                  ),
-                ),
-              ],
+            child: const Icon(
+              CupertinoIcons.chat_bubble_2,
+              color: Color(0xFF8E8E93),
+              size: 36,
             ),
           ),
+          const SizedBox(height: 20),
           Text(
-            duration,
+            'No Conversations',
+            style: GoogleFonts.inter(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Link with a patient to start messaging',
+            textAlign: TextAlign.center,
             style: GoogleFonts.inter(
               fontSize: 15,
               fontWeight: FontWeight.w500,
               color: const Color(0xFF8E8E93),
             ),
           ),
-          const SizedBox(width: 12),
-          const Icon(CupertinoIcons.info, color: Color(0xFF007AFF), size: 22),
         ],
       ),
     );
   }
-  
-  /// Format message timestamp for display
+
+  Widget _buildEmptyCallsState() {
+    return Container(
+      padding: const EdgeInsets.all(40),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF2F2F7),
+              borderRadius: BorderRadius.circular(40),
+            ),
+            child: const Icon(
+              CupertinoIcons.phone,
+              color: Color(0xFF8E8E93),
+              size: 36,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'No Patients Linked',
+            style: GoogleFonts.inter(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Link with a patient to make calls',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: const Color(0xFF8E8E93),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _formatMessageTime(DateTime timestamp) {
     final now = DateTime.now();
     final diff = now.difference(timestamp);
@@ -454,5 +575,14 @@ class _CaregiverCommunicationScreenState extends ConsumerState<CaregiverCommunic
       return days[timestamp.weekday % 7];
     }
     return '${timestamp.month}/${timestamp.day}';
+  }
+
+  String _formatLastSeen(DateTime? lastSeen) {
+    if (lastSeen == null) return 'unknown';
+    final diff = DateTime.now().difference(lastSeen);
+    if (diff.inMinutes < 5) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 }

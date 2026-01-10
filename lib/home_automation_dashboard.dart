@@ -19,6 +19,8 @@ import 'package:flutter/services.dart';
 
 import 'all_rooms_screen.dart';
 import 'room_details_screen.dart';
+// Health Stability Score integration
+import 'stability_score/stability_score.dart';
 
 /// Monochrome emotional palette (Chunk 1)
 /// Focused, calm, minimal – with gentle optional warmth tints.
@@ -168,11 +170,23 @@ class HomeAutomationDashboard extends StatelessWidget {
               ),
               Row(
                 children: [
-                  _PulsingStatusAvatar(
-                    imageAsset: 'images/male.jpg',
-                    isDarkMode: isDarkMode,
-                    ringColor: const Color(0xFF10B981), // calm green pulse
-                    size: 50,
+                  // Avatar with HSS badge below
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _PulsingStatusAvatar(
+                        imageAsset: 'images/male.jpg',
+                        isDarkMode: isDarkMode,
+                        ringColor: const Color(0xFF10B981), // calm green pulse
+                        size: 50,
+                      ),
+                      const SizedBox(height: 6),
+                      // HSS Badge
+                      const HSSBadge(
+                        size: HSSBadgeSize.small,
+                        showLabel: true,
+                      ),
+                    ],
                   ),
                   const SizedBox(width: 12),
                   Expanded(

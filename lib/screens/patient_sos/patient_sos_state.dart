@@ -20,6 +20,9 @@ enum SosPhase {
   
   /// Connected to emergency services
   connected,
+  
+  /// SOS session has been resolved (help arrived or situation handled)
+  resolved,
 }
 
 /// Immutable state for Patient SOS Screen
@@ -62,6 +65,18 @@ class PatientSosState {
   
   /// Whether microphone permission was denied
   final bool microphoneDenied;
+  
+  /// Whether network is available (for SOS transmission)
+  final bool networkAvailable;
+  
+  /// Whether caregiver response timed out
+  final bool caregiverTimedOut;
+  
+  /// Error message for user display (null = no error)
+  final String? errorMessage;
+  
+  /// Whether SMS fallback was triggered
+  final bool smsFallbackTriggered;
 
   const PatientSosState({
     required this.phase,
@@ -74,6 +89,10 @@ class PatientSosState {
     this.isRecording = false,
     this.locationDenied = false,
     this.microphoneDenied = false,
+    this.networkAvailable = true,
+    this.caregiverTimedOut = false,
+    this.errorMessage,
+    this.smsFallbackTriggered = false,
   });
 
   /// Initial state when SOS is first triggered
@@ -99,6 +118,10 @@ class PatientSosState {
       isRecording: true,
       locationDenied: false,
       microphoneDenied: false,
+      networkAvailable: true,
+      caregiverTimedOut: false,
+      errorMessage: null,
+      smsFallbackTriggered: false,
     );
   }
 
@@ -115,6 +138,10 @@ class PatientSosState {
       isRecording: false,
       locationDenied: false,
       microphoneDenied: false,
+      networkAvailable: true,
+      caregiverTimedOut: false,
+      errorMessage: null,
+      smsFallbackTriggered: false,
     );
   }
 
@@ -130,9 +157,14 @@ class PatientSosState {
     bool? isRecording,
     bool? locationDenied,
     bool? microphoneDenied,
+    bool? networkAvailable,
+    bool? caregiverTimedOut,
+    String? errorMessage,
+    bool? smsFallbackTriggered,
     bool clearHeartRate = false,
     bool clearCaregiverName = false,
     bool clearLocationText = false,
+    bool clearErrorMessage = false,
   }) {
     return PatientSosState(
       phase: phase ?? this.phase,
@@ -145,6 +177,10 @@ class PatientSosState {
       isRecording: isRecording ?? this.isRecording,
       locationDenied: locationDenied ?? this.locationDenied,
       microphoneDenied: microphoneDenied ?? this.microphoneDenied,
+      networkAvailable: networkAvailable ?? this.networkAvailable,
+      caregiverTimedOut: caregiverTimedOut ?? this.caregiverTimedOut,
+      errorMessage: clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
+      smsFallbackTriggered: smsFallbackTriggered ?? this.smsFallbackTriggered,
     );
   }
 
@@ -164,6 +200,8 @@ class PatientSosState {
         return "Emergency services";
       case SosPhase.connected:
         return "Connected";
+      case SosPhase.resolved:
+        return "Resolved";
     }
   }
 
@@ -180,6 +218,8 @@ class PatientSosState {
         return "Connecting line...";
       case SosPhase.connected:
         return "Help is on the way";
+      case SosPhase.resolved:
+        return "Emergency handled";
     }
   }
 
@@ -233,7 +273,37 @@ class PatientSosState {
         return 1;
       case SosPhase.contactingEmergency:
       case SosPhase.connected:
+      case SosPhase.resolved:
         return 2;
     }
+  }
+  
+  /// Whether there is a permission issue that needs user action
+  bool get hasPermissionIssue => locationDenied || microphoneDenied;
+  
+  /// Whether there is a network connectivity issue
+  bool get hasNetworkIssue => !networkAvailable;
+  
+  /// Whether the SOS is in an error state requiring attention
+  bool get hasError => errorMessage != null || hasPermissionIssue || hasNetworkIssue;
+  
+  /// Get a user-friendly error description
+  String get errorDescription {
+    if (!networkAvailable) {
+      return "No internet connection. Emergency SMS will be sent instead.";
+    }
+    if (locationDenied && microphoneDenied) {
+      return "Location and microphone access denied. Tap to enable in Settings.";
+    }
+    if (locationDenied) {
+      return "Location access denied. Tap to enable in Settings for accurate help.";
+    }
+    if (microphoneDenied) {
+      return "Microphone access denied. Tap to enable in Settings for voice recording.";
+    }
+    if (caregiverTimedOut) {
+      return "Caregiver not responding. Escalating to emergency services.";
+    }
+    return errorMessage ?? "";
   }
 }

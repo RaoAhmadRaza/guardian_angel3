@@ -2,11 +2,33 @@
 class ArrhythmiaConfig {
   ArrhythmiaConfig._();
 
-  /// Base URL for the local inference service.
-  static const String inferenceServiceUrl = 'http://127.0.0.1:8000';
+  /// Base URL for the inference service.
+  /// Uses Firebase Functions in production.
+  /// Set via environment or use default Cloud Function URL.
+  static String get inferenceServiceUrl {
+    // In production, this should be your deployed Firebase Functions URL
+    // Format: https://<region>-<project-id>.cloudfunctions.net
+    const cloudFunctionUrl = String.fromEnvironment(
+      'ARRHYTHMIA_SERVICE_URL',
+      defaultValue: 'https://us-central1-guardian-angel-app.cloudfunctions.net',
+    );
+    return cloudFunctionUrl;
+  }
+
+  /// Inference endpoint path
+  static const String inferenceEndpoint = '/analyzeArrhythmia';
+
+  /// Full inference URL
+  static String get fullInferenceUrl => '$inferenceServiceUrl$inferenceEndpoint';
 
   /// Request timeout duration.
-  static const Duration requestTimeout = Duration(seconds: 5);
+  static const Duration requestTimeout = Duration(seconds: 10);
+
+  /// Retry count for failed requests
+  static const int maxRetries = 3;
+
+  /// Delay between retries
+  static const Duration retryDelay = Duration(seconds: 2);
 
   /// Health check interval.
   static const Duration healthCheckInterval = Duration(minutes: 1);

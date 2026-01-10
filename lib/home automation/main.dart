@@ -1,6 +1,7 @@
 import 'dart:ui'; // Add this import for ImageFilter if needed, though not explicitly used yet, good for glassmorphism
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../services/patient_service.dart';
 import 'src/data/home_automation_hive_bridge.dart';
 import 'src/data/local_hive_service.dart';
 // Host app will import these directly where needed.
@@ -104,6 +105,10 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
   // Legacy dummy state removed; devices now come from Riverpod providers
 
   late AnimationController _menuAnimationController;
+  
+  // Patient data
+  String _patientName = 'Patient';
+  String _gender = 'male';
 
   @override
   void initState() {
@@ -112,6 +117,18 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
+    _loadPatientData();
+  }
+  
+  Future<void> _loadPatientData() async {
+    final name = await PatientService.instance.getPatientName();
+    final gender = await PatientService.instance.getPatientGender();
+    if (mounted) {
+      setState(() {
+        _patientName = name.isNotEmpty ? name : 'Patient';
+        _gender = gender.toLowerCase();
+      });
+    }
   }
 
   @override
@@ -262,9 +279,9 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
               color: colors.borderSubtle,
               width: 2,
             ),
-            image: const DecorationImage(
-              image: NetworkImage(
-                'https://i.pravatar.cc/150?img=47',
+            image: DecorationImage(
+              image: AssetImage(
+                _gender == 'female' ? 'images/female.jpg' : 'images/male.jpg',
               ),
               fit: BoxFit.cover,
             ),
@@ -288,7 +305,7 @@ class _HomeAutomationScreenState extends State<HomeAutomationScreen>
               ),
               const SizedBox(height: 4),
               Text(
-                'Savannah Nguyen',
+                _patientName,
                 style: TextStyle(
                   color: colors.textPrimary,
                   fontSize: 22,

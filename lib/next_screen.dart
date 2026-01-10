@@ -25,6 +25,12 @@ import 'widgets/overlay_nav_bar.dart';
 import 'screens/patient_home_screen.dart';
 import 'screens/patient_home/patient_home_state.dart';
 import 'screens/patient_home/patient_home_data_provider.dart';
+import 'health/services/patient_vitals_ingestion_service.dart';
+// Fall detection integration
+import 'services/fall_detection/fall_detection.dart';
+import 'screens/fall_detection/fall_detected_screen.dart';
+// Health Stability Score integration
+import 'stability_score/stability_score.dart';
 
 class NextScreen extends StatefulWidget {
   final String? selectedGender;
@@ -61,14 +67,75 @@ class _NextScreenState extends State<NextScreen> {
     _loadPatientData();
     _checkSessionPeriodically();
     _listenToDemoModeChanges();
+    _initializeVitalsIngestion();
+    _initializeFallDetection();
+    _initializeHealthStabilityScore();
     // Removed: _startHealthDataAnimation() - no fake data simulation
 
     // Removed home automation initialization
   }
 
+  /// Initialize Health Stability Score for continuous monitoring
+  Future<void> _initializeHealthStabilityScore() async {
+    try {
+      await StabilityScoreProvider.instance.initialize();
+      debugPrint('[NextScreen] Health Stability Score initialized');
+    } catch (e) {
+      debugPrint('[NextScreen] Failed to initialize HSS: $e');
+    }
+  }
+
+  /// Initialize fall detection for patient safety monitoring
+  Future<void> _initializeFallDetection() async {
+    try {
+      final fallService = FallDetectionService.instance;
+      
+      // Initialize with callback that shows the fall detected screen
+      await fallService.initialize(
+        onFallDetected: () {
+          if (mounted) {
+            _showFallDetectedScreen();
+          }
+        },
+      );
+      
+      // Start monitoring if enabled (default is enabled)
+      if (fallService.isEnabled) {
+        fallService.startMonitoring();
+        debugPrint('[NextScreen] Fall detection monitoring started');
+      }
+    } catch (e) {
+      debugPrint('[NextScreen] Failed to initialize fall detection: $e');
+    }
+  }
+  
+  /// Show fall detected screen with 10-second countdown
+  void _showFallDetectedScreen() {
+    // Stop monitoring while showing alert to prevent duplicate detections
+    FallDetectionService.instance.stopMonitoring();
+    
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const FallDetectedScreen(),
+      ),
+    );
+  }
+
+  /// Initialize vitals ingestion service for wearable health data
+  Future<void> _initializeVitalsIngestion() async {
+    try {
+      final initialized = await PatientVitalsIngestionService.instance.initialize();
+      debugPrint('[NextScreen] Vitals ingestion initialized: $initialized');
+    } catch (e) {
+      debugPrint('[NextScreen] Failed to initialize vitals ingestion: $e');
+    }
+  }
+
   @override
   void dispose() {
     _demoModeSubscription?.cancel();
+    PatientVitalsIngestionService.instance.dispose();
+    FallDetectionService.instance.stopMonitoring();
     // Removed health data timer - no longer needed
     super.dispose();
   }
@@ -213,29 +280,40 @@ class _NextScreenState extends State<NextScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Avatar
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: isDarkMode
-                        ? Colors.white.withOpacity(0.1)
-                        : const Color(0xFFF5F5F7),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
+                // Avatar with HSS badge
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
                         color: isDarkMode
-                            ? Colors.black.withOpacity(0.3)
-                            : const Color(0xFF475569).withOpacity(0.15),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+                            ? Colors.white.withOpacity(0.1)
+                            : const Color(0xFFF5F5F7),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: isDarkMode
+                                ? Colors.black.withOpacity(0.3)
+                                : const Color(0xFF475569).withOpacity(0.15),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                        image: DecorationImage(
+                          image: AssetImage(avatarPath),
+                          fit: BoxFit.cover,
+                        ),
                       ),
-                    ],
-                    image: DecorationImage(
-                      image: AssetImage(avatarPath),
-                      fit: BoxFit.cover,
                     ),
-                  ),
+                    const SizedBox(height: 6),
+                    // HSS Badge under avatar
+                    const HSSBadge(
+                      size: HSSBadgeSize.small,
+                      showLabel: true,
+                    ),
+                  ],
                 ),
                 const SizedBox(width: 16),
                 // Greeting
@@ -529,7 +607,7 @@ class _NextScreenState extends State<NextScreen> {
   Widget _buildHealthMetricsRow(bool isDarkMode) {
     return Row(
       children: [
-        // Heart pressure card with enhanced glassmorphism
+        // Oxygen Saturation card with enhanced glassmorphism
         Expanded(
           child: Container(
             height: 100, // Fixed height for uniformity like automation cards
@@ -558,16 +636,16 @@ class _NextScreenState extends State<NextScreen> {
                                   : Colors.white.withOpacity(0.3),
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            // Heart pressure icon - only animate if real vitals data exists
-                            child: _homeState.vitals.hasData
+                            // Oxygen saturation icon - only animate if real vitals data exists
+                            child: _homeState.vitals.hasOxygenData
                               ? TweenAnimationBuilder<double>(
-                                  duration: Duration(milliseconds: (1000 + (_homeState.vitals.heartRate * 5)).toInt()),
+                                  duration: const Duration(milliseconds: 2000),
                                   tween: Tween<double>(begin: 0.95, end: 1.05),
                                   builder: (context, scale, child) {
                                     return Transform.scale(
                                       scale: scale,
                                       child: Icon(
-                                        CupertinoIcons.heart,
+                                        CupertinoIcons.drop,
                                         color: isDarkMode
                                             ? Colors.white.withOpacity(0.8)
                                             : const Color(0xFF475569).withOpacity(0.8),
@@ -577,7 +655,7 @@ class _NextScreenState extends State<NextScreen> {
                                   },
                                 )
                               : Icon(
-                                  CupertinoIcons.heart,
+                                  CupertinoIcons.drop,
                                   color: isDarkMode
                                       ? Colors.white.withOpacity(0.5)
                                       : const Color(0xFF475569).withOpacity(0.5),
@@ -588,7 +666,7 @@ class _NextScreenState extends State<NextScreen> {
                           // Title aligned with icon
                           Expanded(
                             child: Text(
-                              'Heart pressure',
+                              'Oxygen saturation',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
@@ -605,15 +683,15 @@ class _NextScreenState extends State<NextScreen> {
 
                       const Spacer(), // Use spacer to fill available space
 
-                      // Pressure reading at bottom - show -- / -- if no data
+                      // Oxygen saturation reading at bottom - show -- % if no data
                       Text(
-                        _homeState.vitals.bloodPressureDisplay,
+                        _homeState.vitals.oxygenSaturationDisplay,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           color: isDarkMode 
-                              ? (_homeState.vitals.hasData ? Colors.white : Colors.white.withOpacity(0.5))
-                              : (_homeState.vitals.hasData ? const Color(0xFF0F172A) : const Color(0xFF0F172A).withOpacity(0.5)),
+                              ? (_homeState.vitals.hasOxygenData ? Colors.white : Colors.white.withOpacity(0.5))
+                              : (_homeState.vitals.hasOxygenData ? const Color(0xFF0F172A) : const Color(0xFF0F172A).withOpacity(0.5)),
                           letterSpacing: -0.1,
                         ),
                         maxLines: 1,
@@ -1652,55 +1730,71 @@ class _NextScreenState extends State<NextScreen> {
 
           const SizedBox(height: 24),
 
-          // See More button - only show if medications exist
-          if (_homeState.medicationSchedule.isNotEmpty)
-            Center(
-              child: Container(
-                decoration: isDarkMode 
-                    ? _getMedicationCardDecorationDark()
-                    : _getMedicationCardDecorationLight(),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.transparent,
-                      ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(20),
-                    onTap: () {
-                      // Handle see more action
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const PatientHomeScreen(),
-                        ),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                      child: Text(
-                        'See More',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: isDarkMode
-                              ? Colors.white.withOpacity(0.8)
-                              : const Color(0xFF475569),
-                        ),
-                      ),
+          // Manage Medications button - always show for easy navigation
+          Center(
+            child: Container(
+              decoration: isDarkMode 
+                  ? _getMedicationCardDecorationDark()
+                  : _getMedicationCardDecorationLight(),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Colors.transparent,
                     ),
-                  ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () async {
+                          // Navigate to Patient Home Screen (Medication Dashboard)
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const PatientHomeScreen(),
+                            ),
+                          );
+                          // Refresh data after returning (in case medication was added/changed)
+                          _loadPatientData();
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 12),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                CupertinoIcons.capsule,
+                                size: 16,
+                                color: isDarkMode
+                                    ? Colors.white.withOpacity(0.8)
+                                    : const Color(0xFF475569),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _homeState.medicationSchedule.isNotEmpty 
+                                    ? 'Manage Medications' 
+                                    : 'Add Medications',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDarkMode
+                                      ? Colors.white.withOpacity(0.8)
+                                      : const Color(0xFF475569),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          )
+          ),
         ],
               ), // Close Column
             ), // Close Container  

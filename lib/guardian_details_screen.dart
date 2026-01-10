@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -11,6 +12,7 @@ import 'onboarding/services/onboarding_local_service.dart';
 import 'onboarding/services/onboarding_firestore_service.dart';
 import 'relationships/services/relationship_service.dart';
 import 'relationships/repositories/relationship_repository.dart';
+import 'utils/input_validators.dart';
 
 class GuardianDetailsScreen extends StatefulWidget {
   const GuardianDetailsScreen({super.key});
@@ -240,12 +242,11 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
                               icon: Icons.person_outline,
                               hint: 'e.g., John Doe',
                               isTablet: isTablet,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Please enter your full name';
-                                }
-                                return null;
-                              },
+                              validator: InputValidators.validateName,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-']")),
+                                LengthLimitingTextInputFormatter(100),
+                              ],
                             ).animate().slideX(
                                 begin: -0.3, duration: 600.ms, delay: 600.ms),
 
@@ -259,12 +260,11 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
                               icon: Icons.phone_outlined,
                               keyboardType: TextInputType.phone,
                               isTablet: isTablet,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Please enter your phone number';
-                                }
-                                return null;
-                              },
+                              validator: InputValidators.validatePhone,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(RegExp(r'[\d\s\+\-\(\)]')),
+                                LengthLimitingTextInputFormatter(20),
+                              ],
                             ).animate().slideX(
                                 begin: -0.3, duration: 600.ms, delay: 700.ms),
 
@@ -278,15 +278,11 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
                               icon: Icons.email_outlined,
                               keyboardType: TextInputType.emailAddress,
                               isTablet: isTablet,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Please enter your email address';
-                                }
-                                if (!value.contains('@')) {
-                                  return 'Please enter a valid email address';
-                                }
-                                return null;
-                              },
+                              validator: InputValidators.validateEmail,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                                LengthLimitingTextInputFormatter(254),
+                              ],
                             ).animate().slideX(
                                 begin: -0.3, duration: 600.ms, delay: 800.ms),
 
@@ -299,12 +295,11 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
                               icon: Icons.family_restroom_outlined,
                               hint: 'e.g., Parent, Spouse, Child, etc.',
                               isTablet: isTablet,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Please specify your relation to the patient';
-                                }
-                                return null;
-                              },
+                              validator: InputValidators.validateRelation,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s\-]')),
+                                LengthLimitingTextInputFormatter(50),
+                              ],
                             ).animate().slideX(
                                 begin: -0.3, duration: 600.ms, delay: 900.ms),
 
@@ -317,12 +312,11 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
                               hint: 'e.g., Jane Doe',
                               icon: Icons.local_hospital_outlined,
                               isTablet: isTablet,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Please enter the patient\'s name';
-                                }
-                                return null;
-                              },
+                              validator: (value) => InputValidators.validateName(value, isRequired: true),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-']")),
+                                LengthLimitingTextInputFormatter(100),
+                              ],
                             ).animate().slideX(
                                 begin: -0.3, duration: 600.ms, delay: 1000.ms),
 
@@ -547,6 +541,7 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
     TextInputType? keyboardType,
     String? hint,
     String? Function(String?)? validator,
+    List<TextInputFormatter>? inputFormatters,
     required bool isTablet,
   }) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -591,6 +586,7 @@ class _GuardianDetailsScreenState extends State<GuardianDetailsScreen> {
             controller: controller,
             keyboardType: keyboardType,
             validator: validator,
+            inputFormatters: inputFormatters,
             style: GoogleFonts.inter(
               fontSize: inputFontSize,
               fontWeight: FontWeight.w400,

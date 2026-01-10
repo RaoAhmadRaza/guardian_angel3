@@ -1,4 +1,12 @@
+import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Enum for session state changes
+enum SessionState {
+  active,
+  expired,
+  loggedOut,
+}
 
 class SessionService {
   static const String _sessionKey = 'user_session_timestamp';
@@ -6,6 +14,18 @@ class SessionService {
   static const String _userTypeKey = 'user_type';
   static const String _userUidKey = 'current_user_uid';
   static const int _sessionDurationDays = 2;
+  
+  /// Stream controller for session state changes (Critical Issue #5)
+  final _sessionStateController = StreamController<SessionState>.broadcast();
+  
+  /// Stream of session state changes for UI to listen to
+  Stream<SessionState> get sessionStateStream => _sessionStateController.stream;
+  
+  /// Timer for periodic session validation
+  Timer? _sessionCheckTimer;
+  
+  /// How often to check session validity (every 5 minutes)
+  static const Duration _sessionCheckInterval = Duration(minutes: 5);
 
   // ═══════════════════════════════════════════════════════════════════════
   // SINGLETON (DEPRECATED - Use Riverpod provider instead)
@@ -54,12 +74,61 @@ class SessionService {
       print('📅 SessionService: Current time: $currentDate');
       print('📊 SessionService: Days difference: $daysDifference');
       print('✅ SessionService: Session valid: $isValid');
+      
+      // Critical Issue #5: Broadcast session expiry if invalid
+      if (!isValid) {
+        _sessionStateController.add(SessionState.expired);
+      }
 
       return isValid;
     } catch (e) {
       print('❌ SessionService Error checking session: $e');
       return false;
     }
+  }
+  
+  /// Start periodic session validation checks
+  /// Call this when app initializes or resumes from background
+  void startSessionMonitoring() {
+    _sessionCheckTimer?.cancel();
+    _sessionCheckTimer = Timer.periodic(_sessionCheckInterval, (_) async {
+      final isValid = await hasValidSession();
+      if (!isValid) {
+        _sessionStateController.add(SessionState.expired);
+        _sessionCheckTimer?.cancel();
+      }
+    });
+    print('⏰ SessionService: Started session monitoring');
+  }
+  
+  /// Stop session monitoring
+  void stopSessionMonitoring() {
+    _sessionCheckTimer?.cancel();
+    _sessionCheckTimer = null;
+    print('⏰ SessionService: Stopped session monitoring');
+  }
+  
+  /// Get remaining session time in hours
+  Future<int?> getRemainingSessionHours() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sessionTimestamp = prefs.getInt(_sessionKey);
+      if (sessionTimestamp == null) return null;
+      
+      final sessionDate = DateTime.fromMillisecondsSinceEpoch(sessionTimestamp);
+      final expiryDate = sessionDate.add(Duration(days: _sessionDurationDays));
+      final remaining = expiryDate.difference(DateTime.now());
+      
+      return remaining.inHours;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  /// Check if session is about to expire (within 4 hours)
+  Future<bool> isSessionAboutToExpire() async {
+    final remaining = await getRemainingSessionHours();
+    return remaining != null && remaining <= 4 && remaining > 0;
   }
 
   /// Start a new user session
@@ -80,6 +149,10 @@ class SessionService {
         await prefs.setString(_userUidKey, uid);
         print('👤 SessionService: Stored UID: $uid');
       }
+      
+      // Start session monitoring after login
+      startSessionMonitoring();
+      _sessionStateController.add(SessionState.active);
 
       print(
           '🎉 SessionService: New session started at ${DateTime.now()} for $userType (uid: $uid)');
@@ -97,6 +170,10 @@ class SessionService {
       await prefs.setBool(_loginStatusKey, false);
       await prefs.remove(_userTypeKey);
       await prefs.remove(_userUidKey);
+      
+      // Stop monitoring and notify listeners
+      stopSessionMonitoring();
+      _sessionStateController.add(SessionState.loggedOut);
 
       print('👋 SessionService: Session ended');
     } catch (e) {
@@ -182,5 +259,11 @@ class SessionService {
     } catch (e) {
       return {'error': e.toString()};
     }
+  }
+  
+  /// Dispose of resources (call when app is closing)
+  void dispose() {
+    stopSessionMonitoring();
+    _sessionStateController.close();
   }
 }

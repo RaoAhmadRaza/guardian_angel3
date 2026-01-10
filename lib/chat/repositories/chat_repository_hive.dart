@@ -485,8 +485,13 @@ class ChatRepositoryHive implements ChatRepository {
   }
 
   @override
-  Stream<List<ChatMessageModel>> watchMessagesForThread(String threadId) {
-    return _messagesBox.watch().map((_) {
+  Stream<List<ChatMessageModel>> watchMessagesForThread(String threadId) async* {
+    // Emit initial value immediately so UI doesn't wait forever
+    yield _getMessagesForThreadSync(threadId)
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    
+    // Then watch for changes
+    yield* _messagesBox.watch().map((_) {
       return _getMessagesForThreadSync(threadId)
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     });

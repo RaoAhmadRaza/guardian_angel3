@@ -352,6 +352,9 @@ class _CaregiverPatientChatScreenState extends ConsumerState<CaregiverPatientCha
   }
 
   Widget _buildMessageBubble(ChatMessageModel msg, bool isMe) {
+    final isFailed = msg.localStatus == ChatMessageLocalStatus.failed;
+    final isPending = msg.localStatus == ChatMessageLocalStatus.pending;
+    
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -362,31 +365,39 @@ class _CaregiverPatientChatScreenState extends ConsumerState<CaregiverPatientCha
             child: Column(
               crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: isMe ? const Color(0xFF007AFF) : Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(20),
-                      topRight: const Radius.circular(20),
-                      bottomLeft: isMe ? const Radius.circular(20) : const Radius.circular(4),
-                      bottomRight: isMe ? const Radius.circular(4) : const Radius.circular(20),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
+                GestureDetector(
+                  onTap: isFailed ? () => _retryMessage(msg) : null,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isMe 
+                          ? (isFailed ? const Color(0xFFFF3B30) : const Color(0xFF007AFF)) 
+                          : Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(20),
+                        topRight: const Radius.circular(20),
+                        bottomLeft: isMe ? const Radius.circular(20) : const Radius.circular(4),
+                        bottomRight: isMe ? const Radius.circular(4) : const Radius.circular(20),
                       ),
-                    ],
-                  ),
-                  child: Text(
-                    msg.content,
-                    style: GoogleFonts.inter(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: isMe ? Colors.white : Colors.black,
-                      height: 1.4,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Opacity(
+                      opacity: isPending ? 0.6 : 1.0,
+                      child: Text(
+                        msg.content,
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: isMe ? Colors.white : Colors.black,
+                          height: 1.4,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -405,14 +416,41 @@ class _CaregiverPatientChatScreenState extends ConsumerState<CaregiverPatientCha
                     ),
                     if (isMe) ...[
                       const SizedBox(width: 4),
-                      Icon(
-                        msg.readAt != null 
-                            ? CupertinoIcons.checkmark_alt_circle_fill 
-                            : CupertinoIcons.check_mark,
-                        size: 12,
-                        color: msg.readAt != null 
-                            ? const Color(0xFF34C759) 
-                            : const Color(0xFF007AFF),
+                      if (isFailed)
+                        const Icon(
+                          CupertinoIcons.exclamationmark_circle_fill,
+                          size: 12,
+                          color: Color(0xFFFF3B30),
+                        )
+                      else if (isPending)
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF8E8E93)),
+                          ),
+                        )
+                      else
+                        Icon(
+                          msg.readAt != null 
+                              ? CupertinoIcons.checkmark_alt_circle_fill 
+                              : CupertinoIcons.check_mark,
+                          size: 12,
+                          color: msg.readAt != null 
+                              ? const Color(0xFF34C759) 
+                              : const Color(0xFF007AFF),
+                        ),
+                    ],
+                    if (isFailed && isMe) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        'Tap to retry',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFFFF3B30),
+                        ),
                       ),
                     ],
                   ],
@@ -423,6 +461,10 @@ class _CaregiverPatientChatScreenState extends ConsumerState<CaregiverPatientCha
         ],
       ),
     );
+  }
+  
+  Future<void> _retryMessage(ChatMessageModel msg) async {
+    await ref.read(caregiverPortalProvider.notifier).retryFailedMessages();
   }
 
   Widget _buildEmptyChat(String patientName) {

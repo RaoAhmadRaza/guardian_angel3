@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'patient_ai_chat/patient_ai_chat_state.dart';
 import 'patient_ai_chat/patient_ai_chat_data_provider.dart';
 import '../services/guardian_ai_service.dart';
@@ -95,6 +96,9 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
   
   // Local UI state (not persisted)
   bool _isMenuOpen = false;
+  bool _showHistoryWarning = false;  // Issue #20: Context limit warning
+  bool _isOffline = false;  // Issue #32: Offline mode tracking
+  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
   
   // Animation Controllers
   late AnimationController _pulseController;
@@ -106,9 +110,40 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+    
+    // Issue #20: Listen for history truncation
+    _aiService.onHistoryTruncated = (int messagesRemoved) {
+      if (mounted) {
+        setState(() => _showHistoryWarning = true);
+        // Auto-dismiss after 5 seconds
+        Future.delayed(const Duration(seconds: 5), () {
+          if (mounted) setState(() => _showHistoryWarning = false);
+        });
+      }
+    };
+    
+    // Issue #32: Monitor network connectivity
+    _checkConnectivity();
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((result) {
+      if (mounted) {
+        setState(() => _isOffline = result == ConnectivityResult.none);
+      }
+    });
 
     // Load state from local storage
     _loadChatState();
+  }
+  
+  /// Issue #32: Check initial connectivity state
+  Future<void> _checkConnectivity() async {
+    try {
+      final result = await Connectivity().checkConnectivity();
+      if (mounted) {
+        setState(() => _isOffline = result == ConnectivityResult.none);
+      }
+    } catch (e) {
+      // Assume online if check fails
+    }
   }
   
   /// Load chat state from local storage
@@ -136,17 +171,31 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
     _pulseController.dispose();
     _scrollController.dispose();
     _textController.dispose();
+    _connectivitySubscription?.cancel();
     super.dispose();
   }
 
   void _handleSend([String? message]) async {
     if (_state == null) return;
+    
+    // Issue #12: Rate limiting - prevent sending while AI is typing
+    if (_state!.isAITyping) return;
+    
+    // Issue #32: Check for offline mode
+    if (_isOffline) {
+      _showOfflineMessage();
+      return;
+    }
+    
     final text = message ?? _textController.text;
     if (text.trim().isEmpty) return;
     
+    // Issue #13: Character limit (2000 chars)
+    final trimmedText = text.length > 2000 ? text.substring(0, 2000) : text;
+    
     final userMessage = ChatMessage(
       id: 'user_${DateTime.now().millisecondsSinceEpoch}',
-      text: text,
+      text: trimmedText,
       sender: 'user',
       timestamp: DateTime.now(),
       status: 'sent',
@@ -164,7 +213,7 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
 
     // Call Guardian AI Service
     try {
-      final response = await _aiService.sendMessage(text);
+      final response = await _aiService.sendMessage(trimmedText);
       
       if (mounted) {
         final aiMessage = ChatMessage(
@@ -189,12 +238,14 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
       }
     } catch (e) {
       if (mounted) {
+        // Issue #18: Store last message for retry
         final errorMessage = ChatMessage(
           id: 'ai_error_${DateTime.now().millisecondsSinceEpoch}',
           text: "I'm sorry, dear. I had trouble understanding that. Could you please try again? I'm here for you! 💙",
           sender: 'ai',
           timestamp: DateTime.now(),
           status: 'error',
+          failedMessageText: trimmedText, // Store original for retry
         );
         
         setState(() {
@@ -206,6 +257,13 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
         
         _scrollToBottom();
       }
+    }
+  }
+  
+  /// Retry sending a failed message (Issue #18)
+  void _retryMessage(String originalText) {
+    if (originalText.isNotEmpty) {
+      _handleSend(originalText);
     }
   }
 
@@ -357,6 +415,10 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
             children: [
               // 3. Header
               _buildHeader(),
+              
+              // Issue #20: History context limit warning
+              if (_showHistoryWarning)
+                _buildHistoryWarningBanner(),
               
               // 4. Messages Area
               Expanded(
@@ -736,6 +798,133 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
     ).animate().slideY(begin: 0.5, end: 0, duration: 400.ms, delay: Duration(milliseconds: delay), curve: Curves.easeOutBack).fade(duration: 400.ms, delay: Duration(milliseconds: delay));
   }
 
+  /// Issue #20: Warning banner when conversation history is trimmed
+  Widget _buildHistoryWarningBanner() {
+    final colors = _ChatColors.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.statusWarning.withOpacity(0.15),
+        border: Border(
+          bottom: BorderSide(color: colors.statusWarning.withOpacity(0.3)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            CupertinoIcons.info_circle_fill,
+            size: 18,
+            color: colors.statusWarning,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Some earlier messages were removed to keep our conversation flowing smoothly.',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: colors.textSecondary,
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => setState(() => _showHistoryWarning = false),
+            child: Icon(
+              CupertinoIcons.xmark_circle_fill,
+              size: 18,
+              color: colors.textTertiary,
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 300.milliseconds);
+  }
+  
+  /// Issue #30: Show chat menu with clear option
+  void _showChatMenu() {
+    showCupertinoModalPopup(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(context);
+              _showClearChatConfirmation();
+            },
+            isDestructiveAction: true,
+            child: const Text('Clear Chat History'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ),
+    );
+  }
+  
+  /// Issue #30: Confirmation dialog for clearing chat
+  void _showClearChatConfirmation() {
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Clear Chat History'),
+        content: const Text(
+          'This will delete all messages and start fresh. This cannot be undone.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () {
+              Navigator.pop(context);
+              _clearChatHistory();
+            },
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// Issue #30: Clear all chat messages
+  void _clearChatHistory() async {
+    await _dataProvider.clearChatHistory();
+    _aiService.clearHistory();
+    
+    if (mounted) {
+      setState(() {
+        _state = PatientAIChatState.initial();
+      });
+    }
+  }
+  
+  /// Issue #32: Show offline mode message
+  void _showOfflineMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(CupertinoIcons.wifi_slash, color: Colors.white, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'You\'re offline. Please check your connection to chat with Guardian Angel.',
+                style: GoogleFonts.inter(fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.grey.shade800,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   Widget _buildHeader() {
     final colors = _ChatColors.of(context);
     return ClipRect(
@@ -830,15 +1019,18 @@ class _PatientAIChatScreenState extends State<PatientAIChatScreen> with TickerPr
                 ],
               ),
 
-              // Right Action
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: colors.bgSecondary.withOpacity(0.5),
-                  shape: BoxShape.circle,
+              // Right Action - Issue #30: Add menu with clear chat option
+              GestureDetector(
+                onTap: _showChatMenu,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: colors.bgSecondary.withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.more_horiz, color: colors.iconSecondary),
                 ),
-                child: Icon(Icons.more_horiz, color: colors.iconSecondary),
               ),
             ],
           ),

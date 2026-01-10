@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../models/medication_model.dart';
 
 class MedicationDetailScreen extends StatefulWidget {
   final Map<String, dynamic>? medication;
-  const MedicationDetailScreen({super.key, this.medication});
+  final MedicationModel? medicationModel;
+  
+  const MedicationDetailScreen({
+    super.key, 
+    this.medication,
+    this.medicationModel,
+  });
 
   @override
   State<MedicationDetailScreen> createState() => _MedicationDetailScreenState();
@@ -14,6 +21,208 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
   bool _isLogged = false;
   double _sliderPos = 0.0;
   final double _handleSize = 80.0;
+  
+  // Computed medication data
+  String get _medicationName => 
+      widget.medicationModel?.name ?? 
+      widget.medication?['name'] as String? ?? 
+      'Medication';
+  
+  String get _dose => 
+      widget.medicationModel?.dose ?? 
+      widget.medication?['dose'] as String? ?? 
+      widget.medication?['dosage'] as String? ??
+      '';
+  
+  String get _time {
+    if (widget.medicationModel != null) {
+      return _formatTime24To12(widget.medicationModel!.time);
+    }
+    return widget.medication?['time'] as String? ?? '08:00 AM';
+  }
+  
+  int get _currentStock => 
+      widget.medicationModel?.currentStock ?? 
+      widget.medication?['currentStock'] as int? ?? 
+      30;
+  
+  String get _medicationType => 
+      widget.medicationModel?.type ?? 
+      widget.medication?['subType'] as String? ?? 
+      'pill';
+  
+  String get _instructions => 
+      widget.medication?['instructions'] as String? ?? 
+      'Take as directed';
+  
+  int get _frequency {
+    // Try to get frequency from medication data
+    final freq = widget.medication?['frequency'] as int?;
+    if (freq != null) return freq;
+    
+    // Default based on type
+    if (_medicationType == 'infusion') return 1;
+    return 1; // Default to 1x per day
+  }
+  
+  /// Calculate supply days based on stock and frequency
+  int get _supplyDays => _frequency > 0 ? (_currentStock / _frequency).floor() : _currentStock;
+  
+  /// Format 24h time to 12h format
+  String _formatTime24To12(String time24) {
+    final parts = time24.split(':');
+    if (parts.length != 2) return time24;
+    
+    final hour = int.tryParse(parts[0]) ?? 0;
+    final minute = int.tryParse(parts[1]) ?? 0;
+    
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final hour12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    
+    return '${hour12.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $period';
+  }
+  
+  /// Generate schedule items based on medication time and frequency
+  List<_ScheduleData> _generateSchedule() {
+    final schedules = <_ScheduleData>[];
+    
+    // Parse the base time
+    String baseTime = widget.medicationModel?.time ?? '08:00';
+    final parts = baseTime.split(':');
+    int baseHour = int.tryParse(parts[0]) ?? 8;
+    int baseMinute = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+    
+    // Generate schedule based on frequency
+    final now = DateTime.now();
+    final currentHour = now.hour;
+    final currentMinute = now.minute;
+    
+    for (int i = 0; i < _frequency; i++) {
+      // Calculate time for each dose (spread throughout the day)
+      int doseHour = (baseHour + (i * (12 ~/ _frequency))) % 24;
+      
+      final time = _formatTime24To12('${doseHour.toString().padLeft(2, '0')}:${baseMinute.toString().padLeft(2, '0')}');
+      
+      // Determine status based on current time
+      bool isCompleted = false;
+      String status = 'Upcoming';
+      
+      if (doseHour < currentHour || (doseHour == currentHour && baseMinute <= currentMinute)) {
+        // Past dose time - check if logged
+        isCompleted = _isLogged && i == 0; // First dose is logged via slider
+        status = isCompleted ? 'Taken' : 'Missed';
+      }
+      
+      schedules.add(_ScheduleData(
+        time: time,
+        status: status,
+        isCompleted: isCompleted,
+      ));
+    }
+    
+    // If no schedule items (frequency 0), add at least one
+    if (schedules.isEmpty) {
+      schedules.add(_ScheduleData(
+        time: _time,
+        status: _isLogged ? 'Taken' : 'Upcoming',
+        isCompleted: _isLogged,
+      ));
+    }
+    
+    return schedules;
+  }
+  
+  /// Get frequency text
+  String _getFrequencyText() {
+    switch (_frequency) {
+      case 1:
+        return 'Once daily';
+      case 2:
+        return 'Twice daily';
+      case 3:
+        return '3x a day';
+      case 4:
+        return '4x a day';
+      default:
+        return '$_frequency x daily';
+    }
+  }
+  
+  /// Get medication icon based on type
+  IconData _getMedicationIcon() {
+    switch (_medicationType.toLowerCase()) {
+      case 'capsule':
+        return CupertinoIcons.capsule;
+      case 'liquid':
+      case 'infusion':
+        return CupertinoIcons.drop_fill;
+      case 'injection':
+        return Icons.vaccines;
+      default:
+        return CupertinoIcons.capsule_fill;
+    }
+  }
+  
+  /// Get medication color based on type
+  Color _getMedicationColor() {
+    switch (_medicationType.toLowerCase()) {
+      case 'capsule':
+        return const Color(0xFFEFF6FF); // Blue tint
+      case 'liquid':
+      case 'infusion':
+        return const Color(0xFFFFF7ED); // Orange tint
+      case 'injection':
+        return const Color(0xFFF0FDF4); // Green tint
+      default:
+        return const Color(0xFFF5F3FF); // Purple tint
+    }
+  }
+  
+  /// Get medication icon color based on type
+  Color _getMedicationIconColor() {
+    switch (_medicationType.toLowerCase()) {
+      case 'capsule':
+        return const Color(0xFF2563EB); // Blue
+      case 'liquid':
+      case 'infusion':
+        return const Color(0xFFEA580C); // Orange
+      case 'injection':
+        return const Color(0xFF16A34A); // Green
+      default:
+        return const Color(0xFF7C3AED); // Purple
+    }
+  }
+  
+  /// Build schedule items dynamically
+  List<Widget> _buildScheduleItems() {
+    final schedules = _generateSchedule();
+    if (schedules.isEmpty) {
+      return [
+        Center(
+          child: Text(
+            'No scheduled doses',
+            style: GoogleFonts.inter(
+              fontSize: 16,
+              color: const Color(0xFF64748B),
+            ),
+          ),
+        ),
+      ];
+    }
+    
+    return schedules.asMap().entries.map((entry) {
+      final index = entry.key;
+      final schedule = entry.value;
+      
+      return _ScheduleItem(
+        time: schedule.time,
+        status: schedule.status,
+        isCompleted: schedule.isCompleted,
+        isFirst: index == 0,
+        isLast: index == schedules.length - 1,
+      );
+    }).toList();
+  }
 
   void _handleDragUpdate(DragUpdateDetails details, double maxWidth) {
     if (_isLogged) return;
@@ -105,7 +314,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
                             height: 256,
                             margin: const EdgeInsets.only(bottom: 24),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF5F5F7),
+                              color: _getMedicationColor(),
                               borderRadius: BorderRadius.circular(64),
                               border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
                               boxShadow: [
@@ -115,16 +324,17 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
                                   offset: const Offset(0, 10),
                                 ),
                               ],
-                              image: const DecorationImage(
-                                image: NetworkImage(
-                                  'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&q=80&w=300&h=300&seed=med1',
-                                ),
-                                fit: BoxFit.cover,
+                            ),
+                            child: Center(
+                              child: Icon(
+                                _getMedicationIcon(),
+                                size: 100,
+                                color: _getMedicationIconColor(),
                               ),
                             ),
                           ),
                           Text(
-                            widget.medication?['name'] ?? 'Amoxicillin',
+                            _medicationName,
                             textAlign: TextAlign.center,
                             style: GoogleFonts.inter(
                               fontSize: 36,
@@ -135,7 +345,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            '${widget.medication?['dose'] ?? '500mg'} • ${widget.medication?['instructions'] ?? 'Take with food'}',
+                            '$_dose • $_instructions',
                             textAlign: TextAlign.center,
                             style: GoogleFonts.inter(
                               fontSize: 20,
@@ -148,7 +358,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
 
                       const SizedBox(height: 40),
 
-                      // Info Grid
+                      // Info Grid - Using dynamic data
                       GridView.count(
                         crossAxisCount: 2,
                         shrinkWrap: true,
@@ -160,29 +370,29 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
                           _InfoBox(
                             icon: CupertinoIcons.doc_text,
                             label: 'Dose',
-                            value: widget.medication?['dose'] ?? '500mg',
+                            value: _dose.isNotEmpty ? _dose : 'N/A',
                           ),
                           _InfoBox(
                             icon: CupertinoIcons.clock,
                             label: 'Time',
-                            value: widget.medication?['time'] ?? '08:00 AM',
+                            value: _time,
                           ),
                           _InfoBox(
                             icon: CupertinoIcons.cube_box,
                             label: 'Supply',
-                            value: '${((widget.medication?['currentStock'] ?? 36) / 3).floor()} Days', // Mock calc
+                            value: '$_supplyDays Days',
                           ),
-                          const _InfoBox(
-                            icon: CupertinoIcons.pencil, // Edit3 equivalent
+                          _InfoBox(
+                            icon: CupertinoIcons.calendar,
                             label: 'Frequency',
-                            value: '3x a day',
+                            value: _getFrequencyText(),
                           ),
                         ],
                       ),
 
                       const SizedBox(height: 40),
 
-                      // Schedule
+                      // Schedule - Using dynamic data
                       Text(
                         "Today's Schedule",
                         style: GoogleFonts.inter(
@@ -193,23 +403,8 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
                       ),
                       const SizedBox(height: 24),
                       
-                      const _ScheduleItem(
-                        time: '08:00 AM',
-                        status: 'Taken',
-                        isCompleted: true,
-                        isFirst: true,
-                      ),
-                      const _ScheduleItem(
-                        time: '02:00 PM',
-                        status: 'Upcoming',
-                        isCompleted: false,
-                      ),
-                      const _ScheduleItem(
-                        time: '08:00 PM',
-                        status: 'Upcoming',
-                        isCompleted: false,
-                        isLast: true,
-                      ),
+                      // Dynamic schedule items
+                      ..._buildScheduleItems(),
                     ],
                   ),
                 ),
@@ -516,4 +711,17 @@ class _ScheduleItem extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Data class to hold schedule information
+class _ScheduleData {
+  final String time;
+  final String status;
+  final bool isCompleted;
+
+  const _ScheduleData({
+    required this.time,
+    required this.status,
+    required this.isCompleted,
+  });
 }

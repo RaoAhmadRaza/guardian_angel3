@@ -13,6 +13,7 @@ import 'peace_of_mind_screen.dart';
 import 'community_discovery_screen.dart';
 import 'patient_chat/patient_chat_state.dart';
 import 'patient_chat/patient_chat_data_provider.dart';
+import '../services/patient_service.dart';
 
 // --- THEME COLORS ---
 
@@ -215,8 +216,11 @@ class _PatientChatScreenState extends State<PatientChatScreen> with SingleTicker
   /// First-time users get empty state with helpful guidance
   Future<void> _loadPatientChatData() async {
     try {
-      // TODO: Get patient name from onboarding/profile storage
-      const patientName = 'there'; // Placeholder - will be loaded from storage
+      // Issue #11: Load patient name from PatientService instead of hardcoding
+      final patientFirstName = await PatientService.instance.getPatientFirstName();
+      final patientName = patientFirstName.isNotEmpty && patientFirstName != 'Patient' 
+          ? patientFirstName 
+          : 'there';
       final state = await _dataProvider.loadInitialState(patientName: patientName);
       if (mounted) {
         setState(() {

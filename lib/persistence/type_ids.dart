@@ -229,6 +229,28 @@ abstract final class TypeIds {
   // Reserved: 57-59 for future health persistence types
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // GEOFENCING (60-65)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  /// SafeZoneModel - Geofencing safe zone
+  /// Adapter: lib/geofencing/adapters/safe_zone_adapter.dart
+  static const int safeZone = 60;
+  
+  /// SafeZoneType - Enum for zone type (home, work, park, etc.)
+  /// Adapter: lib/geofencing/adapters/safe_zone_adapter.dart
+  static const int safeZoneType = 61;
+  
+  /// GeofenceEvent - Zone entry/exit event record
+  /// Adapter: lib/geofencing/adapters/safe_zone_adapter.dart
+  static const int geofenceEvent = 62;
+  
+  /// GeofenceEventType - Enum for event type (entry, exit)
+  /// Adapter: lib/geofencing/adapters/safe_zone_adapter.dart
+  static const int geofenceEventType = 63;
+  
+  // Reserved: 64-65 for future geofencing types
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // REGISTRY HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
   
@@ -288,6 +310,12 @@ abstract final class TypeIds {
     // Health Data Persistence (55-59)
     storedHealthReading: 'StoredHealthReadingAdapter',
     storedHealthReadingType: 'StoredHealthReadingTypeAdapter',
+    
+    // Geofencing (60-65)
+    safeZone: 'SafeZoneModelAdapter',
+    safeZoneType: 'SafeZoneTypeAdapter',
+    geofenceEvent: 'GeofenceEventAdapter',
+    geofenceEventType: 'GeofenceEventTypeAdapter',
   };
   
   /// Returns all TypeId values as a set.

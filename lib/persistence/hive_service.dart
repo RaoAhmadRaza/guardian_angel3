@@ -27,6 +27,8 @@ import 'adapters/relationship_adapter.dart';
 import 'adapters/chat_adapter.dart';
 // Health Data Persistence adapters
 import 'adapters/stored_health_reading_adapter.dart';
+// Geofencing adapters
+import '../geofencing/adapters/safe_zone_adapter.dart';
 import '../models/vitals_model.dart';
 import '../models/room_model.dart';
 import '../models/pending_op.dart';
@@ -193,6 +195,19 @@ class HiveService {
     }
     if (!Hive.isAdapterRegistered(TypeIds.storedHealthReadingType)) {
       Hive.registerAdapter(StoredHealthReadingTypeAdapter());
+    }
+    // Geofencing adapters (60-63)
+    if (!Hive.isAdapterRegistered(TypeIds.safeZone)) {
+      Hive.registerAdapter(SafeZoneModelAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.safeZoneType)) {
+      Hive.registerAdapter(SafeZoneTypeAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.geofenceEvent)) {
+      Hive.registerAdapter(GeofenceEventAdapter());
+    }
+    if (!Hive.isAdapterRegistered(TypeIds.geofenceEventType)) {
+      Hive.registerAdapter(GeofenceEventTypeAdapter());
     }
 
     final key = await _getOrCreateKey();

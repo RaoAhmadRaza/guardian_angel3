@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -209,18 +210,27 @@ class _SignUPState extends State<SignUP> {
     );
   }
 
-  bool _isValidPhoneNumber(String phone) {
-    // Remove any non-digit characters for validation
+  /// Returns an error message if phone is invalid, null if valid
+  String? _getPhoneValidationError(String phone) {
     String cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
-
-    // Check if it has at least 1 digit
-    return cleanPhone.isNotEmpty;
+    
+    if (cleanPhone.isEmpty) {
+      return 'Please enter your phone number';
+    }
+    if (cleanPhone.length < 7) {
+      return 'Phone number is too short (minimum 7 digits)';
+    }
+    if (cleanPhone.length > 15) {
+      return 'Phone number is too long (maximum 15 digits)';
+    }
+    return null;
   }
 
   void _createAccount() {
-    // Validate required fields
-    if (!_isValidPhoneNumber(phoneController.text)) {
-      _showError('Please enter a valid phone number');
+    // Validate phone number with specific error messages
+    final phoneError = _getPhoneValidationError(phoneController.text);
+    if (phoneError != null) {
+      _showError(phoneError);
       return;
     }
 
@@ -629,6 +639,10 @@ class _SignUPState extends State<SignUP> {
                             child: TextField(
                               controller: phoneController,
                               keyboardType: TextInputType.phone,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(RegExp(r'[\d\s\-]')),
+                                LengthLimitingTextInputFormatter(20),
+                              ],
                               style: GoogleFonts.inter(
                                 fontSize: 16,
                                 color: Theme.of(context).colorScheme.onSurface,

@@ -5,10 +5,14 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:speech_to_text/speech_recognition_error.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:permission_handler/permission_handler.dart';
 
 import 'peace_of_mind/peace_of_mind_state.dart';
 import 'peace_of_mind/peace_of_mind_data_provider.dart';
 import 'package:guardian_angel_fyp/screens/wellness_center_screen.dart';
+import 'package:guardian_angel_fyp/services/peace_of_mind_ai_service.dart';
 
 class PeaceOfMindScreen extends StatefulWidget {
   const PeaceOfMindScreen({super.key});
@@ -33,6 +37,14 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
 
   // Data provider
   final _dataProvider = PeaceOfMindDataProvider.instance;
+  
+  // Speech-to-text
+  late stt.SpeechToText _speech;
+  bool _speechAvailable = false;
+  String _currentTranscription = '';
+  
+  // AI Service
+  final _aiService = PeaceOfMindAIService();
 
   @override
   void initState() {
@@ -53,7 +65,88 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
       duration: const Duration(seconds: 8),
     )..repeat();
 
+    // Initialize speech-to-text
+    _speech = stt.SpeechToText();
+    _initSpeech();
+
     _loadInitialState();
+  }
+  
+  /// Initialize speech recognition
+  Future<void> _initSpeech() async {
+    try {
+      _speechAvailable = await _speech.initialize(
+        onStatus: _onSpeechStatus,
+        onError: _onSpeechError,
+      );
+    } catch (e) {
+      debugPrint('Speech init error: $e');
+      _speechAvailable = false;
+    }
+  }
+  
+  /// Handle speech status changes
+  void _onSpeechStatus(String status) {
+    debugPrint('Speech status: $status');
+    if (status == 'done' || status == 'notListening') {
+      // Speech ended naturally - process the transcription
+      if (_state.speechStatus == SpeechStatus.listening && 
+          _currentTranscription.isNotEmpty) {
+        _processTranscription();
+      } else if (_state.speechStatus == SpeechStatus.listening) {
+        // No transcription captured
+        setState(() {
+          _state = _state.copyWith(
+            speechStatus: SpeechStatus.idle,
+            isRecordingReflection: false,
+          );
+        });
+      }
+    }
+  }
+  
+  /// Handle speech errors
+  void _onSpeechError(SpeechRecognitionError error) {
+    debugPrint('Speech error: ${error.errorMsg}');
+    setState(() {
+      _state = _state.copyWith(
+        speechStatus: SpeechStatus.error,
+        errorMessage: _getSpeechErrorMessage(error.errorMsg),
+        isRecordingReflection: false,
+      );
+    });
+    
+    // Clear error after delay
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && _state.speechStatus == SpeechStatus.error) {
+        setState(() {
+          _state = _state.copyWith(
+            speechStatus: SpeechStatus.idle,
+            clearErrorMessage: true,
+          );
+        });
+      }
+    });
+  }
+  
+  /// Convert speech error codes to user-friendly messages
+  String _getSpeechErrorMessage(String errorCode) {
+    switch (errorCode) {
+      case 'error_no_match':
+        return "I couldn't catch that. Try speaking a bit louder.";
+      case 'error_speech_timeout':
+        return 'No speech detected. Hold the mic and speak.';
+      case 'error_audio':
+        return 'Audio error. Please try again.';
+      case 'error_network':
+        return 'Network error. Check your connection.';
+      case 'error_permission':
+        return 'Microphone permission needed.';
+      case 'error_busy':
+        return 'Microphone is busy. Try again.';
+      default:
+        return 'Something went wrong. Try again.';
+    }
   }
 
   Future<void> _loadInitialState() async {
@@ -87,16 +180,208 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
     _dataProvider.saveMood(value);
   }
 
-  void _onReflectStart() {
+  /// Called when user presses the mic button
+  Future<void> _onReflectStart() async {
+    // Don't start if already processing
+    if (_state.speechStatus == SpeechStatus.processing) {
+      return;
+    }
+    
+    // Check microphone permission
+    final permissionStatus = await Permission.microphone.status;
+    if (!permissionStatus.isGranted) {
+      final result = await Permission.microphone.request();
+      if (!result.isGranted) {
+        _showPermissionDeniedSnackbar();
+        return;
+      }
+      // Re-initialize speech after permission granted
+      await _initSpeech();
+    }
+    
+    // Check if speech is available
+    if (!_speechAvailable) {
+      // Try to initialize again
+      await _initSpeech();
+      if (!_speechAvailable) {
+        setState(() {
+          _state = _state.copyWith(
+            speechStatus: SpeechStatus.error,
+            errorMessage: 'Speech recognition not available on this device.',
+          );
+        });
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _state = _state.copyWith(
+                speechStatus: SpeechStatus.idle,
+                clearErrorMessage: true,
+              );
+            });
+          }
+        });
+        return;
+      }
+    }
+    
+    // Clear previous transcription
+    _currentTranscription = '';
+    
     setState(() {
-      _state = _state.copyWith(isRecordingReflection: true);
+      _state = _state.copyWith(
+        isRecordingReflection: true,
+        speechStatus: SpeechStatus.listening,
+        clearTranscribedText: true,
+        clearErrorMessage: true,
+      );
     });
+    
+    // Start listening
+    try {
+      await _speech.listen(
+        onResult: (result) {
+          _currentTranscription = result.recognizedWords;
+          setState(() {
+            _state = _state.copyWith(
+              transcribedText: result.recognizedWords,
+            );
+          });
+        },
+        listenMode: stt.ListenMode.dictation,
+        pauseFor: const Duration(seconds: 3),
+        partialResults: true,
+        localeId: 'en_US',
+      );
+    } catch (e) {
+      debugPrint('Speech listen error: $e');
+      setState(() {
+        _state = _state.copyWith(
+          speechStatus: SpeechStatus.error,
+          errorMessage: 'Could not start listening. Try again.',
+          isRecordingReflection: false,
+        );
+      });
+    }
   }
 
-  void _onReflectEnd() {
+  /// Called when user releases the mic button
+  Future<void> _onReflectEnd() async {
+    if (_state.speechStatus != SpeechStatus.listening) {
+      return;
+    }
+    
+    // Stop listening
+    await _speech.stop();
+    
+    // Process the transcription if we have any
+    if (_currentTranscription.isNotEmpty) {
+      await _processTranscription();
+    } else {
+      setState(() {
+        _state = _state.copyWith(
+          isRecordingReflection: false,
+          speechStatus: SpeechStatus.idle,
+        );
+      });
+    }
+  }
+  
+  /// Process the transcribed text with AI
+  Future<void> _processTranscription() async {
+    final transcription = _currentTranscription.trim();
+    
+    if (transcription.isEmpty) {
+      setState(() {
+        _state = _state.copyWith(
+          isRecordingReflection: false,
+          speechStatus: SpeechStatus.idle,
+        );
+      });
+      return;
+    }
+    
+    // Update state to processing
     setState(() {
-      _state = _state.copyWith(isRecordingReflection: false);
+      _state = _state.copyWith(
+        isRecordingReflection: false,
+        speechStatus: SpeechStatus.processing,
+        transcribedText: transcription,
+      );
     });
+    
+    // Call AI service
+    try {
+      final result = await _aiService.generateReflection(transcription);
+      
+      if (!mounted) return;
+      
+      setState(() {
+        _state = _state.copyWith(
+          speechStatus: SpeechStatus.idle,
+          aiGeneratedReflection: result.reflection,
+          isAiFallback: result.isFallback,
+          fallbackReason: result.fallbackReason,
+          clearErrorMessage: true,
+        );
+      });
+      
+      // Persist the AI reflection
+      await _dataProvider.saveAiReflection(result.reflection);
+      
+      // Show fallback notice if applicable
+      if (result.isFallback && result.fallbackReason != null) {
+        _showFallbackNotice(result.fallbackReason!);
+      }
+    } catch (e) {
+      debugPrint('AI service error: $e');
+      if (!mounted) return;
+      
+      setState(() {
+        _state = _state.copyWith(
+          speechStatus: SpeechStatus.error,
+          errorMessage: 'Could not generate reflection. Try again.',
+        );
+      });
+      
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted && _state.speechStatus == SpeechStatus.error) {
+          setState(() {
+            _state = _state.copyWith(
+              speechStatus: SpeechStatus.idle,
+              clearErrorMessage: true,
+            );
+          });
+        }
+      });
+    }
+  }
+  
+  /// Show snackbar when microphone permission is denied
+  void _showPermissionDeniedSnackbar() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Microphone permission is required for voice reflection'),
+        backgroundColor: Colors.orange.shade700,
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'Settings',
+          textColor: Colors.white,
+          onPressed: () => openAppSettings(),
+        ),
+      ),
+    );
+  }
+  
+  /// Show notice when AI falls back to offline mode
+  void _showFallbackNotice(String reason) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(reason),
+        backgroundColor: Colors.grey.shade700,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -104,6 +389,8 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
     _blobController.dispose();
     _breatheController.dispose();
     _liquidController.dispose();
+    _speech.stop();
+    _speech.cancel();
     super.dispose();
   }
 
@@ -378,25 +665,59 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          "DAILY REFLECTION",
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey.shade500,
-                            letterSpacing: 2.0,
+                        // Dynamic label based on state
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          child: Text(
+                            _state.reflectionCardLabel,
+                            key: ValueKey(_state.reflectionCardLabel),
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: _state.speechStatus == SpeechStatus.error
+                                  ? Colors.red.shade400
+                                  : _state.isProcessing
+                                      ? Colors.amber.shade600
+                                      : Colors.grey.shade500,
+                              letterSpacing: 2.0,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 20),
-                        Text(
-                          _state.reflectionDisplayText,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.playfairDisplay( // Serif font
-                            fontSize: _state.hasPrompt ? 30 : 24,
-                            height: 1.2,
-                            color: _state.hasPrompt 
-                                ? Colors.grey.shade800 
-                                : Colors.grey.shade500,
+                        // Processing indicator
+                        if (_state.speechStatus == SpeechStatus.processing)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.grey.shade600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        // Animated text content
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 400),
+                          child: Text(
+                            _state.reflectionDisplayText,
+                            key: ValueKey(_state.reflectionDisplayText),
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.playfairDisplay( // Serif font
+                              fontSize: _state.hasAnyReflection || _state.isProcessing ? 26 : 22,
+                              height: 1.3,
+                              fontStyle: _state.hasAiReflection ? FontStyle.italic : FontStyle.normal,
+                              color: _state.speechStatus == SpeechStatus.error
+                                  ? Colors.red.shade700
+                                  : _state.speechStatus == SpeechStatus.listening
+                                      ? Colors.grey.shade700
+                                      : _state.hasAnyReflection 
+                                          ? Colors.grey.shade800 
+                                          : Colors.grey.shade500,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 28),
@@ -658,15 +979,19 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
             ),
             
             const SizedBox(height: 24),
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 500),
-              opacity: _state.isRecordingReflection ? 0.0 : 1.0,
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
               child: Text(
-                "Hold to reflect",
+                _getMicButtonLabel(),
+                key: ValueKey(_getMicButtonLabel()),
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: Colors.grey.shade600,
+                  color: _state.speechStatus == SpeechStatus.listening
+                      ? Colors.amber.shade700
+                      : _state.speechStatus == SpeechStatus.processing
+                          ? Colors.grey.shade500
+                          : Colors.grey.shade600,
                 ),
               ),
             ),
@@ -674,6 +999,20 @@ class _PeaceOfMindScreenState extends State<PeaceOfMindScreen> with TickerProvid
         ),
       ),
     );
+  }
+  
+  /// Get the label text for mic button based on current state
+  String _getMicButtonLabel() {
+    switch (_state.speechStatus) {
+      case SpeechStatus.listening:
+        return 'Listening...';
+      case SpeechStatus.processing:
+        return 'Processing...';
+      case SpeechStatus.error:
+        return 'Try again';
+      case SpeechStatus.idle:
+        return 'Hold to reflect';
+    }
   }
 }
 

@@ -54,47 +54,91 @@ class ArrhythmiaInferenceClient {
         _httpClient = httpClient ?? http.Client(),
         _timeout = timeout ?? ArrhythmiaConfig.requestTimeout;
 
-  /// Analyze RR intervals for arrhythmia risk.
+  /// Analyze RR intervals for arrhythmia risk with automatic retry.
   Future<ArrhythmiaInferenceResult> analyze(
     ArrhythmiaAnalysisRequest request,
   ) async {
-    final url = Uri.parse('$_baseUrl/v1/arrhythmia/analyze');
+    // Use cloud function endpoint
+    final url = Uri.parse(ArrhythmiaConfig.fullInferenceUrl);
 
-    try {
-      final response = await _httpClient
-          .post(
-            url,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(request.toJson()),
-          )
-          .timeout(_timeout);
+    // Retry loop
+    for (int attempt = 0; attempt < ArrhythmiaConfig.maxRetries; attempt++) {
+      try {
+        debugPrint('[ArrhythmiaInferenceClient] Attempt ${attempt + 1} to $url');
+        
+        final response = await _httpClient
+            .post(
+              url,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'rr_intervals_ms': request.rrIntervalsMs,
+                'request_id': request.requestId,
+                'window_metadata': request.windowMetadata?.toJson(),
+              }),
+            )
+            .timeout(_timeout);
 
-      return _handleResponse(response, request.requestId);
-    } on TimeoutException {
-      return ArrhythmiaInferenceFailure(
-        requestId: request.requestId,
-        failureType: InferenceFailureType.timeout,
-        message: 'Analysis request timed out after ${_timeout.inSeconds} seconds',
-      );
-    } on SocketException catch (e) {
-      return ArrhythmiaInferenceFailure(
-        requestId: request.requestId,
-        failureType: InferenceFailureType.serviceUnavailable,
-        message: 'Inference service unavailable: ${e.message}',
-      );
-    } on http.ClientException catch (e) {
-      return ArrhythmiaInferenceFailure(
-        requestId: request.requestId,
-        failureType: InferenceFailureType.networkError,
-        message: 'Network error: ${e.message}',
-      );
-    } catch (e) {
-      return ArrhythmiaInferenceFailure(
-        requestId: request.requestId,
-        failureType: InferenceFailureType.unknown,
-        message: 'Unexpected error: $e',
-      );
+        final result = _handleResponse(response, request.requestId);
+        
+        // If success, return immediately
+        if (result is ArrhythmiaInferenceSuccess) {
+          return result;
+        }
+        
+        // If it's a retryable error, continue loop
+        if (result is ArrhythmiaInferenceFailure) {
+          final isRetryable = result.failureType == InferenceFailureType.serviceUnavailable ||
+                              result.failureType == InferenceFailureType.timeout ||
+                              result.failureType == InferenceFailureType.networkError;
+          
+          if (!isRetryable || attempt == ArrhythmiaConfig.maxRetries - 1) {
+            return result;
+          }
+          
+          debugPrint('[ArrhythmiaInferenceClient] Retrying after ${ArrhythmiaConfig.retryDelay.inSeconds}s...');
+          await Future.delayed(ArrhythmiaConfig.retryDelay);
+        }
+      } on TimeoutException {
+        if (attempt == ArrhythmiaConfig.maxRetries - 1) {
+          return ArrhythmiaInferenceFailure(
+            requestId: request.requestId,
+            failureType: InferenceFailureType.timeout,
+            message: 'Analysis request timed out after ${_timeout.inSeconds} seconds',
+          );
+        }
+        await Future.delayed(ArrhythmiaConfig.retryDelay);
+      } on SocketException catch (e) {
+        if (attempt == ArrhythmiaConfig.maxRetries - 1) {
+          return ArrhythmiaInferenceFailure(
+            requestId: request.requestId,
+            failureType: InferenceFailureType.serviceUnavailable,
+            message: 'Inference service unavailable: ${e.message}',
+          );
+        }
+        await Future.delayed(ArrhythmiaConfig.retryDelay);
+      } on http.ClientException catch (e) {
+        if (attempt == ArrhythmiaConfig.maxRetries - 1) {
+          return ArrhythmiaInferenceFailure(
+            requestId: request.requestId,
+            failureType: InferenceFailureType.networkError,
+            message: 'Network error: ${e.message}',
+          );
+        }
+        await Future.delayed(ArrhythmiaConfig.retryDelay);
+      } catch (e) {
+        return ArrhythmiaInferenceFailure(
+          requestId: request.requestId,
+          failureType: InferenceFailureType.unknown,
+          message: 'Unexpected error: $e',
+        );
+      }
     }
+    
+    return ArrhythmiaInferenceFailure(
+      requestId: request.requestId,
+      failureType: InferenceFailureType.unknown,
+      message: 'Max retries exceeded',
+    );
   }
 
   /// Check if inference service is available.

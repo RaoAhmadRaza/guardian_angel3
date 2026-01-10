@@ -22,6 +22,32 @@ import '../../../profile/user_profile_remote_service.dart';
 // ============================================================
 
 
+/// Linked patient data container (for multi-patient support)
+class LinkedPatientData {
+  final RelationshipModel relationship;
+  final PatientInfo patient;
+  final PatientVitals? vitals;
+  final ChatThreadModel? chatThread;
+  final List<ChatMessageModel> recentMessages;
+  final int unreadMessageCount;
+  final List<CaregiverAlert> alerts;
+  final Set<String> permissions;
+  
+  const LinkedPatientData({
+    required this.relationship,
+    required this.patient,
+    this.vitals,
+    this.chatThread,
+    this.recentMessages = const [],
+    this.unreadMessageCount = 0,
+    this.alerts = const [],
+    this.permissions = const {},
+  });
+  
+  /// Check if caregiver has a specific permission for this patient
+  bool hasPermission(String permission) => permissions.contains(permission);
+}
+
 /// Complete state for the caregiver portal
 class CaregiverPortalState {
   final CaregiverLoadingStatus loadingStatus;
@@ -31,7 +57,13 @@ class CaregiverPortalState {
   final String? caregiverUid;
   final String? caregiverName;
   
-  // Linked patient info (from relationship)
+  // ALL linked patients (multi-patient support)
+  final List<LinkedPatientData> linkedPatients;
+  
+  // Currently selected patient index
+  final int selectedPatientIndex;
+  
+  // Linked patient info (from relationship) - for backward compatibility
   final RelationshipModel? activeRelationship;
   final PatientInfo? linkedPatient;
   
@@ -55,6 +87,8 @@ class CaregiverPortalState {
     this.errorMessage,
     this.caregiverUid,
     this.caregiverName,
+    this.linkedPatients = const [],
+    this.selectedPatientIndex = 0,
     this.activeRelationship,
     this.linkedPatient,
     this.patientVitals,
@@ -92,11 +126,39 @@ class CaregiverPortalState {
   /// Check if SOS features are permitted
   bool get canUseSOS => hasPermission('sos');
   
+  /// Multi-patient support: Get number of linked patients
+  int get patientCount => linkedPatients.length;
+  
+  /// Multi-patient support: Check if multiple patients are linked
+  bool get hasMultiplePatients => linkedPatients.length > 1;
+  
+  /// Multi-patient support: Get currently selected patient data
+  LinkedPatientData? get selectedPatient {
+    if (linkedPatients.isEmpty) return null;
+    if (selectedPatientIndex >= linkedPatients.length) return linkedPatients.first;
+    return linkedPatients[selectedPatientIndex];
+  }
+  
+  /// Multi-patient support: Total unread messages across all patients
+  int get totalUnreadMessages {
+    return linkedPatients.fold(0, (sum, p) => sum + p.unreadMessageCount);
+  }
+  
+  /// Multi-patient support: Total active alerts across all patients
+  int get totalActiveAlerts {
+    return linkedPatients.fold(
+      0, 
+      (sum, p) => sum + p.alerts.where((a) => !a.isResolved).length
+    );
+  }
+  
   CaregiverPortalState copyWith({
     CaregiverLoadingStatus? loadingStatus,
     String? errorMessage,
     String? caregiverUid,
     String? caregiverName,
+    List<LinkedPatientData>? linkedPatients,
+    int? selectedPatientIndex,
     RelationshipModel? activeRelationship,
     PatientInfo? linkedPatient,
     PatientVitals? patientVitals,
@@ -112,6 +174,8 @@ class CaregiverPortalState {
       errorMessage: errorMessage,
       caregiverUid: caregiverUid ?? this.caregiverUid,
       caregiverName: caregiverName ?? this.caregiverName,
+      linkedPatients: linkedPatients ?? this.linkedPatients,
+      selectedPatientIndex: selectedPatientIndex ?? this.selectedPatientIndex,
       activeRelationship: activeRelationship ?? this.activeRelationship,
       linkedPatient: linkedPatient ?? this.linkedPatient,
       patientVitals: patientVitals ?? this.patientVitals,
@@ -306,6 +370,9 @@ class CaregiverPortalNotifier extends StateNotifier<CaregiverPortalState> {
   StreamSubscription? _vitalsSubscription;
   StreamSubscription? _authSubscription;
   
+  // Track active Firestore listener thread ID for cleanup
+  String? _activeListeningThreadId;
+  
   CaregiverPortalNotifier(this._ref) : super(CaregiverPortalState.loading()) {
     _initialize();
   }
@@ -379,7 +446,7 @@ class CaregiverPortalNotifier extends StateNotifier<CaregiverPortalState> {
     });
   }
   
-  /// Load all caregiver data
+  /// Load all caregiver data - SUPPORTS MULTIPLE PATIENTS
   Future<void> _loadCaregiverData(String caregiverUid) async {
     try {
       // Get caregiver name from Firebase Auth
@@ -392,95 +459,139 @@ class CaregiverPortalNotifier extends StateNotifier<CaregiverPortalState> {
         caregiverName: caregiverName,
       );
       
-      // Step 1: Get active relationship
-      final relationshipResult = await RelationshipService.instance
-          .getActiveRelationshipForCaregiver(caregiverUid);
+      // Step 1: Get ALL relationships for caregiver
+      final allRelationshipsResult = await RelationshipService.instance
+          .getRelationshipsForUser(caregiverUid);
       
-      if (!relationshipResult.success || relationshipResult.data == null) {
-        // Check if there's a pending relationship
-        final allRelationships = await RelationshipService.instance
-            .getRelationshipsForUser(caregiverUid);
-        
-        if (allRelationships.success && allRelationships.data != null) {
-          final pending = allRelationships.data!.where(
-            (r) => r.status == RelationshipStatus.pending
-          ).toList();
-          
-          if (pending.isNotEmpty) {
-            state = CaregiverPortalState(
-              loadingStatus: CaregiverLoadingStatus.relationshipPending,
-              caregiverUid: caregiverUid,
-              activeRelationship: pending.first,
-            );
-            return;
-          }
-        }
-        
+      if (!allRelationshipsResult.success || allRelationshipsResult.data == null) {
         state = CaregiverPortalState.noRelationship(caregiverUid);
         return;
       }
       
-      final relationship = relationshipResult.data!;
+      final allRelationships = allRelationshipsResult.data!;
       
-      // Check relationship status
-      if (relationship.status == RelationshipStatus.revoked) {
-        state = CaregiverPortalState(
-          loadingStatus: CaregiverLoadingStatus.relationshipRevoked,
-          caregiverUid: caregiverUid,
-          activeRelationship: relationship,
-        );
+      // Filter active relationships (where user is caregiver)
+      final activeRelationships = allRelationships.where(
+        (r) => r.caregiverId == caregiverUid && r.status == RelationshipStatus.active
+      ).toList();
+      
+      // Check for pending relationships
+      final pendingRelationships = allRelationships.where(
+        (r) => r.status == RelationshipStatus.pending
+      ).toList();
+      
+      if (activeRelationships.isEmpty) {
+        if (pendingRelationships.isNotEmpty) {
+          state = CaregiverPortalState(
+            loadingStatus: CaregiverLoadingStatus.relationshipPending,
+            caregiverUid: caregiverUid,
+            activeRelationship: pendingRelationships.first,
+          );
+          return;
+        }
+        state = CaregiverPortalState.noRelationship(caregiverUid);
         return;
       }
       
-      // Step 2: Extract permissions
-      final permissions = relationship.permissions.toSet();
+      // Step 2: Load data for ALL linked patients
+      final linkedPatientsList = <LinkedPatientData>[];
       
-      // Step 3: Load patient info
-      final patientInfo = await _loadPatientInfo(relationship.patientId);
-      
-      // Step 4: Load vitals if permitted
-      PatientVitals? vitals;
-      if (permissions.contains('view_vitals')) {
-        vitals = await _loadPatientVitals(relationship.patientId);
+      for (final relationship in activeRelationships) {
+        final permissions = relationship.permissions.toSet();
+        
+        // Load patient info
+        final patientInfo = await _loadPatientInfo(relationship.patientId);
+        
+        // Load vitals if permitted
+        PatientVitals? vitals;
+        if (permissions.contains('view_vitals')) {
+          vitals = await _loadPatientVitals(relationship.patientId);
+        }
+        
+        // Load chat thread if permitted
+        ChatThreadModel? chatThread;
+        List<ChatMessageModel> messages = [];
+        int unreadCount = 0;
+        if (permissions.contains('chat')) {
+          final chatResult = await _loadChatData(caregiverUid, relationship.id);
+          chatThread = chatResult.$1;
+          messages = chatResult.$2;
+          unreadCount = chatResult.$3;
+        }
+        
+        // Load alerts
+        final alerts = await _loadAlerts(relationship.patientId);
+        
+        linkedPatientsList.add(LinkedPatientData(
+          relationship: relationship,
+          patient: patientInfo,
+          vitals: vitals,
+          chatThread: chatThread,
+          recentMessages: messages,
+          unreadMessageCount: unreadCount,
+          alerts: alerts,
+          permissions: permissions,
+        ));
       }
       
-      // Step 5: Load chat thread if permitted
-      ChatThreadModel? chatThread;
-      List<ChatMessageModel> messages = [];
-      int unreadCount = 0;
-      if (permissions.contains('chat')) {
-        final chatResult = await _loadChatData(caregiverUid, relationship.id);
-        chatThread = chatResult.$1;
-        messages = chatResult.$2;
-        unreadCount = chatResult.$3;
-      }
+      // Use first patient as the "active" one for backward compatibility
+      final firstPatient = linkedPatientsList.isNotEmpty ? linkedPatientsList.first : null;
       
-      // Step 6: Load alerts
-      final alerts = await _loadAlerts(relationship.patientId);
-      
-      // Update state with all loaded data including caregiver name
+      // Update state with all loaded data
       state = CaregiverPortalState(
         loadingStatus: CaregiverLoadingStatus.loaded,
         caregiverUid: caregiverUid,
-        caregiverName: state.caregiverName, // Preserve caregiver name from earlier
-        activeRelationship: relationship,
-        linkedPatient: patientInfo,
-        patientVitals: vitals,
-        chatThread: chatThread,
-        recentMessages: messages,
-        unreadMessageCount: unreadCount,
-        alerts: alerts,
-        activeAlertCount: alerts.where((a) => !a.isResolved).length,
-        permissions: permissions,
+        caregiverName: caregiverName,
+        linkedPatients: linkedPatientsList,
+        selectedPatientIndex: 0,
+        // Backward compatibility fields (from first patient)
+        activeRelationship: firstPatient?.relationship,
+        linkedPatient: firstPatient?.patient,
+        patientVitals: firstPatient?.vitals,
+        chatThread: firstPatient?.chatThread,
+        recentMessages: firstPatient?.recentMessages ?? [],
+        unreadMessageCount: firstPatient?.unreadMessageCount ?? 0,
+        alerts: firstPatient?.alerts ?? [],
+        activeAlertCount: (firstPatient?.alerts ?? []).where((a) => !a.isResolved).length,
+        permissions: firstPatient?.permissions ?? {},
       );
       
-      // Set up real-time subscriptions
-      _setupRealtimeSubscriptions(caregiverUid, relationship);
+      // Set up real-time subscriptions for first patient
+      if (firstPatient != null) {
+        _setupRealtimeSubscriptions(caregiverUid, firstPatient.relationship);
+      }
       
     } catch (e) {
       debugPrint('CaregiverPortal Error: $e');
       state = CaregiverPortalState.error('Failed to load data: ${e.toString()}');
     }
+  }
+  
+  /// Switch to a different patient (for multi-patient support)
+  void selectPatient(int index) {
+    if (index < 0 || index >= state.linkedPatients.length) return;
+    
+    final selectedPatient = state.linkedPatients[index];
+    
+    state = state.copyWith(
+      selectedPatientIndex: index,
+      // Update backward-compatibility fields
+      activeRelationship: selectedPatient.relationship,
+      linkedPatient: selectedPatient.patient,
+      patientVitals: selectedPatient.vitals,
+      chatThread: selectedPatient.chatThread,
+      recentMessages: selectedPatient.recentMessages,
+      unreadMessageCount: selectedPatient.unreadMessageCount,
+      alerts: selectedPatient.alerts,
+      activeAlertCount: selectedPatient.alerts.where((a) => !a.isResolved).length,
+      permissions: selectedPatient.permissions,
+    );
+    
+    // Update real-time subscriptions
+    _relationshipSubscription?.cancel();
+    _chatSubscription?.cancel();
+    _vitalsSubscription?.cancel();
+    _setupRealtimeSubscriptions(state.caregiverUid!, selectedPatient.relationship);
   }
   
   /// Load patient info from Firestore
@@ -546,22 +657,74 @@ class CaregiverPortalNotifier extends StateNotifier<CaregiverPortalState> {
     );
   }
   
-  /// Load patient vitals
+  /// Load patient vitals from FIRESTORE (not local Hive)
+  /// This queries the patient's health_readings collection in Firestore
   Future<PatientVitals?> _loadPatientVitals(String patientId) async {
     try {
-      final repo = HealthDataRepositoryHive();
-      final snapshot = await repo.getLatestVitals(patientId);
+      final firestore = FirebaseFirestore.instance;
+      final healthReadingsRef = firestore
+          .collection('patients')
+          .doc(patientId)
+          .collection('health_readings');
+      
+      // Get latest heart rate
+      final heartRateQuery = await healthReadingsRef
+          .where('type', isEqualTo: 'heart_rate')
+          .orderBy('timestamp', descending: true)
+          .limit(1)
+          .get();
+      
+      // Get latest blood oxygen
+      final oxygenQuery = await healthReadingsRef
+          .where('type', isEqualTo: 'blood_oxygen')
+          .orderBy('timestamp', descending: true)
+          .limit(1)
+          .get();
+      
+      // Get latest sleep session
+      final sleepQuery = await healthReadingsRef
+          .where('type', isEqualTo: 'sleep_session')
+          .orderBy('timestamp', descending: true)
+          .limit(1)
+          .get();
+      
+      int? heartRate;
+      int? oxygenLevel;
+      double? sleepHours;
+      DateTime? lastUpdated;
+      
+      if (heartRateQuery.docs.isNotEmpty) {
+        final doc = heartRateQuery.docs.first;
+        heartRate = doc.data()['bpm'] as int?;
+        final timestamp = doc.data()['timestamp'];
+        if (timestamp is Timestamp) {
+          lastUpdated = timestamp.toDate();
+        } else if (timestamp is String) {
+          lastUpdated = DateTime.tryParse(timestamp);
+        }
+      }
+      
+      if (oxygenQuery.docs.isNotEmpty) {
+        final doc = oxygenQuery.docs.first;
+        oxygenLevel = doc.data()['percentage'] as int? ?? doc.data()['spo2'] as int?;
+      }
+      
+      if (sleepQuery.docs.isNotEmpty) {
+        final doc = sleepQuery.docs.first;
+        final totalMinutes = doc.data()['total_minutes'] as num?;
+        if (totalMinutes != null) {
+          sleepHours = totalMinutes / 60;
+        }
+      }
       
       return PatientVitals(
-        heartRate: snapshot.latestHeartRate?.data['bpm'] as int?,
-        oxygenLevel: snapshot.latestOxygen?.data['spo2'] as int?,
-        sleepHours: snapshot.latestSleep?.data['totalMinutes'] != null 
-            ? (snapshot.latestSleep!.data['totalMinutes'] as num) / 60 
-            : null,
-        lastUpdated: snapshot.latestHeartRate?.recordedAt,
+        heartRate: heartRate,
+        oxygenLevel: oxygenLevel,
+        sleepHours: sleepHours,
+        lastUpdated: lastUpdated,
       );
     } catch (e) {
-      debugPrint('Failed to load vitals: $e');
+      debugPrint('Failed to load vitals from Firestore: $e');
       return null;
     }
   }
@@ -602,11 +765,171 @@ class CaregiverPortalNotifier extends StateNotifier<CaregiverPortalState> {
     }
   }
   
-  /// Load alerts for patient
+  /// Load alerts for patient from Firestore
   Future<List<CaregiverAlert>> _loadAlerts(String patientId) async {
-    // TODO: Load from real alert system
-    // For now, return empty list - real alerts will come from SOS system
-    return [];
+    final alerts = <CaregiverAlert>[];
+    
+    try {
+      final firestore = FirebaseFirestore.instance;
+      
+      // Load health alerts from patients/{patientId}/health_alerts
+      try {
+        final healthAlertsSnapshot = await firestore
+            .collection('patients')
+            .doc(patientId)
+            .collection('health_alerts')
+            .orderBy('created_at', descending: true)
+            .limit(20)
+            .get();
+        
+        for (final doc in healthAlertsSnapshot.docs) {
+          final data = doc.data();
+          alerts.add(_parseHealthAlert(doc.id, data, patientId));
+        }
+        debugPrint('[CaregiverPortal] Loaded ${healthAlertsSnapshot.docs.length} health alerts for patient $patientId');
+      } catch (healthError) {
+        debugPrint('[CaregiverPortal] Failed to load health alerts: $healthError');
+        // Continue to try loading SOS alerts even if health alerts fail
+      }
+      
+      // Load SOS alerts from sos_sessions where patient_uid = patientId
+      // Note: This compound query requires a composite index on (patient_uid, created_at)
+      // Deploy with: firebase deploy --only firestore:indexes
+      try {
+        final sosSnapshot = await firestore
+            .collection('sos_sessions')
+            .where('patient_uid', isEqualTo: patientId)
+            .orderBy('created_at', descending: true)
+            .limit(10)
+            .get();
+        
+        for (final doc in sosSnapshot.docs) {
+          final data = doc.data();
+          alerts.add(_parseSosAlert(doc.id, data, patientId));
+        }
+        debugPrint('[CaregiverPortal] Loaded ${sosSnapshot.docs.length} SOS alerts for patient $patientId');
+      } catch (sosError) {
+        // Check for missing index error
+        final errorMessage = sosError.toString();
+        if (errorMessage.contains('index') || errorMessage.contains('FAILED_PRECONDITION')) {
+          debugPrint('[CaregiverPortal] MISSING FIRESTORE INDEX: The sos_sessions query requires a composite index.');
+          debugPrint('[CaregiverPortal] Run: firebase deploy --only firestore:indexes');
+        } else {
+          debugPrint('[CaregiverPortal] Failed to load SOS alerts: $sosError');
+        }
+        // Continue with whatever alerts we have
+      }
+      
+      // Sort by timestamp descending
+      alerts.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      
+      debugPrint('[CaregiverPortal] Total alerts loaded: ${alerts.length}');
+      return alerts;
+    } catch (e) {
+      debugPrint('[CaregiverPortal] Failed to load alerts: $e');
+      return [];
+    }
+  }
+  
+  /// Parse a health alert from Firestore data
+  CaregiverAlert _parseHealthAlert(String id, Map<String, dynamic> data, String patientId) {
+    final type = data['type'] as String? ?? 'vitals';
+    final riskLevel = data['risk_level'] as String? ?? 'unknown';
+    final recommendation = data['recommendation'] as String? ?? '';
+    final acknowledged = data['acknowledged'] as bool? ?? false;
+    final createdAt = data['created_at'];
+    
+    DateTime timestamp = DateTime.now();
+    if (createdAt is Timestamp) {
+      timestamp = createdAt.toDate();
+    } else if (createdAt is String) {
+      timestamp = DateTime.tryParse(createdAt) ?? DateTime.now();
+    }
+    
+    // Map type to CaregiverAlertType
+    CaregiverAlertType alertType;
+    switch (type) {
+      case 'arrhythmia':
+      case 'heart_rate':
+      case 'blood_oxygen':
+        alertType = CaregiverAlertType.vitals;
+        break;
+      case 'fall':
+        alertType = CaregiverAlertType.fall;
+        break;
+      case 'medication':
+        alertType = CaregiverAlertType.medication;
+        break;
+      default:
+        alertType = CaregiverAlertType.system;
+    }
+    
+    // Map risk level to severity
+    CaregiverAlertSeverity severity;
+    switch (riskLevel) {
+      case 'critical':
+      case 'high':
+        severity = CaregiverAlertSeverity.critical;
+        break;
+      case 'moderate':
+        severity = CaregiverAlertSeverity.high;
+        break;
+      case 'low':
+        severity = CaregiverAlertSeverity.medium;
+        break;
+      default:
+        severity = CaregiverAlertSeverity.medium;
+    }
+    
+    return CaregiverAlert(
+      id: id,
+      type: alertType,
+      title: '${type.replaceAll('_', ' ').toUpperCase()} Alert',
+      description: recommendation.isNotEmpty 
+          ? recommendation 
+          : 'Risk level: $riskLevel',
+      timestamp: timestamp,
+      isResolved: acknowledged,
+      severity: severity,
+      patientId: patientId,
+    );
+  }
+  
+  /// Parse an SOS alert from Firestore data
+  CaregiverAlert _parseSosAlert(String id, Map<String, dynamic> data, String patientId) {
+    final state = data['state'] as String? ?? 'unknown';
+    final patientName = data['patient_name'] as String? ?? 'Patient';
+    final createdAt = data['created_at'];
+    
+    DateTime timestamp = DateTime.now();
+    if (createdAt is Timestamp) {
+      timestamp = createdAt.toDate();
+    } else if (createdAt is String) {
+      timestamp = DateTime.tryParse(createdAt) ?? DateTime.now();
+    }
+    
+    final isResolved = state == 'resolved' || state == 'cancelled' || state == 'false_alarm';
+    
+    CaregiverAlertSeverity severity;
+    switch (state) {
+      case 'active':
+      case 'escalated':
+        severity = CaregiverAlertSeverity.critical;
+        break;
+      default:
+        severity = CaregiverAlertSeverity.high;
+    }
+    
+    return CaregiverAlert(
+      id: id,
+      type: CaregiverAlertType.sos,
+      title: 'SOS Emergency',
+      description: '$patientName triggered an SOS alert',
+      timestamp: timestamp,
+      isResolved: isResolved,
+      severity: severity,
+      patientId: patientId,
+    );
   }
   
   /// Set up real-time subscriptions
@@ -635,6 +958,20 @@ class CaregiverPortalNotifier extends StateNotifier<CaregiverPortalState> {
     // Watch chat messages if permitted
     if (state.canChat && state.chatThread != null) {
       _chatSubscription?.cancel();
+      
+      // Stop previous Firestore listener if different thread
+      if (_activeListeningThreadId != null && _activeListeningThreadId != state.chatThread!.id) {
+        ChatService.instance.stopListeningForIncomingMessages(_activeListeningThreadId!);
+      }
+      
+      // CRITICAL: Start listening for incoming messages from Firestore
+      // This syncs messages sent by the patient to the caregiver's local Hive
+      _activeListeningThreadId = state.chatThread!.id;
+      ChatService.instance.startListeningForIncomingMessages(
+        threadId: state.chatThread!.id,
+        currentUid: caregiverUid,
+      );
+      
       _chatSubscription = ChatService.instance
           .watchMessagesForThread(state.chatThread!.id, caregiverUid)
           .listen((messages) {
@@ -713,8 +1050,61 @@ class CaregiverPortalNotifier extends StateNotifier<CaregiverPortalState> {
     }
   }
   
-  /// Resolve an alert
+  /// Retry failed messages
+  Future<void> retryFailedMessages() async {
+    try {
+      await ChatService.instance.retryFailedMessages();
+    } catch (e) {
+      debugPrint('Failed to retry messages: $e');
+    }
+  }
+  
+  /// Resolve an alert - updates both local state and Firestore
   Future<void> resolveAlert(String alertId) async {
+    // Find the alert to get its type and patient ID
+    final alertToResolve = state.alerts.where((a) => a.id == alertId).firstOrNull;
+    if (alertToResolve == null) return;
+    
+    // Update Firestore based on alert type
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final caregiverUid = state.caregiverUid;
+      final caregiverName = state.caregiverName ?? 'Caregiver';
+      
+      if (alertToResolve.type == CaregiverAlertType.sos) {
+        // Update SOS session
+        await firestore.collection('sos_sessions').doc(alertId).update({
+          'state': 'resolved',
+          'resolved_at': FieldValue.serverTimestamp(),
+          'resolved_by': caregiverName,
+          'resolved_by_uid': caregiverUid,
+          'resolution_reason': 'Resolved by caregiver',
+        });
+        debugPrint('[CaregiverPortal] SOS alert resolved in Firestore: $alertId');
+      } else {
+        // Update health alert
+        final patientId = alertToResolve.patientId ?? state.linkedPatient?.uid;
+        if (patientId != null) {
+          await firestore
+              .collection('patients')
+              .doc(patientId)
+              .collection('health_alerts')
+              .doc(alertId)
+              .update({
+            'acknowledged': true,
+            'acknowledged_at': FieldValue.serverTimestamp(),
+            'acknowledged_by': caregiverName,
+            'acknowledged_by_uid': caregiverUid,
+          });
+          debugPrint('[CaregiverPortal] Health alert acknowledged in Firestore: $alertId');
+        }
+      }
+    } catch (e) {
+      debugPrint('[CaregiverPortal] Failed to persist alert resolution: $e');
+      // Continue with local update even if Firestore fails
+    }
+    
+    // Update local state
     final alerts = state.alerts.map((a) {
       if (a.id == alertId) {
         return CaregiverAlert(
@@ -743,6 +1133,13 @@ class CaregiverPortalNotifier extends StateNotifier<CaregiverPortalState> {
     _chatSubscription?.cancel();
     _vitalsSubscription?.cancel();
     _authSubscription?.cancel();
+    
+    // Stop Firestore listener for incoming messages
+    if (_activeListeningThreadId != null) {
+      ChatService.instance.stopListeningForIncomingMessages(_activeListeningThreadId!);
+      _activeListeningThreadId = null;
+    }
+    
     super.dispose();
   }
 }

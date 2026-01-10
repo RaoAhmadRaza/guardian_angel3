@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:ui';
+import '../utils/input_validators.dart';
 
 class AddMedicationModal extends StatefulWidget {
   final VoidCallback onClose;
@@ -33,18 +35,99 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
   int _initialStock = 30;
   int _lowStockLevel = 5;
 
+  // Validation error messages
+  String? _nameError;
+  String? _dosageError;
+  String? _volumeError;
+  String? _durationError;
+  String? _stockError;
+
+  // Text controllers for input formatting
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _dosageController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _dosageController.dispose();
+    super.dispose();
+  }
+
+  /// Validates current step and returns true if valid
+  bool _validateCurrentStep() {
+    setState(() {
+      _nameError = null;
+      _dosageError = null;
+      _volumeError = null;
+      _durationError = null;
+      _stockError = null;
+    });
+
+    switch (_step) {
+      case 0: // Name & Type
+        final nameValidation = InputValidators.validateMedicationName(_name);
+        if (nameValidation != null) {
+          setState(() => _nameError = nameValidation);
+          return false;
+        }
+        return true;
+
+      case 1: // Dosage / Volume
+        if (_type == 'infusion') {
+          final volumeValidation = InputValidators.validateInfusionVolume(_volumeML);
+          final durationValidation = InputValidators.validateInfusionDuration(_durationMinutes);
+          if (volumeValidation != null) {
+            setState(() => _volumeError = volumeValidation);
+            return false;
+          }
+          if (durationValidation != null) {
+            setState(() => _durationError = durationValidation);
+            return false;
+          }
+        } else {
+          final dosageValidation = InputValidators.validateDosage(_dosage);
+          if (dosageValidation != null) {
+            setState(() => _dosageError = dosageValidation);
+            return false;
+          }
+        }
+        return true;
+
+      case 2: // Stock
+        final stockValidation = InputValidators.validateStockCount(_initialStock);
+        if (stockValidation != null) {
+          setState(() => _stockError = stockValidation);
+          return false;
+        }
+        return true;
+
+      default:
+        return true;
+    }
+  }
+
   void _handleNext() {
+    // Validate current step before proceeding
+    if (!_validateCurrentStep()) {
+      return;
+    }
+
     if (_step < _totalSteps - 1) {
       setState(() {
         _step++;
       });
     } else {
-      // Save
+      // Final validation before save
+      if (!_validateCurrentStep()) return;
+
+      // Sanitize inputs before saving
+      final sanitizedName = InputValidators.sanitizeMedicationName(_name);
+      
       final isInfusion = _type == 'infusion';
       final newMed = {
         'id': DateTime.now().millisecondsSinceEpoch.toString(),
-        'name': _name,
-        'dosage': isInfusion ? '${_volumeML}ml' : _dosage,
+        'name': sanitizedName,
+        'dosage': isInfusion ? '${_volumeML}ml' : InputValidators.sanitize(_dosage),
         'dailyDosage': isInfusion ? '${_volumeML}ml / ${_durationMinutes}m' : 'N/A',
         'type': isInfusion ? 'IV Infusion' : 'Medication',
         'subType': _type,
@@ -173,7 +256,10 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
+            border: Border.all(
+              color: _nameError != null ? const Color(0xFFDC2626) : const Color(0xFFE2E8F0), 
+              width: 2,
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.05),
@@ -184,7 +270,13 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
           ),
           alignment: Alignment.centerLeft,
           child: TextField(
+            controller: _nameController,
             autofocus: true,
+            maxLength: 100,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z0-9\s\-\(\)\.]")),
+              LengthLimitingTextInputFormatter(100),
+            ],
             style: GoogleFonts.inter(
               fontSize: 24,
               fontWeight: FontWeight.w700,
@@ -192,14 +284,35 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
             ),
             decoration: InputDecoration(
               border: InputBorder.none,
-              hintText: 'e.g. Saline Drip',
+              hintText: 'e.g. Amoxicillin',
+              counterText: '', // Hide character counter
               hintStyle: GoogleFonts.inter(
                 color: const Color(0xFF94A3B8),
               ),
             ),
-            onChanged: (value) => setState(() => _name = value),
+            onChanged: (value) {
+              setState(() {
+                _name = value;
+                _nameError = null; // Clear error on change
+              });
+            },
           ),
         ),
+        // Error message display
+        if (_nameError != null) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: Text(
+              _nameError!,
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: const Color(0xFFDC2626),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 40),
         _buildSectionLabel('Type'),
         const SizedBox(height: 16),
@@ -249,7 +362,10 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
             children: [
               _AdjustButton(
                 label: '-',
-                onTap: () => setState(() => _volumeML = (_volumeML - 50).clamp(0, 5000)),
+                onTap: () => setState(() {
+                  _volumeML = (_volumeML - 50).clamp(10, 3000);
+                  _volumeError = null;
+                }),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -258,7 +374,10 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
+                    border: Border.all(
+                      color: _volumeError != null ? const Color(0xFFDC2626) : const Color(0xFFE2E8F0), 
+                      width: 2,
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.05),
@@ -295,18 +414,51 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
               const SizedBox(width: 16),
               _AdjustButton(
                 label: '+',
-                onTap: () => setState(() => _volumeML += 50),
+                onTap: () => setState(() {
+                  _volumeML = (_volumeML + 50).clamp(10, 3000);
+                  _volumeError = null;
+                }),
               ),
             ],
           ),
-          const SizedBox(height: 40),
+          // Volume error message
+          if (_volumeError != null) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Text(
+                _volumeError!,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: const Color(0xFFDC2626),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+          // Volume range hint
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: Text(
+              'Range: 10ml - 3000ml',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: const Color(0xFF94A3B8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
           _buildSectionLabel('Time Duration (minutes)'),
           const SizedBox(height: 16),
           Row(
             children: [
               _AdjustButton(
                 label: '-',
-                onTap: () => setState(() => _durationMinutes = (_durationMinutes - 15).clamp(1, 1440)),
+                onTap: () => setState(() {
+                  _durationMinutes = (_durationMinutes - 15).clamp(5, 720);
+                  _durationError = null;
+                }),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -315,7 +467,10 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
+                    border: Border.all(
+                      color: _durationError != null ? const Color(0xFFDC2626) : const Color(0xFFE2E8F0), 
+                      width: 2,
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.05),
@@ -352,9 +507,39 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
               const SizedBox(width: 16),
               _AdjustButton(
                 label: '+',
-                onTap: () => setState(() => _durationMinutes += 15),
+                onTap: () => setState(() {
+                  _durationMinutes = (_durationMinutes + 15).clamp(5, 720);
+                  _durationError = null;
+                }),
               ),
             ],
+          ),
+          // Duration error message
+          if (_durationError != null) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Text(
+                _durationError!,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: const Color(0xFFDC2626),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+          // Duration range hint
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: Text(
+              'Range: 5 min - 12 hours (720 min)',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: const Color(0xFF94A3B8),
+              ),
+            ),
           ),
         ],
       );
@@ -415,7 +600,10 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
+              border: Border.all(
+                color: _dosageError != null ? const Color(0xFFDC2626) : const Color(0xFFE2E8F0), 
+                width: 2,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.05),
@@ -426,6 +614,12 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
             ),
             alignment: Alignment.centerLeft,
             child: TextField(
+              controller: _dosageController,
+              maxLength: 50,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z0-9\s\-\.\/\(\)]")),
+                LengthLimitingTextInputFormatter(50),
+              ],
               style: GoogleFonts.inter(
                 fontSize: 24,
                 fontWeight: FontWeight.w700,
@@ -433,14 +627,35 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
               ),
               decoration: InputDecoration(
                 border: InputBorder.none,
-                hintText: 'e.g. 1 Tablet',
+                counterText: '', // Hide character counter
+                hintText: 'e.g. 500mg or 2 tablets',
                 hintStyle: GoogleFonts.inter(
                   color: const Color(0xFF94A3B8),
                 ),
               ),
-              onChanged: (value) => setState(() => _dosage = value),
+              onChanged: (value) {
+                setState(() {
+                  _dosage = value;
+                  _dosageError = null;
+                });
+              },
             ),
           ),
+          // Dosage error message
+          if (_dosageError != null) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Text(
+                _dosageError!,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: const Color(0xFFDC2626),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
         ],
       );
     }
@@ -484,7 +699,10 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
           children: [
             _AdjustButton(
               label: '-',
-              onTap: () => setState(() => _initialStock = (_initialStock - 5).clamp(0, 1000)),
+              onTap: () => setState(() {
+                _initialStock = (_initialStock - 5).clamp(0, 500);
+                _stockError = null;
+              }),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -493,7 +711,10 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
+                  border: Border.all(
+                    color: _stockError != null ? const Color(0xFFDC2626) : const Color(0xFFE2E8F0), 
+                    width: 2,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.05),
@@ -516,9 +737,39 @@ class _AddMedicationModalState extends State<AddMedicationModal> {
             const SizedBox(width: 16),
             _AdjustButton(
               label: '+',
-              onTap: () => setState(() => _initialStock += 5),
+              onTap: () => setState(() {
+                _initialStock = (_initialStock + 5).clamp(0, 500);
+                _stockError = null;
+              }),
             ),
           ],
+        ),
+        // Stock error message
+        if (_stockError != null) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: Text(
+              _stockError!,
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: const Color(0xFFDC2626),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+        // Stock range hint
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Text(
+            'Range: 0 - 500 units',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: const Color(0xFF94A3B8),
+            ),
+          ),
         ),
       ],
     );

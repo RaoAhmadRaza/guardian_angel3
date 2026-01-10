@@ -2,17 +2,21 @@
 ///
 /// This service reads from:
 /// - Device connection status (Bluetooth/wearable)
-/// - Local Hive storage for cached diagnostic data
-/// - Future: Real-time device data streams
+/// - Local Hive storage for cached diagnostic data (from Apple Health)
+/// - Arrhythmia analysis results
 ///
 /// All reads are LOCAL ONLY. No network calls.
 /// Supports Demo Mode for showcasing UI with sample data.
 /// NO simulated data when demo mode is off. NO timers. NO random values.
 library;
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../services/demo_mode_service.dart';
 import '../../services/demo_data.dart';
+import '../../health/repositories/health_data_repository_hive.dart';
+import '../../ml/services/arrhythmia_analysis_service.dart';
+import '../../ml/models/arrhythmia_risk_level.dart';
 import 'diagnostic_state.dart';
 
 /// Provider for loading diagnostic screen data.
@@ -26,6 +30,9 @@ class DiagnosticDataProvider {
   static DiagnosticDataProvider? _instance;
   static DiagnosticDataProvider get instance => 
       _instance ??= DiagnosticDataProvider._();
+
+  late final HealthDataRepositoryHive _healthRepo = HealthDataRepositoryHive();
+  final ArrhythmiaAnalysisService _arrhythmiaService = ArrhythmiaAnalysisService();
 
   /// Load initial diagnostic state from local sources.
   /// Returns demo data if Demo Mode is enabled.
@@ -47,23 +54,15 @@ class DiagnosticDataProvider {
         return DiagnosticDemoData.state;
       }
       
-      // Load real data
-      // Check if any device is connected
-      final hasDevice = await _checkDeviceConnection();
-      
-      if (!hasDevice) {
-        debugPrint('[DiagnosticDataProvider] No device connected - returning empty state');
+      // Get current user UID
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
+        debugPrint('[DiagnosticDataProvider] No user logged in - returning empty state');
         return DiagnosticState.initial();
       }
-      
-      // If device is connected, load any available data
-      // For now, we don't have real device integration, so return empty
-      debugPrint('[DiagnosticDataProvider] Device connected but no data yet');
-      return const DiagnosticState(
-        hasDeviceConnected: true,
-        hasAnyDiagnosticData: false,
-        hasDiagnosticHistory: false,
-      );
+
+      // Load real data from health repository
+      return await _loadRealDiagnosticData(uid);
       
     } catch (e) {
       debugPrint('[DiagnosticDataProvider] Error loading state: $e');
@@ -71,69 +70,100 @@ class DiagnosticDataProvider {
     }
   }
 
-  /// Check if a wearable/ECG device is connected
-  /// 
-  /// TODO: Replace with actual device connection check when available
-  Future<bool> _checkDeviceConnection() async {
-    // For now, no device integration exists
-    // Return false - no device connected
-    return false;
+  /// Load real diagnostic data from HealthDataRepositoryHive
+  Future<DiagnosticState> _loadRealDiagnosticData(String patientUid) async {
+    debugPrint('[DiagnosticDataProvider] Loading real data for $patientUid...');
+    
+    try {
+      // Get latest vitals snapshot from health repository
+      final snapshot = await _healthRepo.getLatestVitals(patientUid);
+      
+      // Extract heart rate using convenience getter
+      final heartRate = snapshot.heartRateBpm;
+      
+      // Extract oxygen saturation using convenience getter
+      OxygenSaturationData? oxygenSaturation;
+      final oxygenPercent = snapshot.oxygenPercentage;
+      if (oxygenPercent != null && snapshot.latestOxygen != null) {
+        oxygenSaturation = OxygenSaturationData(
+          percent: oxygenPercent,
+          measurementTime: snapshot.latestOxygen!.recordedAt,
+          status: _getOxygenStatus(oxygenPercent),
+        );
+      }
+      
+      // Extract HRV and RR intervals from data map
+      List<int>? rrIntervals;
+      if (snapshot.latestHRV != null) {
+        final rrData = snapshot.latestHRV!.data['rrIntervals'];
+        if (rrData is List) {
+          rrIntervals = rrData.cast<int>().toList();
+        }
+      }
+      
+      // Extract sleep data from data map
+      SleepQualityData? sleepData;
+      if (snapshot.latestSleep != null) {
+        final sleepStart = snapshot.latestSleep!.data['sleepStart'];
+        final sleepEnd = snapshot.latestSleep!.data['sleepEnd'];
+        if (sleepStart != null && sleepEnd != null) {
+          final start = DateTime.parse(sleepStart as String);
+          final end = DateTime.parse(sleepEnd as String);
+          final hours = end.difference(start).inMinutes / 60.0;
+          sleepData = SleepQualityData(
+            qualityScore: (hours >= 7 ? 80 : hours >= 5 ? 60 : 40).toInt(),
+            hoursSlept: hours,
+            date: start,
+            quality: hours >= 7 ? 'Good' : hours >= 5 ? 'Fair' : 'Poor',
+          );
+        }
+      }
+      
+      // Get heart rhythm from arrhythmia analysis (cached result)
+      String? heartRhythm;
+      double? aiConfidence;
+      final cachedAnalysis = _arrhythmiaService.cachedAnalysis;
+      if (cachedAnalysis != null) {
+        heartRhythm = cachedAnalysis.analysis.heartRhythmDescription;
+        // Convert enum confidence to numeric value (0.0 - 1.0)
+        aiConfidence = switch (cachedAnalysis.analysis.confidence) {
+          ArrhythmiaConfidence.high => 0.95,
+          ArrhythmiaConfidence.medium => 0.75,
+          ArrhythmiaConfidence.low => 0.50,
+        };
+      }
+      
+      // Determine if we have any data
+      final hasAnyData = heartRate != null || 
+          oxygenSaturation != null || 
+          sleepData != null ||
+          rrIntervals != null;
+      
+      debugPrint('[DiagnosticDataProvider] Loaded: HR=$heartRate, O2=${oxygenSaturation?.percent}, Sleep=${sleepData?.hoursSlept}');
+      
+      return DiagnosticState(
+        hasDeviceConnected: hasAnyData, // If we have data, health app is "connected"
+        hasAnyDiagnosticData: hasAnyData,
+        heartRate: heartRate,
+        rrIntervals: rrIntervals,
+        heartRhythm: heartRhythm,
+        aiConfidence: aiConfidence,
+        oxygenSaturation: oxygenSaturation,
+        sleep: sleepData,
+        hasDiagnosticHistory: hasAnyData,
+      );
+      
+    } catch (e) {
+      debugPrint('[DiagnosticDataProvider] Error loading real data: $e');
+      return DiagnosticState.initial();
+    }
   }
 
-  /// Load cached heart rate data from local storage
-  /// 
-  /// TODO: Replace with actual Hive/local storage when available
-  Future<int?> _loadCachedHeartRate() async {
-    // No local storage for heart rate yet
-    return null;
-  }
-
-  /// Load cached R-R intervals from local storage
-  /// 
-  /// TODO: Replace with actual Hive/local storage when available
-  Future<List<int>?> _loadCachedRRIntervals() async {
-    // No local storage for R-R intervals yet
-    return null;
-  }
-
-  /// Load cached ECG samples from local storage
-  /// 
-  /// TODO: Replace with actual Hive/local storage when available
-  Future<List<double>?> _loadCachedECGSamples() async {
-    // No local storage for ECG samples yet
-    return null;
-  }
-
-  /// Load cached blood pressure from local storage
-  /// 
-  /// TODO: Replace with actual Hive/local storage when available
-  Future<BloodPressureData?> _loadCachedBloodPressure() async {
-    // No local storage for blood pressure yet
-    return null;
-  }
-
-  /// Load cached temperature from local storage
-  /// 
-  /// TODO: Replace with actual Hive/local storage when available
-  Future<TemperatureData?> _loadCachedTemperature() async {
-    // No local storage for temperature yet
-    return null;
-  }
-
-  /// Load cached sleep data from local storage
-  /// 
-  /// TODO: Replace with actual Hive/local storage when available
-  Future<SleepQualityData?> _loadCachedSleepData() async {
-    // No local storage for sleep data yet
-    return null;
-  }
-
-  /// Check if user has any diagnostic history
-  /// 
-  /// TODO: Replace with actual history check when available
-  Future<bool> _checkDiagnosticHistory() async {
-    // No diagnostic history system yet
-    return false;
+  /// Get oxygen status based on percentage
+  String _getOxygenStatus(int percent) {
+    if (percent >= 95) return 'Normal';
+    if (percent >= 90) return 'Low';
+    return 'Critical';
   }
 
   /// Load complete diagnostic data when device is connected
@@ -143,49 +173,11 @@ class DiagnosticDataProvider {
   Future<DiagnosticState> loadFullDiagnosticData() async {
     debugPrint('[DiagnosticDataProvider] Loading full diagnostic data...');
     
-    final hasDevice = await _checkDeviceConnection();
-    if (!hasDevice) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
       return DiagnosticState.initial();
     }
-
-    // Load all cached data in parallel
-    final results = await Future.wait([
-      _loadCachedHeartRate(),
-      _loadCachedRRIntervals(),
-      _loadCachedECGSamples(),
-      _loadCachedBloodPressure(),
-      _loadCachedTemperature(),
-      _loadCachedSleepData(),
-      _checkDiagnosticHistory(),
-    ]);
-
-    final heartRate = results[0] as int?;
-    final rrIntervals = results[1] as List<int>?;
-    final ecgSamples = results[2] as List<double>?;
-    final bloodPressure = results[3] as BloodPressureData?;
-    final temperature = results[4] as TemperatureData?;
-    final sleep = results[5] as SleepQualityData?;
-    final hasHistory = results[6] as bool;
-
-    // Determine if we have any diagnostic data
-    final hasAnyData = heartRate != null ||
-        (rrIntervals != null && rrIntervals.isNotEmpty) ||
-        (ecgSamples != null && ecgSamples.isNotEmpty) ||
-        bloodPressure != null ||
-        temperature != null ||
-        sleep != null;
-
-    return DiagnosticState(
-      hasDeviceConnected: true,
-      hasAnyDiagnosticData: hasAnyData,
-      heartRate: heartRate,
-      rrIntervals: rrIntervals,
-      ecgSamples: ecgSamples,
-      bloodPressure: bloodPressure,
-      temperature: temperature,
-      sleep: sleep,
-      hasDiagnosticHistory: hasHistory,
-      // AI analysis fields remain null until real AI is integrated
-    );
+    
+    return _loadRealDiagnosticData(uid);
   }
 }

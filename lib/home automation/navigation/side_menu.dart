@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/patient_service.dart';
 import '../models/menu_item.dart';
 import '../components/menu_row.dart';
 
@@ -16,6 +17,27 @@ class SideMenu extends StatefulWidget {
 
 class _SideMenuState extends State<SideMenu> {
   String selectedMenuId = "home";
+  
+  // Patient data
+  String _patientName = 'Patient';
+  String _gender = 'male';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPatientData();
+  }
+  
+  Future<void> _loadPatientData() async {
+    final name = await PatientService.instance.getPatientName();
+    final gender = await PatientService.instance.getPatientGender();
+    if (mounted) {
+      setState(() {
+        _patientName = name.isNotEmpty ? name : 'Patient';
+        _gender = gender.toLowerCase();
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,9 +71,9 @@ class _SideMenuState extends State<SideMenu> {
                     height: 56,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      image: const DecorationImage(
-                        image: NetworkImage(
-                          'https://i.pravatar.cc/150?img=47',
+                      image: DecorationImage(
+                        image: AssetImage(
+                          _gender == 'female' ? 'images/female.jpg' : 'images/male.jpg',
                         ),
                         fit: BoxFit.cover,
                       ),
@@ -70,9 +92,9 @@ class _SideMenuState extends State<SideMenu> {
                   ),
                   const SizedBox(height: 4),
                   // Username
-                  const Text(
-                    'Savannah Nguyen',
-                    style: TextStyle(
+                  Text(
+                    _patientName,
+                    style: const TextStyle(
                       color: Color(0xFF1A1438),
                       fontSize: 18,
                       fontWeight: FontWeight.w700,

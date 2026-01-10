@@ -870,29 +870,28 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
 
                       const SizedBox(height: 24),
 
-                      // Original diagnostic cards - use state data or "No data" for first-time users
+                      // Oxygen Saturation - from Apple HealthKit
                       _buildDiagnosticCard(
                         isDarkMode: isDarkMode,
-                        icon: CupertinoIcons.waveform,
-                        title: 'Blood Pressure',
-                        subtitle: _state.bloodPressure != null
-                            ? '${_state.bloodPressure!.systolic}/${_state.bloodPressure!.diastolic} mmHg'
+                        icon: CupertinoIcons.drop_fill,
+                        title: 'Oxygen Saturation',
+                        subtitle: _state.oxygenSaturation != null
+                            ? '${_state.oxygenSaturation!.percent}% SpO₂'
                             : 'No reading available',
-                        status: _state.bloodPressure?.status ?? 'No data',
+                        status: _state.oxygenSaturationStatus,
                         statusColor:
                             const Color(0xFF475569),
                       ),
 
                       const SizedBox(height: 16),
 
+                      // Heart Rhythm - from AI Analysis
                       _buildDiagnosticCard(
                         isDarkMode: isDarkMode,
-                        icon: CupertinoIcons.thermometer,
-                        title: 'Body Temperature',
-                        subtitle: _state.temperature != null
-                            ? '${_state.temperature!.value.toStringAsFixed(1)}°${_state.temperature!.unit}'
-                            : 'No reading available',
-                        status: _state.temperature?.status ?? 'No data',
+                        icon: CupertinoIcons.waveform_path_ecg,
+                        title: 'Heart Rhythm',
+                        subtitle: _state.heartRhythm ?? 'No reading available',
+                        status: _state.hasAIAnalysis ? 'Analyzed' : 'No data',
                         statusColor: const Color(0xFF475569),
                       ),
 

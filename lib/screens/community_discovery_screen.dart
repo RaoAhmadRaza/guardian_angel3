@@ -5,7 +5,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:guardian_angel_fyp/screens/community_feed_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:guardian_angel_fyp/screens/community_feed_screen_v2.dart';
 
 import 'community/community_discovery_state.dart';
 import 'community/community_discovery_data_provider.dart';
@@ -71,19 +72,19 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
     super.dispose();
   }
 
-  /// Navigate to community feed - only with real data, no mock messages
+  /// Get current user info
+  String get _userId => FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
+  String get _userName => FirebaseAuth.instance.currentUser?.displayName ?? 'User';
+  String? get _userAvatar => FirebaseAuth.instance.currentUser?.photoURL;
+
+  /// Navigate to community feed - uses V2 with location-based filtering (10km radius)
   void _navigateToFeed(CommunityGroup community) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => CommunityFeedScreen(
-          session: ChatSession(
-            id: community.id,
-            name: community.name,
-            coverImage: community.imageUrl,
-            goalProgress: 0, // Will be loaded from real data
-            dailyPrompt: '', // Will be loaded from real data
-            messages: [], // Empty - real messages loaded by feed screen
-          ),
+        builder: (context) => CommunityFeedScreenV2(
+          userId: _userId,
+          userName: _userName,
+          userAvatar: _userAvatar,
         ),
       ),
     );
@@ -92,18 +93,12 @@ class _CommunityDiscoveryScreenState extends State<CommunityDiscoveryScreen> {
   /// Navigate to featured community feed
   void _navigateToFeaturedFeed() {
     if (_state.featured == null) return;
-    final featured = _state.featured!;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => CommunityFeedScreen(
-          session: ChatSession(
-            id: featured.id,
-            name: featured.name,
-            coverImage: featured.imageUrl,
-            goalProgress: 0,
-            dailyPrompt: featured.prompt,
-            messages: [], // Empty - real messages loaded by feed screen
-          ),
+        builder: (context) => CommunityFeedScreenV2(
+          userId: _userId,
+          userName: _userName,
+          userAvatar: _userAvatar,
         ),
       ),
     );

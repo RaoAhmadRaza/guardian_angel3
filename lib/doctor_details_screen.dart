@@ -12,6 +12,7 @@ import 'onboarding/services/onboarding_local_service.dart';
 import 'onboarding/services/onboarding_firestore_service.dart';
 import 'relationships/services/doctor_relationship_service.dart';
 import 'doctor_main_screen.dart';
+import 'utils/input_validators.dart';
 
 /// Modern doctor details screen with gender selection and form fields
 ///
@@ -605,12 +606,11 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
           label: 'Full Name',
           hint: 'Dr. John Doe',
           icon: Icons.person_outline,
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter your name';
-            }
-            return null;
-          },
+          validator: InputValidators.validateName,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-'.]")),
+            LengthLimitingTextInputFormatter(100),
+          ],
           delay: 300,
         ),
         const SizedBox(height: 16),
@@ -620,12 +620,11 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
           label: 'Specialty',
           hint: 'Cardiologist, General Practitioner, etc.',
           icon: Icons.medical_services_outlined,
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter your specialty';
-            }
-            return null;
-          },
+          validator: InputValidators.validateSpecialty,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s\-\/]')),
+            LengthLimitingTextInputFormatter(100),
+          ],
           delay: 400,
         ),
         const SizedBox(height: 16),
@@ -635,12 +634,10 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
           label: 'Hospital / Clinic',
           hint: 'City Hospital',
           icon: Icons.local_hospital_outlined,
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter your hospital or clinic name';
-            }
-            return null;
-          },
+          validator: InputValidators.validateHospital,
+          inputFormatters: [
+            LengthLimitingTextInputFormatter(200),
+          ],
           delay: 500,
         ),
         const SizedBox(height: 16),
@@ -651,12 +648,11 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
           hint: '+1 234 567 8900',
           icon: Icons.phone_outlined,
           keyboardType: TextInputType.phone,
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter your phone number';
-            }
-            return null;
-          },
+          validator: InputValidators.validatePhone,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[\d\s\+\-\(\)]')),
+            LengthLimitingTextInputFormatter(20),
+          ],
           delay: 600,
         ),
         const SizedBox(height: 16),
@@ -666,12 +662,11 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
           label: 'Medical License Number',
           hint: 'MD-12345-6789',
           icon: Icons.badge_outlined,
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter your license number';
-            }
-            return null;
-          },
+          validator: InputValidators.validateLicenseNumber,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9\-_]')),
+            LengthLimitingTextInputFormatter(30),
+          ],
           delay: 700,
         ),
         const SizedBox(height: 24),
@@ -682,7 +677,17 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
           label: 'Patient Invite Code (Optional)',
           hint: 'DOC-ABC123',
           icon: Icons.link_outlined,
-          validator: null, // Optional field, no validation required
+          validator: InputValidators.validateInviteCode,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\-]')),
+            LengthLimitingTextInputFormatter(20),
+            TextInputFormatter.withFunction((oldValue, newValue) {
+              return TextEditingValue(
+                text: newValue.text.toUpperCase(),
+                selection: newValue.selection,
+              );
+            }),
+          ],
           delay: 800,
         ),
       ],
@@ -698,6 +703,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
     String? Function(String?)? validator,
+    List<TextInputFormatter>? inputFormatters,
     required int delay,
   }) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -727,6 +733,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
         controller: controller,
         focusNode: focusNode,
         keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
         style: GoogleFonts.inter(
           fontSize: 16,
           color: isDarkMode ? Colors.white : const Color(0xFF0F172A),

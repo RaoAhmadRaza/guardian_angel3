@@ -26,6 +26,7 @@ import '../repositories/chat_repository_hive.dart';
 import '../../relationships/models/relationship_model.dart';
 import '../../relationships/services/relationship_service.dart';
 import '../../services/telemetry_service.dart';
+import '../../services/push_notification_sender.dart';
 import 'chat_firestore_service.dart';
 
 /// Result of a chat access check.
@@ -192,6 +193,44 @@ class ChatService {
 
     return result;
   }
+  
+  /// Gets or creates a chat thread for a specific relationship.
+  ///
+  /// This is called automatically when a relationship is accepted
+  /// to ensure the chat thread is ready immediately.
+  ///
+  /// SKIPS validation since this is an internal call during relationship creation.
+  Future<ChatResult<ChatThreadModel>> getOrCreateThreadForRelationship({
+    required String relationshipId,
+    required String patientId,
+    required String caregiverId,
+  }) async {
+    debugPrint('[ChatService] getOrCreateThreadForRelationship: $relationshipId');
+    
+    if (relationshipId.isEmpty || patientId.isEmpty || caregiverId.isEmpty) {
+      return ChatResult.failure(
+        'invalid_params',
+        'Missing required parameters for chat thread creation',
+      );
+    }
+
+    // Get or create thread (thread ID = relationship ID)
+    final result = await _repository.getOrCreateThread(
+      relationshipId: relationshipId,
+      patientId: patientId,
+      caregiverId: caregiverId,
+    );
+
+    if (result.success && result.data != null) {
+      // Mirror to Firestore (non-blocking)
+      _firestore.mirrorThread(result.data!).catchError((e) {
+        debugPrint('[ChatService] Thread mirror failed: $e');
+      });
+      debugPrint('[ChatService] Chat thread created/found: ${result.data!.id}');
+    }
+
+    return result;
+  }
 
   /// Gets all threads for a user (should be exactly 1 for patient-caregiver).
   Future<ChatResult<List<ChatThreadModel>>> getThreadsForUser(String currentUid) async {
@@ -336,6 +375,63 @@ class ChatService {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // MESSAGE DELIVERY STATES (sent → delivered → read)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// ===== MARK MESSAGES AS READ =====
+  /// Called when user opens/views messages in a thread.
+  /// Updates local state and syncs to Firestore for read receipts.
+  Future<void> markMessagesAsRead({
+    required String threadId,
+    required String currentUid,
+    required List<String> messageIds,
+  }) async {
+    // Validate access
+    final access = await validateThreadAccess(currentUid: currentUid, threadId: threadId);
+    if (!access.allowed) return;
+
+    for (final messageId in messageIds) {
+      // Update local repository
+      await _repository.markMessageRead(messageId);
+      
+      // Sync read status to Firestore for sender to see
+      await _firestore.updateReadStatus(
+        threadId: threadId,
+        messageId: messageId,
+        readAt: DateTime.now().toUtc(),
+      );
+    }
+    
+    _telemetry.increment('chat.message.read.marked', messageIds.length);
+    debugPrint('[ChatService] Marked ${messageIds.length} messages as read');
+  }
+
+  /// ===== MARK ALL UNREAD MESSAGES AS READ =====
+  /// Convenience method to mark all unread messages in a thread as read.
+  Future<void> markAllUnreadMessagesAsRead({
+    required String threadId,
+    required String currentUid,
+  }) async {
+    // Get all messages
+    final messagesResult = await _repository.getMessagesForThread(threadId);
+    if (!messagesResult.success || messagesResult.data == null) return;
+    
+    // Filter to unread messages from other users
+    final unreadMessageIds = messagesResult.data!
+        .where((m) => m.senderId != currentUid && m.readAt == null)
+        .map((m) => m.id)
+        .toList();
+    
+    if (unreadMessageIds.isNotEmpty) {
+      await markMessagesAsRead(
+        threadId: threadId,
+        currentUid: currentUid,
+        messageIds: unreadMessageIds,
+      );
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // INCOMING MESSAGE SYNC
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -448,6 +544,7 @@ class ChatService {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /// Mirrors a message to Firestore with retry logic.
+  /// ===== REAL PUSH NOTIFICATION - AFTER SUCCESSFUL MIRROR =====
   Future<void> _mirrorMessageWithRetry(ChatMessageModel message) async {
     for (int attempt = 0; attempt < _maxRetries; attempt++) {
       try {
@@ -457,6 +554,12 @@ class ChatService {
           await _repository.markMessageSent(message.id);
           debugPrint('[ChatService] Message mirrored: ${message.id}');
           _telemetry.increment('chat.message.mirror.success');
+          
+          // ===== REAL PUSH NOTIFICATION - START =====
+          // Send push notification to the receiver
+          await _sendPushNotificationForMessage(message);
+          // ===== REAL PUSH NOTIFICATION - END =====
+          
           return;
         }
       } catch (e) {
@@ -476,5 +579,53 @@ class ChatService {
     );
     _telemetry.increment('chat.message.mirror.failed');
     debugPrint('[ChatService] Message mirror failed permanently: ${message.id}');
+  }
+
+  /// ===== REAL PUSH NOTIFICATION FOR CHAT MESSAGES =====
+  /// Sends FCM push notification to the message receiver
+  Future<void> _sendPushNotificationForMessage(ChatMessageModel message) async {
+    try {
+      // Import and use PushNotificationSender
+      final pushSender = PushNotificationSender.instance;
+      
+      // Get sender name for notification
+      String senderName = 'Someone';
+      final relationship = await _relationshipService.getRelationshipsForUser(message.senderId);
+      if (relationship.success && relationship.data != null && relationship.data!.isNotEmpty) {
+        final rel = relationship.data!.first;
+        // Determine if sender is patient or caregiver
+        if (rel.patientId == message.senderId) {
+          senderName = 'Your Patient';
+        } else {
+          senderName = 'Your Caregiver';
+        }
+      }
+      
+      // Send push via Cloud Function
+      final result = await pushSender.sendChatNotification(
+        recipientUid: message.receiverId,
+        senderName: senderName,
+        threadId: message.threadId,
+        messagePreview: message.content.length > 50 
+            ? '${message.content.substring(0, 50)}...' 
+            : message.content,
+        messageId: message.id,
+      );
+      
+      if (result.success) {
+        debugPrint('[ChatService] Push notification sent for message: ${message.id}');
+        _telemetry.increment('chat.push.sent');
+        
+        // ===== UPDATE DELIVERY STATE TO DELIVERED =====
+        // When push is successfully sent, we update message state to delivered
+        await _repository.markMessageDelivered(message.id);
+      } else {
+        debugPrint('[ChatService] Push notification failed: ${result.error}');
+        _telemetry.increment('chat.push.failed');
+      }
+    } catch (e) {
+      debugPrint('[ChatService] Push notification error: $e');
+      _telemetry.increment('chat.push.error');
+    }
   }
 }

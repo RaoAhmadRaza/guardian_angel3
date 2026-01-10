@@ -8,6 +8,7 @@ import 'patient_overview_screen.dart';
 import 'providers/doctor_patients_provider.dart';
 import 'relationships/services/doctor_relationship_service.dart';
 import 'chat/screens/patient_doctor_chat_screen.dart';
+import 'screens/doctor_patient_vitals_screen.dart';
 
 // Mock Data Models - KEPT FOR FALLBACK/DEMO MODE
 
@@ -506,7 +507,20 @@ class _DoctorMainScreenState extends ConsumerState<DoctorMainScreen> with Ticker
 
     return GestureDetector(
       onTap: () {
-        // If has chat permission, go to chat. Otherwise show info.
+        // Navigate to patient vitals screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DoctorPatientVitalsScreen(
+              patientId: patient.patientId,
+              patientName: patient.patientName,
+              currentVitals: patient.vitals,
+            ),
+          ),
+        );
+      },
+      onLongPress: () {
+        // Long press to go to chat if available
         if (patient.hasChatPermission && patient.chatThread != null) {
           Navigator.push(
             context,
@@ -516,14 +530,6 @@ class _DoctorMainScreenState extends ConsumerState<DoctorMainScreen> with Ticker
                 otherUserName: patient.patientName,
                 otherUserAvatarUrl: patient.photo,
               ),
-            ),
-          );
-        } else {
-          // Navigate to patient overview or show details
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Patient details: ${patient.patientName}'),
-              duration: const Duration(seconds: 2),
             ),
           );
         }

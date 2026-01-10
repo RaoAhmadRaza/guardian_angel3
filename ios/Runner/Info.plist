@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Guardian Angel Fyp</string>
+	<string>Guardian Angel</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>guardian_angel_fyp</string>
+	<string>Guardian Angel</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -30,6 +30,14 @@
 	<string>Your location is used to provide local weather and context-aware automation.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your location is used to provide local weather and context-aware automation.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Guardian Angel needs access to your health data to monitor your vital signs and provide real-time health insights to your caregivers.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Guardian Angel needs permission to save health data to track your wellness journey and sync with connected devices.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Guardian Angel uses speech recognition to let you speak your thoughts and feelings in the Peace of Mind journal.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Guardian Angel needs microphone access to enable voice journaling in the Peace of Mind feature.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

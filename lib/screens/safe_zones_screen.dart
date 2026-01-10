@@ -1,52 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'add_safe_zone_screen.dart';
 import 'safe_zone_info_screen.dart';
+import '../geofencing/models/safe_zone_model.dart';
+import '../geofencing/providers/safe_zone_data_provider.dart';
 
-class SafeZonesScreen extends StatefulWidget {
+class SafeZonesScreen extends ConsumerStatefulWidget {
   const SafeZonesScreen({super.key});
 
   @override
-  State<SafeZonesScreen> createState() => _SafeZonesScreenState();
+  ConsumerState<SafeZonesScreen> createState() => _SafeZonesScreenState();
 }
 
-class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProviderStateMixin {
+class _SafeZonesScreenState extends ConsumerState<SafeZonesScreen> with SingleTickerProviderStateMixin {
   late AnimationController _radarController;
-
-  // Mock Data
-  final List<Map<String, dynamic>> _zones = [
-    {
-      'id': '1',
-      'name': 'Home',
-      'address': '123 Maple Street',
-      'radius': 500,
-      'status': 'active',
-      'icon': CupertinoIcons.house_fill,
-      'color': const Color(0xFF2563EB), // blue-600
-      'bg': const Color(0xFFEFF6FF), // blue-50
-    },
-    {
-      'id': '2',
-      'name': 'Grocery Store',
-      'address': 'Whole Foods Market',
-      'radius': 200,
-      'status': 'inactive',
-      'icon': CupertinoIcons.cart_fill,
-      'color': const Color(0xFF059669), // emerald-600
-      'bg': const Color(0xFFECFDF5), // emerald-50
-    },
-    {
-      'id': '3',
-      'name': 'Central Park',
-      'address': 'Park Entrance North',
-      'radius': 1000,
-      'status': 'active',
-      'icon': CupertinoIcons.tree,
-      'color': const Color(0xFF7C3AED), // violet-600
-      'bg': const Color(0xFFF5F3FF), // violet-50
-    },
-  ];
+  GoogleMapController? _mapController;
+  bool _satelliteView = false;
 
   @override
   void initState() {
@@ -55,6 +27,19 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
       vsync: this,
       duration: const Duration(seconds: 3),
     )..repeat();
+
+    // Initialize geofencing on screen load
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeGeofencing();
+    });
+  }
+
+  Future<void> _initializeGeofencing() async {
+    final control = ref.read(geofencingControlProvider.notifier);
+    final hasPermission = await control.checkPermissions();
+    if (hasPermission) {
+      await control.startMonitoring();
+    }
   }
 
   @override
@@ -65,6 +50,10 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
+    final zonesAsync = ref.watch(safeZonesStreamProvider);
+    final safeStatus = ref.watch(currentSafeStatusProvider);
+    final activeCount = ref.watch(activeZonesCountProvider);
+
     return Scaffold(
       backgroundColor: const Color(0xFFFDFDFD),
       body: Stack(
@@ -76,8 +65,8 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
-                    _buildMapHeader(),
-                    _buildZoneList(),
+                    _buildMapHeader(safeStatus),
+                    _buildZoneList(zonesAsync, activeCount),
                     const SizedBox(height: 120), // Space for bottom button
                   ],
                 ),
@@ -168,7 +157,11 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildMapHeader() {
+  Widget _buildMapHeader(SafeZoneStatus safeStatus) {
+    final isMonitoring = ref.watch(geofencingControlProvider).isMonitoring;
+    final zonesAsync = ref.watch(safeZonesStreamProvider);
+    final currentLocationAsync = ref.watch(currentLocationProvider);
+    
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       height: 320,
@@ -186,71 +179,8 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
         borderRadius: BorderRadius.circular(40),
         child: Stack(
           children: [
-            // Map Background Placeholder
-            Container(
-              color: const Color(0xFFE2E8F0),
-              child: Stack(
-                children: [
-                  // Grid pattern to simulate map
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: GridPainter(),
-                    ),
-                  ),
-                  // Radar Animation
-                  Center(
-                    child: AnimatedBuilder(
-                      animation: _radarController,
-                      builder: (context, child) {
-                        return Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Container(
-                              width: 200 * _radarController.value,
-                              height: 200 * _radarController.value,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: const Color(0xFF2563EB).withOpacity(0.1 * (1 - _radarController.value)),
-                              ),
-                            ),
-                            Container(
-                              width: 150 * _radarController.value,
-                              height: 150 * _radarController.value,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: const Color(0xFF2563EB).withOpacity(0.2 * (1 - _radarController.value)),
-                                  width: 1,
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                  // User Marker
-                  Center(
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2563EB),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 3),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF2563EB).withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            // Google Maps
+            _buildGoogleMap(zonesAsync, currentLocationAsync),
 
             // Top Badges
             Positioned(
@@ -274,14 +204,16 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
                     Container(
                       width: 8,
                       height: 8,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF10B981), // emerald-500
+                      decoration: BoxDecoration(
+                        color: isMonitoring 
+                            ? const Color(0xFF10B981) // emerald-500
+                            : const Color(0xFFF59E0B), // amber-500
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Live Monitoring',
+                      isMonitoring ? 'Live Monitoring' : 'Monitoring Paused',
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -293,26 +225,63 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
               ),
             ),
 
+            // Map Type Toggle
+            Positioned(
+              top: 20,
+              right: 60,
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _satelliteView = !_satelliteView);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.9),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    _satelliteView ? CupertinoIcons.map : CupertinoIcons.globe,
+                    size: 16,
+                    color: const Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+            ),
+
+            // Recenter Button
             Positioned(
               top: 20,
               right: 20,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  CupertinoIcons.location_fill,
-                  size: 16,
-                  color: Color(0xFF0F172A),
+              child: GestureDetector(
+                onTap: () async {
+                  await ref.read(geofencingControlProvider.notifier).refreshZoneStates();
+                  _recenterMap();
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.9),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.location_fill,
+                    size: 16,
+                    color: Color(0xFF0F172A),
+                  ),
                 ),
               ),
             ),
@@ -341,12 +310,12 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEFF6FF),
+                        color: _getStatusBackgroundColor(safeStatus.isSafe),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: const Icon(
-                        CupertinoIcons.shield_fill,
-                        color: Color(0xFF2563EB),
+                      child: Icon(
+                        _getStatusIcon(safeStatus.isSafe),
+                        color: _getStatusIconColor(safeStatus.isSafe),
                         size: 24,
                       ),
                     ),
@@ -356,7 +325,7 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Currently Safe',
+                            _getStatusTitle(safeStatus.isSafe),
                             style: GoogleFonts.inter(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -364,7 +333,7 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
                             ),
                           ),
                           Text(
-                            'Inside Home Zone',
+                            safeStatus.message,
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
@@ -374,21 +343,22 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFDCFCE7),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '98%',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF16A34A),
+                    if (safeStatus.isSafe == true)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDCFCE7),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '100%',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF16A34A),
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -399,7 +369,160 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildZoneList() {
+  Widget _buildGoogleMap(
+    AsyncValue<List<SafeZoneModel>> zonesAsync,
+    AsyncValue<dynamic> currentLocationAsync,
+  ) {
+    // Build circles for zones
+    final circles = <Circle>{};
+    final markers = <Marker>{};
+    LatLng? initialPosition;
+
+    zonesAsync.whenData((zones) {
+      for (final zone in zones) {
+        circles.add(Circle(
+          circleId: CircleId(zone.id),
+          center: LatLng(zone.latitude, zone.longitude),
+          radius: zone.radiusMeters,
+          fillColor: Color(zone.type.colorValue).withOpacity(0.15),
+          strokeColor: Color(zone.type.colorValue).withOpacity(0.6),
+          strokeWidth: 2,
+        ));
+
+        markers.add(Marker(
+          markerId: MarkerId(zone.id),
+          position: LatLng(zone.latitude, zone.longitude),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            _getMarkerHue(zone.type),
+          ),
+          infoWindow: InfoWindow(
+            title: zone.name,
+            snippet: '${zone.radiusMeters.toInt()}m radius${zone.isCurrentlyInside == true ? ' • Inside' : ''}',
+          ),
+        ));
+
+        initialPosition ??= LatLng(zone.latitude, zone.longitude);
+      }
+    });
+
+    currentLocationAsync.whenData((position) {
+      if (position != null) {
+        initialPosition = LatLng(position.latitude, position.longitude);
+      }
+    });
+
+    // Default to San Francisco if no location
+    initialPosition ??= const LatLng(37.7749, -122.4194);
+
+    return GoogleMap(
+      initialCameraPosition: CameraPosition(
+        target: initialPosition!,
+        zoom: 14.0,
+      ),
+      mapType: _satelliteView ? MapType.satellite : MapType.normal,
+      myLocationEnabled: true,
+      myLocationButtonEnabled: false,
+      zoomControlsEnabled: false,
+      compassEnabled: false,
+      circles: circles,
+      markers: markers,
+      onMapCreated: (controller) {
+        _mapController = controller;
+        _fitMapBounds(zonesAsync);
+      },
+    );
+  }
+
+  void _fitMapBounds(AsyncValue<List<SafeZoneModel>> zonesAsync) {
+    zonesAsync.whenData((zones) {
+      if (zones.isEmpty || _mapController == null) return;
+
+      double minLat = double.infinity;
+      double maxLat = double.negativeInfinity;
+      double minLng = double.infinity;
+      double maxLng = double.negativeInfinity;
+
+      for (final zone in zones) {
+        final radiusDegrees = zone.radiusMeters / 111320;
+        
+        if (zone.latitude - radiusDegrees < minLat) minLat = zone.latitude - radiusDegrees;
+        if (zone.latitude + radiusDegrees > maxLat) maxLat = zone.latitude + radiusDegrees;
+        if (zone.longitude - radiusDegrees < minLng) minLng = zone.longitude - radiusDegrees;
+        if (zone.longitude + radiusDegrees > maxLng) maxLng = zone.longitude + radiusDegrees;
+      }
+
+      if (minLat.isFinite && maxLat.isFinite && minLng.isFinite && maxLng.isFinite) {
+        final bounds = LatLngBounds(
+          southwest: LatLng(minLat, minLng),
+          northeast: LatLng(maxLat, maxLng),
+        );
+
+        Future.delayed(const Duration(milliseconds: 300), () {
+          _mapController?.animateCamera(
+            CameraUpdate.newLatLngBounds(bounds, 60),
+          );
+        });
+      }
+    });
+  }
+
+  void _recenterMap() async {
+    final currentLocation = await ref.read(currentLocationProvider.future);
+    if (currentLocation != null && _mapController != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLng(
+          LatLng(currentLocation.latitude, currentLocation.longitude),
+        ),
+      );
+    }
+  }
+
+  double _getMarkerHue(SafeZoneType type) {
+    switch (type) {
+      case SafeZoneType.home:
+        return BitmapDescriptor.hueBlue;
+      case SafeZoneType.work:
+        return BitmapDescriptor.hueViolet;
+      case SafeZoneType.park:
+        return BitmapDescriptor.hueGreen;
+      case SafeZoneType.gym:
+        return BitmapDescriptor.hueRed;
+      case SafeZoneType.school:
+        return BitmapDescriptor.hueOrange;
+      case SafeZoneType.medical:
+        return BitmapDescriptor.hueRose;
+      case SafeZoneType.grocery:
+        return BitmapDescriptor.hueCyan;
+      case SafeZoneType.other:
+        return BitmapDescriptor.hueMagenta;
+    }
+  }
+
+  String _getStatusTitle(bool? isSafe) {
+    if (isSafe == true) return 'Currently Safe';
+    if (isSafe == false) return 'Outside Safe Zones';
+    return 'Status Unknown';
+  }
+
+  IconData _getStatusIcon(bool? isSafe) {
+    if (isSafe == true) return CupertinoIcons.shield_fill;
+    if (isSafe == false) return CupertinoIcons.exclamationmark_triangle_fill;
+    return CupertinoIcons.question_circle_fill;
+  }
+
+  Color _getStatusBackgroundColor(bool? isSafe) {
+    if (isSafe == true) return const Color(0xFFEFF6FF);
+    if (isSafe == false) return const Color(0xFFFEF2F2);
+    return const Color(0xFFF5F5F7);
+  }
+
+  Color _getStatusIconColor(bool? isSafe) {
+    if (isSafe == true) return const Color(0xFF2563EB);
+    if (isSafe == false) return const Color(0xFFDC2626);
+    return const Color(0xFF64748B);
+  }
+
+  Widget _buildZoneList(AsyncValue<List<SafeZoneModel>> zonesAsync, int activeCount) {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -417,7 +540,7 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
                 ),
               ),
               Text(
-                '${_zones.length} Active',
+                '$activeCount Active',
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -427,74 +550,243 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
             ],
           ),
           const SizedBox(height: 16),
-          ..._zones.map((zone) => Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: _buildZoneCard(zone),
-          )),
+          
+          zonesAsync.when(
+            data: (zones) {
+              if (zones.isEmpty) {
+                return _buildEmptyState();
+              }
+              return Column(
+                children: zones.map((zone) => Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: _buildZoneCard(zone),
+                )).toList(),
+              );
+            },
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: CupertinoActivityIndicator(),
+              ),
+            ),
+            error: (e, _) => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Text(
+                  'Error loading zones',
+                  style: GoogleFonts.inter(color: const Color(0xFF64748B)),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildZoneCard(Map<String, dynamic> zone) {
+  Widget _buildEmptyState() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFF5F5F7),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Icon(
+              CupertinoIcons.location_slash,
+              color: Color(0xFF64748B),
+              size: 32,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No Safe Zones Yet',
+            style: GoogleFonts.inter(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Add your first safe zone to start monitoring',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              color: const Color(0xFF64748B),
+            ),
           ),
         ],
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: zone['bg'],
-              borderRadius: BorderRadius.circular(16),
+    );
+  }
+
+  Widget _buildZoneCard(SafeZoneModel zone) {
+    return GestureDetector(
+      onTap: () => _showZoneOptions(zone),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
             ),
-            child: Icon(
-              zone['icon'],
-              color: zone['color'],
-              size: 24,
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Color(zone.type.backgroundColorValue),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(
+                zone.type.icon,
+                color: Color(zone.type.colorValue),
+                size: 24,
+              ),
             ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  zone['name'],
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF0F172A),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          zone.name,
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF0F172A),
+                          ),
+                        ),
+                      ),
+                      if (zone.isCurrentlyInside == true)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDCFCE7),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'INSIDE',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF16A34A),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${zone.radiusMeters.toInt()}m radius • ${zone.isActive ? 'Monitoring' : 'Paused'}',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              CupertinoIcons.chevron_right,
+              color: Color(0xFFCBD5E1),
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showZoneOptions(SafeZoneModel zone) {
+    showCupertinoModalPopup(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text(
+          zone.name,
+          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+        ),
+        message: Text('${zone.radiusMeters.toInt()}m radius'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.push(
+                context,
+                CupertinoPageRoute(
+                  builder: (_) => AddSafeZoneScreen(
+                    isEditing: true,
+                    existingZone: zone,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${zone['radius']}m radius • ${zone['status'] == 'active' ? 'Monitoring' : 'Paused'}',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFF64748B),
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
+            child: const Text('Edit Zone'),
           ),
-          Icon(
-            CupertinoIcons.chevron_right,
-            color: const Color(0xFFCBD5E1),
-            size: 20,
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(safeZoneNotifierProvider.notifier).toggleZoneActive(zone.id);
+            },
+            child: Text(zone.isActive ? 'Pause Monitoring' : 'Resume Monitoring'),
+          ),
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () {
+              Navigator.pop(ctx);
+              _confirmDeleteZone(zone);
+            },
+            child: const Text('Delete Zone'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteZone(SafeZoneModel zone) {
+    showCupertinoDialog(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Delete Safe Zone?'),
+        content: Text('Are you sure you want to delete "${zone.name}"? This cannot be undone.'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(safeZoneNotifierProvider.notifier).deleteZone(zone.id);
+            },
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -507,13 +799,18 @@ class _SafeZonesScreenState extends State<SafeZonesScreen> with SingleTickerProv
       left: 24,
       right: 24,
       child: GestureDetector(
-        onTap: () {
-          Navigator.push(
+        onTap: () async {
+          final result = await Navigator.push<bool>(
             context,
             CupertinoPageRoute(
               builder: (context) => const AddSafeZoneScreen(),
             ),
           );
+          
+          // Refresh zones if a new one was added
+          if (result == true) {
+            ref.invalidate(safeZonesStreamProvider);
+          }
         },
         child: Container(
           height: 64,

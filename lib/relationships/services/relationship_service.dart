@@ -13,6 +13,8 @@ import '../models/relationship_model.dart';
 import '../repositories/relationship_repository.dart';
 import '../repositories/relationship_repository_hive.dart';
 import 'relationship_firestore_service.dart';
+import '../../chat/services/chat_service.dart';
+import '../../services/emergency_contact_service.dart';
 
 /// High-level service for relationship operations.
 class RelationshipService {
@@ -142,6 +144,12 @@ class RelationshipService {
         }).catchError((e) {
           debugPrint('[RelationshipService] Firestore mirror failed (will retry): $e');
         });
+        
+        // Auto-create chat thread for the new relationship (non-blocking)
+        _createChatThreadForRelationship(updated);
+        
+        // Auto-add caregiver as emergency contact for SMS alerts (non-blocking)
+        _addCaregiverAsEmergencyContact(updated);
 
         return RelationshipResult.success(updated);
       }
@@ -162,6 +170,12 @@ class RelationshipService {
     }).catchError((e) {
       debugPrint('[RelationshipService] Firestore mirror failed (will retry): $e');
     });
+    
+    // Auto-create chat thread for the new relationship (non-blocking)
+    _createChatThreadForRelationship(result.data!);
+    
+    // Auto-add caregiver as emergency contact for SMS alerts (non-blocking)
+    _addCaregiverAsEmergencyContact(result.data!);
 
     return result;
   }
@@ -193,6 +207,47 @@ class RelationshipService {
   /// Gets all active relationships for a patient.
   Future<RelationshipResult<List<RelationshipModel>>> getActiveRelationshipsForPatient(String uid) {
     return _repository.getActiveRelationshipsForPatient(uid);
+  }
+
+  /// Syncs relationships from Firestore to local Hive storage.
+  /// 
+  /// This should be called when:
+  /// - Patient opens the app (to pull caregiver acceptances)
+  /// - Caregiver opens the app (to pull patient invites)
+  /// 
+  /// Flow:
+  /// 1. Fetch all relationships from Firestore for this user
+  /// 2. Merge with local data (Firestore wins for status changes)
+  /// 3. Save to local Hive
+  Future<void> syncFromFirestore(String uid) async {
+    debugPrint('[RelationshipService] Syncing from Firestore for user: $uid');
+    
+    try {
+      // Fetch from Firestore
+      final firestoreRelationships = await _firestore.fetchRelationshipsForUser(uid);
+      debugPrint('[RelationshipService] Fetched ${firestoreRelationships.length} relationships from Firestore');
+      
+      if (firestoreRelationships.isEmpty) {
+        debugPrint('[RelationshipService] No relationships in Firestore to sync');
+        return;
+      }
+      
+      // Sync each relationship to local storage
+      final hiveRepo = _repository as RelationshipRepositoryHive;
+      for (final relationship in firestoreRelationships) {
+        try {
+          await hiveRepo.saveToLocal(relationship);
+          debugPrint('[RelationshipService] Synced relationship: ${relationship.id} (status: ${relationship.status})');
+        } catch (e) {
+          debugPrint('[RelationshipService] Failed to sync relationship ${relationship.id}: $e');
+        }
+      }
+      
+      debugPrint('[RelationshipService] Firestore sync complete');
+    } catch (e) {
+      debugPrint('[RelationshipService] Firestore sync failed: $e');
+      // Don't throw - sync failures should not break the app
+    }
   }
 
   /// Revokes a relationship.
@@ -257,5 +312,73 @@ class RelationshipService {
     // Sort by creation date descending, return most recent
     pending.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return pending.first.inviteCode;
+  }
+  
+  /// Creates a chat thread automatically when relationship is accepted.
+  /// 
+  /// This ensures caregiver and patient can immediately start chatting
+  /// without needing to navigate to chat first.
+  void _createChatThreadForRelationship(RelationshipModel relationship) {
+    debugPrint('[RelationshipService] Auto-creating chat thread for relationship: ${relationship.id}');
+    
+    // Validate we have both parties
+    if (relationship.patientId.isEmpty || 
+        relationship.caregiverId == null || 
+        relationship.caregiverId!.isEmpty) {
+      debugPrint('[RelationshipService] Cannot create chat - missing patient or caregiver ID');
+      return;
+    }
+    
+    // Check if chat permission is granted
+    if (!relationship.permissions.contains('chat')) {
+      debugPrint('[RelationshipService] Chat permission not granted, skipping thread creation');
+      return;
+    }
+    
+    // Use ChatService to create thread (non-blocking)
+    ChatService.instance.getOrCreateThreadForRelationship(
+      relationshipId: relationship.id,
+      patientId: relationship.patientId,
+      caregiverId: relationship.caregiverId!,
+    ).then((result) {
+      if (result.success) {
+        debugPrint('[RelationshipService] Chat thread created successfully: ${result.data?.id}');
+      } else {
+        debugPrint('[RelationshipService] Failed to create chat thread: ${result.errorMessage}');
+      }
+    }).catchError((e) {
+      debugPrint('[RelationshipService] Chat thread creation error: $e');
+    });
+  }
+  
+  /// Adds caregiver as emergency contact automatically when relationship is accepted.
+  /// 
+  /// This ensures the caregiver receives SMS alerts during SOS emergencies.
+  /// Fetches the caregiver's phone number from Firestore and adds it to the
+  /// patient's emergency contacts.
+  void _addCaregiverAsEmergencyContact(RelationshipModel relationship) {
+    debugPrint('[RelationshipService] Auto-adding caregiver as emergency contact for relationship: ${relationship.id}');
+    
+    // Validate we have both parties
+    if (relationship.patientId.isEmpty || 
+        relationship.caregiverId == null || 
+        relationship.caregiverId!.isEmpty) {
+      debugPrint('[RelationshipService] Cannot add emergency contact - missing patient or caregiver ID');
+      return;
+    }
+    
+    // Use EmergencyContactService to add caregiver (non-blocking)
+    EmergencyContactService.instance.addLinkedCaregiverAsEmergencyContact(
+      patientId: relationship.patientId,
+      caregiverId: relationship.caregiverId!,
+    ).then((success) {
+      if (success) {
+        debugPrint('[RelationshipService] Caregiver added as emergency contact successfully');
+      } else {
+        debugPrint('[RelationshipService] Failed to add caregiver as emergency contact');
+      }
+    }).catchError((e) {
+      debugPrint('[RelationshipService] Emergency contact addition error: $e');
+    });
   }
 }

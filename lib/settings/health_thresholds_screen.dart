@@ -1,5 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../services/health_threshold_service.dart';
+import '../models/health_threshold_model.dart';
 
 class HealthThresholdsScreen extends StatefulWidget {
   const HealthThresholdsScreen({super.key});
@@ -13,6 +16,120 @@ class _HealthThresholdsScreenState extends State<HealthThresholdsScreen> {
   bool _fallDetection = true;
   bool _inactivityAlert = true;
   double _inactivityHours = 2.0;
+  bool _isLoading = true;
+  HealthThresholdModel? _thresholds;
+  String? _rangeError;
+  
+  // Issue #16: Minimum separation between min and max heart rate
+  static const int _minimumHeartRateSeparation = 20;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThresholds();
+  }
+
+  Future<void> _loadThresholds() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
+    
+    final thresholds = await HealthThresholdService.instance.getThresholds(uid);
+    setState(() {
+      _thresholds = thresholds;
+      _heartRateRange = RangeValues(
+        thresholds.heartRateMin.toDouble(),
+        thresholds.heartRateMax.toDouble(),
+      );
+      _fallDetection = thresholds.fallDetectionEnabled;
+      _inactivityAlert = thresholds.inactivityAlertEnabled;
+      _inactivityHours = thresholds.inactivityHours;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _saveThresholds() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    
+    final thresholds = _thresholds?.copyWith(
+      heartRateMin: _heartRateRange.start.round(),
+      heartRateMax: _heartRateRange.end.round(),
+      fallDetectionEnabled: _fallDetection,
+      inactivityAlertEnabled: _inactivityAlert,
+      inactivityHours: _inactivityHours,
+    ) ?? HealthThresholdModel.defaults(uid).copyWith(
+      heartRateMin: _heartRateRange.start.round(),
+      heartRateMax: _heartRateRange.end.round(),
+      fallDetectionEnabled: _fallDetection,
+      inactivityAlertEnabled: _inactivityAlert,
+      inactivityHours: _inactivityHours,
+    );
+    
+    await HealthThresholdService.instance.saveThresholds(thresholds);
+    setState(() => _thresholds = thresholds);
+  }
+  
+  /// Issue #16: Validate heart rate range has minimum separation
+  String? _validateHeartRateRange(RangeValues values) {
+    final separation = values.end - values.start;
+    if (separation < _minimumHeartRateSeparation) {
+      return 'Min and max must be at least $_minimumHeartRateSeparation BPM apart';
+    }
+    return null;
+  }
+  
+  /// Issue #26: Reset thresholds to defaults
+  Future<void> _resetToDefaults() async {
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Reset to Defaults'),
+        content: const Text(
+          'This will reset all health thresholds to their default values. Are you sure?',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed != true) return;
+    
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    
+    final defaults = HealthThresholdModel.defaults(uid);
+    await HealthThresholdService.instance.saveThresholds(defaults);
+    
+    setState(() {
+      _thresholds = defaults;
+      _heartRateRange = RangeValues(
+        defaults.heartRateMin.toDouble(),
+        defaults.heartRateMax.toDouble(),
+      );
+      _fallDetection = defaults.fallDetectionEnabled;
+      _inactivityAlert = defaults.inactivityAlertEnabled;
+      _inactivityHours = defaults.inactivityHours;
+      _rangeError = null;
+    });
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Thresholds reset to defaults')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +152,16 @@ class _HealthThresholdsScreenState extends State<HealthThresholdsScreen> {
               icon: Icon(Icons.arrow_back_ios_new, color: isDarkMode ? Colors.white : Colors.black),
               onPressed: () => Navigator.pop(context),
             ),
+            // Issue #26: Reset to defaults button
+            actions: [
+              TextButton(
+                onPressed: _resetToDefaults,
+                child: const Text(
+                  'Reset',
+                  style: TextStyle(color: Color(0xFF007AFF)),
+                ),
+              ),
+            ],
           ),
           SliverToBoxAdapter(
             child: Padding(
@@ -84,14 +211,34 @@ class _HealthThresholdsScreenState extends State<HealthThresholdsScreen> {
                           min: 40,
                           max: 160,
                           divisions: 120,
-                          activeColor: Colors.red,
+                          activeColor: _rangeError != null ? Colors.orange : Colors.red,
                           inactiveColor: Colors.red.withOpacity(0.2),
                           onChanged: (values) {
                             setState(() {
                               _heartRateRange = values;
+                              // Issue #16: Validate range separation
+                              _rangeError = _validateHeartRateRange(values);
                             });
                           },
+                          onChangeEnd: (values) {
+                            // Issue #16: Only save if valid range
+                            if (_validateHeartRateRange(values) == null) {
+                              _saveThresholds();
+                            }
+                          },
                         ),
+                        if (_rangeError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              _rangeError!,
+                              style: const TextStyle(
+                                color: Colors.orange,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
                         const SizedBox(height: 8),
                         Text(
                           'Alert guardians if heart rate goes outside this range.',
@@ -125,7 +272,10 @@ class _HealthThresholdsScreenState extends State<HealthThresholdsScreen> {
                           title: 'Fall Detection',
                           subtitle: 'Automatically trigger SOS on impact',
                           value: _fallDetection,
-                          onChanged: (val) => setState(() => _fallDetection = val),
+                          onChanged: (val) {
+                            setState(() => _fallDetection = val);
+                            _saveThresholds();
+                          },
                           isDarkMode: isDarkMode,
                           isFirst: true,
                         ),
@@ -138,7 +288,10 @@ class _HealthThresholdsScreenState extends State<HealthThresholdsScreen> {
                           title: 'Inactivity Alert',
                           subtitle: 'Notify if no movement for ${_inactivityHours.round()} hours',
                           value: _inactivityAlert,
-                          onChanged: (val) => setState(() => _inactivityAlert = val),
+                          onChanged: (val) {
+                            setState(() => _inactivityAlert = val);
+                            _saveThresholds();
+                          },
                           isDarkMode: isDarkMode,
                           isLast: true,
                         ),

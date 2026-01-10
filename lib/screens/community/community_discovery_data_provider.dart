@@ -47,7 +47,7 @@ class CommunityDiscoveryDataProvider {
 
   /// Load initial state from local storage
   /// Returns demo data if Demo Mode is enabled
-  /// Returns empty state for first-time users when demo mode is off
+  /// Returns suggested communities for first-time users when demo mode is off
   Future<CommunityDiscoveryState> loadInitialState() async {
     await initialize();
     
@@ -58,29 +58,24 @@ class CommunityDiscoveryDataProvider {
     }
     
     // Load real data from Hive
-    // Load stories
+    // Load stories (from local cache if any)
     final storiesRaw = _box?.get(_storiesKey) as List<dynamic>?;
     final stories = storiesRaw
         ?.map((e) => StoryItem.fromMap(Map<String, dynamic>.from(e as Map)))
         .toList() ?? [];
     
-    // Load featured community
-    final featuredRaw = _box?.get(_featuredKey) as Map<dynamic, dynamic>?;
-    final featured = featuredRaw != null
-        ? FeaturedCommunity.fromMap(Map<String, dynamic>.from(featuredRaw))
-        : null;
-    
-    // Load communities
-    final communitiesRaw = _box?.get(_communitiesKey) as List<dynamic>?;
-    final communities = communitiesRaw
-        ?.map((e) => CommunityGroup.fromMap(Map<String, dynamic>.from(e as Map)))
-        .toList() ?? [];
-    
-    // Load upcoming event
+    // Load upcoming event (from local cache if any)
     final eventRaw = _box?.get(_eventKey) as Map<dynamic, dynamic>?;
     final upcomingEvent = eventRaw != null
         ? CommunityEvent.fromMap(Map<String, dynamic>.from(eventRaw))
         : null;
+    
+    // Always show the 4 default communities for all users
+    // These are global communities - content is filtered by 10km radius
+    final communities = _getDefaultCommunities();
+    
+    // Also provide a default featured community
+    final featured = _getDefaultFeaturedCommunity();
     
     return CommunityDiscoveryState(
       stories: stories,
@@ -88,6 +83,60 @@ class CommunityDiscoveryDataProvider {
       communities: communities,
       upcomingEvent: upcomingEvent,
       isLoading: false,
+    );
+  }
+
+  /// The 4 default global communities for ALL users
+  /// Content inside each community is filtered by 10km radius
+  List<CommunityGroup> _getDefaultCommunities() {
+    return [
+      CommunityGroup(
+        id: 'community-morning-walks',
+        name: 'Morning Walks',
+        subtitle: 'Health & Fitness',
+        memberCount: 324,
+        imageUrl: 'https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&w=800&q=80',
+        isLive: true,
+        latestActivity: 'Active now',
+      ),
+      CommunityGroup(
+        id: 'community-book-club',
+        name: 'Book Club',
+        subtitle: 'Reading & Learning',
+        memberCount: 89,
+        imageUrl: 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?auto=format&fit=crop&w=800&q=80',
+        isLive: false,
+        latestActivity: 'Quiet',
+      ),
+      CommunityGroup(
+        id: 'community-prayer-circle',
+        name: 'Prayer Circle',
+        subtitle: 'Faith & Spirituality',
+        memberCount: 156,
+        imageUrl: 'https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=800&q=80',
+        isLive: true,
+        latestActivity: '7:00 AM Daily',
+      ),
+      CommunityGroup(
+        id: 'community-heart-health',
+        name: 'Heart Health',
+        subtitle: 'Wellness & Support',
+        memberCount: 512,
+        imageUrl: 'https://images.unsplash.com/photo-1559757175-5700dde675bc?auto=format&fit=crop&w=800&q=80',
+        isLive: true,
+        latestActivity: 'Active now',
+      ),
+    ];
+  }
+
+  /// Default featured community
+  FeaturedCommunity _getDefaultFeaturedCommunity() {
+    return FeaturedCommunity(
+      id: 'featured-heart-warriors',
+      name: 'Heart Health Warriors',
+      prompt: 'Share your heart-healthy tip of the day! 💪❤️',
+      onlineCount: 47,
+      imageUrl: 'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
     );
   }
 

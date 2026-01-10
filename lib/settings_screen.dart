@@ -6,6 +6,9 @@ import 'providers/theme_provider.dart';
 import 'services/demo_mode_service.dart';
 import 'services/session_service.dart';
 import 'services/patient_service.dart';
+import 'services/fall_detection/fall_detection.dart';
+// Health Stability Score integration
+import 'stability_score/stability_score.dart';
 import 'main.dart';
 import 'settings/about_screen.dart';
 import 'settings/device_settings_screen.dart';
@@ -26,6 +29,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDemoMode = false;
+  bool _isFallDetectionEnabled = true;
   String _patientName = 'User';
   int _patientAge = 0;
   String _patientGender = 'male';
@@ -35,6 +39,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _loadDemoModeState();
     _loadPatientData();
+    _loadFallDetectionState();
+  }
+
+  Future<void> _loadFallDetectionState() async {
+    final fallService = FallDetectionService.instance;
+    if (mounted) {
+      setState(() {
+        _isFallDetectionEnabled = fallService.isEnabled;
+      });
+    }
+  }
+
+  Future<void> _toggleFallDetection() async {
+    final fallService = FallDetectionService.instance;
+    await fallService.setEnabled(!_isFallDetectionEnabled);
+    if (mounted) {
+      setState(() {
+        _isFallDetectionEnabled = fallService.isEnabled;
+      });
+    }
   }
 
   Future<void> _loadPatientData() async {
@@ -131,7 +155,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
+        // HSS Badge below avatar
+        const HSSBadge(
+          size: HSSBadgeSize.medium,
+          showLabel: true,
+        ),
+        const SizedBox(height: 12),
         Text(
           _patientName,
           style: TextStyle(
@@ -254,6 +284,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               _buildSettingsDivider(isDarkMode),
               _buildDarkModeToggleItem(isDarkMode),
+              _buildSettingsDivider(isDarkMode),
+              _buildFallDetectionToggleItem(isDarkMode),
               _buildSettingsDivider(isDarkMode),
               _buildDemoModeToggleItem(isDarkMode),
             ],
@@ -473,6 +505,80 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: AnimatedAlign(
                 duration: const Duration(milliseconds: 300),
                 alignment: _isDemoMode ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  margin: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFallDetectionToggleItem(bool isDarkMode) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Icon(
+            Icons.directions_walk,
+            color: _isFallDetectionEnabled ? const Color(0xFF10B981) : (isDarkMode ? Colors.white : const Color(0xFF2A2A2A)),
+            size: 20,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Fall Detection',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _isFallDetectionEnabled ? 'Monitoring for falls' : 'Fall detection disabled',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDarkMode ? Colors.white.withOpacity(0.5) : const Color(0xFF475569).withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () async {
+              HapticFeedback.lightImpact();
+              await _toggleFallDetection();
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: 52,
+              height: 28,
+              decoration: BoxDecoration(
+                color: _isFallDetectionEnabled ? const Color(0xFF10B981) : const Color(0xFF475569).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 300),
+                alignment: _isFallDetectionEnabled ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
                   width: 24,
                   height: 24,

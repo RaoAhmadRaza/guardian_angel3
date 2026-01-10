@@ -18,6 +18,31 @@ final currentDoctorUidProvider = Provider<String?>((ref) {
   return FirebaseAuth.instance.currentUser?.uid;
 });
 
+/// Real-time patient vitals data model.
+class PatientVitalsData {
+  final int? heartRate;
+  final int? bloodOxygen;
+  final double? sleepHours;
+  final DateTime? lastUpdated;
+  final bool hasRecentData; // Data within last 24 hours
+
+  const PatientVitalsData({
+    this.heartRate,
+    this.bloodOxygen,
+    this.sleepHours,
+    this.lastUpdated,
+    this.hasRecentData = false,
+  });
+
+  /// Vitals are stable if heart rate is 50-120 and oxygen >= 90
+  bool get isStable {
+    if (heartRate == null && bloodOxygen == null) return true; // No data = assume stable
+    final hrOk = heartRate == null || (heartRate! >= 50 && heartRate! <= 120);
+    final o2Ok = bloodOxygen == null || bloodOxygen! >= 90;
+    return hrOk && o2Ok;
+  }
+}
+
 /// Model for a patient in the doctor's list (enriched from relationship).
 class DoctorPatientItem {
   final String relationshipId;
@@ -32,6 +57,7 @@ class DoctorPatientItem {
   final bool hasChatPermission;
   final ChatThreadModel? chatThread;
   final int unreadMessages;
+  final PatientVitalsData? vitals;
 
   const DoctorPatientItem({
     required this.relationshipId,
@@ -46,6 +72,7 @@ class DoctorPatientItem {
     this.hasChatPermission = false,
     this.chatThread,
     this.unreadMessages = 0,
+    this.vitals,
   });
 }
 
@@ -94,6 +121,9 @@ final doctorPatientListProvider = FutureProvider<List<DoctorPatientItem>>((ref) 
         // Fetch real patient profile data from Firestore
         final patientInfo = await _fetchPatientInfo(relationship.patientId);
         
+        // Fetch real-time vitals from Firestore
+        final vitals = await _fetchPatientVitals(relationship.patientId);
+        
         items.add(DoctorPatientItem(
           relationshipId: relationship.id,
           patientId: relationship.patientId,
@@ -102,11 +132,12 @@ final doctorPatientListProvider = FutureProvider<List<DoctorPatientItem>>((ref) 
           age: patientInfo.age,
           conditions: patientInfo.conditions,
           lastActivity: _formatLastActivity(relationship.updatedAt),
-          isStable: true, // Would come from health monitoring
+          isStable: vitals.isStable, // Real vitals-based stability
           caregiverName: patientInfo.caregiverName,
           hasChatPermission: relationship.hasPermission('chat'),
           chatThread: chatThread,
           unreadMessages: unreadCount,
+          vitals: vitals,
         ));
       }
       
@@ -207,6 +238,97 @@ List<String> _parseConditions(dynamic medicalHistory) {
   }
   
   return [];
+}
+
+/// Fetches latest vitals from Firestore health_readings collection.
+/// 
+/// Queries for heart_rate, blood_oxygen, and sleep_session readings.
+Future<PatientVitalsData> _fetchPatientVitals(String patientId) async {
+  final firestore = FirebaseFirestore.instance;
+  final now = DateTime.now();
+  final yesterday = now.subtract(const Duration(hours: 24));
+  
+  int? heartRate;
+  int? bloodOxygen;
+  double? sleepHours;
+  DateTime? lastUpdated;
+  
+  try {
+    final healthReadingsRef = firestore
+        .collection('patients')
+        .doc(patientId)
+        .collection('health_readings');
+    
+    // Query latest heart rate
+    final hrQuery = await healthReadingsRef
+        .where('reading_type', isEqualTo: 'heart_rate')
+        .orderBy('recorded_at', descending: true)
+        .limit(1)
+        .get();
+    
+    if (hrQuery.docs.isNotEmpty) {
+      final hrData = hrQuery.docs.first.data();
+      heartRate = hrData['value'] as int?;
+      final recordedAt = hrData['recorded_at'];
+      if (recordedAt is Timestamp) {
+        lastUpdated = recordedAt.toDate();
+      } else if (recordedAt is String) {
+        lastUpdated = DateTime.tryParse(recordedAt);
+      }
+    }
+    
+    // Query latest blood oxygen
+    final o2Query = await healthReadingsRef
+        .where('reading_type', isEqualTo: 'blood_oxygen')
+        .orderBy('recorded_at', descending: true)
+        .limit(1)
+        .get();
+    
+    if (o2Query.docs.isNotEmpty) {
+      final o2Data = o2Query.docs.first.data();
+      bloodOxygen = o2Data['value'] as int?;
+      final recordedAt = o2Data['recorded_at'];
+      DateTime? o2Time;
+      if (recordedAt is Timestamp) {
+        o2Time = recordedAt.toDate();
+      } else if (recordedAt is String) {
+        o2Time = DateTime.tryParse(recordedAt);
+      }
+      if (o2Time != null && (lastUpdated == null || o2Time.isAfter(lastUpdated))) {
+        lastUpdated = o2Time;
+      }
+    }
+    
+    // Query latest sleep session
+    final sleepQuery = await healthReadingsRef
+        .where('reading_type', isEqualTo: 'sleep_session')
+        .orderBy('recorded_at', descending: true)
+        .limit(1)
+        .get();
+    
+    if (sleepQuery.docs.isNotEmpty) {
+      final sleepData = sleepQuery.docs.first.data();
+      // Sleep duration might be stored as minutes or hours
+      final duration = sleepData['duration_minutes'] ?? sleepData['value'];
+      if (duration is num) {
+        sleepHours = duration / 60.0; // Convert minutes to hours
+      }
+    }
+    
+    // Determine if data is recent (within 24 hours)
+    final hasRecentData = lastUpdated != null && lastUpdated.isAfter(yesterday);
+    
+    return PatientVitalsData(
+      heartRate: heartRate,
+      bloodOxygen: bloodOxygen,
+      sleepHours: sleepHours,
+      lastUpdated: lastUpdated,
+      hasRecentData: hasRecentData,
+    );
+  } catch (e) {
+    // Silent fail - return empty vitals
+    return const PatientVitalsData();
+  }
 }
 
 /// Provider for pending invites (patients waiting for doctor to accept).

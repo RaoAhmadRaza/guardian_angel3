@@ -75,12 +75,17 @@ class _ScreenColors {
 }
 
 class MedicationScreen extends StatefulWidget {
-  final ChatSession session;
+  final ChatSession? session;
+  final String? sessionName;
 
   const MedicationScreen({
     super.key,
-    required this.session,
+    this.session,
+    this.sessionName,
   });
+
+  /// Get the session name - from session object or sessionName parameter or default
+  String get effectiveSessionName => session?.name ?? sessionName ?? 'My Medications';
 
   @override
   State<MedicationScreen> createState() => _MedicationScreenState();
@@ -101,7 +106,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
   @override
   void initState() {
     super.initState();
-    _dataProvider = MedicationDataProvider(sessionName: widget.session.name);
+    _dataProvider = MedicationDataProvider(sessionName: widget.effectiveSessionName);
     
     // Listen to state changes from provider
     _dataProvider.addListener(_onProviderStateChanged);
@@ -129,7 +134,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _state = MedicationState.empty(sessionName: widget.session.name);
+          _state = MedicationState.empty(sessionName: widget.effectiveSessionName);
           _isLoading = false;
         });
       }
@@ -279,7 +284,7 @@ class _MedicationScreenState extends State<MedicationScreen> {
                       Row(
                         children: [
                           Text(
-                            widget.session.name,
+                            widget.effectiveSessionName,
                             style: GoogleFonts.inter(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,

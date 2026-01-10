@@ -3,11 +3,97 @@ import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'dart:ui';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../services/session_service.dart';
+import '../services/patient_service.dart';
 
-class ProfileSheet extends StatelessWidget {
+class ProfileSheet extends StatefulWidget {
   final VoidCallback onClose;
 
   const ProfileSheet({super.key, required this.onClose});
+
+  @override
+  State<ProfileSheet> createState() => _ProfileSheetState();
+}
+
+class _ProfileSheetState extends State<ProfileSheet> {
+  String _patientName = 'Patient';
+  String? _patientImageUrl;
+  bool _isLoading = true;
+  bool _isLoggingOut = false;
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadPatientData();
+  }
+  
+  Future<void> _loadPatientData() async {
+    try {
+      final patientName = await PatientService.instance.getPatientName();
+      if (mounted) {
+        setState(() {
+          _patientName = patientName.isNotEmpty && patientName != 'Patient' 
+              ? patientName 
+              : 'Patient';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+  
+  /// Issue #19: Implement logout with confirmation
+  Future<void> _handleLogout() async {
+    // Show confirmation dialog
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out? You\'ll need to sign in again to access your health data.'),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sign Out'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed != true) return;
+    
+    setState(() => _isLoggingOut = true);
+    
+    try {
+      // End session
+      await SessionService.instance.endSession();
+      
+      // Sign out from Firebase
+      await FirebaseAuth.instance.signOut();
+      
+      if (mounted) {
+        widget.onClose();
+        // Navigate to login screen
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoggingOut = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to sign out. Please try again.')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -15,7 +101,7 @@ class ProfileSheet extends StatelessWidget {
       children: [
         // Semantic Overlay
         GestureDetector(
-          onTap: onClose,
+          onTap: widget.onClose,
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
             child: Container(
@@ -51,7 +137,7 @@ class ProfileSheet extends StatelessWidget {
               children: [
                 // Handle
                 GestureDetector(
-                  onTap: onClose,
+                  onTap: widget.onClose,
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -115,11 +201,18 @@ class ProfileSheet extends StatelessWidget {
                                               offset: const Offset(0, 4),
                                             ),
                                           ],
-                                          image: const DecorationImage(
-                                            image: NetworkImage(
-                                              'https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=200&h=200',
+                                          color: const Color(0xFFF1F5F9),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            _patientName.isNotEmpty 
+                                                ? _patientName.split(' ').map((n) => n.isNotEmpty ? n[0] : '').take(2).join()
+                                                : 'P',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 40,
+                                              fontWeight: FontWeight.w900,
+                                              color: const Color(0xFF64748B),
                                             ),
-                                            fit: BoxFit.cover,
                                           ),
                                         ),
                                       ),
@@ -155,15 +248,21 @@ class ProfileSheet extends StatelessWidget {
                                   
                                   const SizedBox(height: 20),
                                   
-                                  Text(
-                                    'Jacob Miller',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.w900,
-                                      color: const Color(0xFF0F172A),
-                                      letterSpacing: -0.5,
-                                    ),
-                                  ),
+                                  _isLoading
+                                    ? const SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : Text(
+                                        _patientName,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.w900,
+                                          color: const Color(0xFF0F172A),
+                                          letterSpacing: -0.5,
+                                        ),
+                                      ),
                                   
                                   const SizedBox(height: 4),
                                   
@@ -286,19 +385,29 @@ class ProfileSheet extends StatelessWidget {
                           child: Material(
                             color: Colors.transparent,
                             child: InkWell(
-                              onTap: () {},
+                              onTap: _isLoggingOut ? null : _handleLogout,
                               borderRadius: BorderRadius.circular(24),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  const Icon(
-                                    Icons.logout, // LogOut
-                                    size: 20,
-                                    color: Color(0xFFDC2626),
-                                  ),
+                                  if (_isLoggingOut)
+                                    const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Color(0xFFDC2626),
+                                      ),
+                                    )
+                                  else
+                                    const Icon(
+                                      Icons.logout, // LogOut
+                                      size: 20,
+                                      color: Color(0xFFDC2626),
+                                    ),
                                   const SizedBox(width: 12),
                                   Text(
-                                    'LOG OUT',
+                                    _isLoggingOut ? 'SIGNING OUT...' : 'LOG OUT',
                                     style: GoogleFonts.inter(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w900,

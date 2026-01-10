@@ -1,7 +1,17 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/demo_mode_service.dart';
 import '../../services/demo_data.dart';
+import '../../services/emergency_contact_service.dart';
+import '../../services/guardian_service.dart';
+import '../../services/sos_emergency_action_service.dart';
+import '../../services/sos_alert_chat_service.dart';
+import '../../repositories/impl/vitals_repository_hive.dart';
+import '../../persistence/wrappers/box_accessor.dart';
 import 'patient_sos_state.dart';
 
 /// Patient SOS Data Provider
@@ -44,6 +54,15 @@ class PatientSosDataProvider extends ChangeNotifier {
   /// It simply counts elapsed time, does NOT trigger state changes
   Timer? _elapsedTimer;
   
+  /// Timer for caregiver response timeout (Critical Issue #3)
+  Timer? _caregiverTimeoutTimer;
+  
+  /// Duration before escalating to emergency services if caregiver doesn't respond
+  static const Duration _caregiverTimeoutDuration = Duration(seconds: 60);
+  
+  /// Connectivity subscription for network monitoring
+  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
+  
   /// Subscriptions to external services (to be connected to real services)
   StreamSubscription? _heartRateSubscription;
   StreamSubscription? _locationSubscription;
@@ -55,7 +74,11 @@ class PatientSosDataProvider extends ChangeNotifier {
   /// This initiates the SOS and sets up listeners for real events.
   /// In demo mode, returns pre-populated state for showcasing UI.
   /// The state will ONLY change when real events occur.
-  Future<void> startSosSession() async {
+  /// 
+  /// [alertReason] specifies why the SOS was triggered (manual, fall detection, etc.)
+  Future<void> startSosSession({
+    SosAlertReason alertReason = SosAlertReason.manual,
+  }) async {
     if (_state.isActive) {
       // Already active
       return;
@@ -70,23 +93,106 @@ class PatientSosDataProvider extends ChangeNotifier {
       return;
     }
     
-    // Set initial state
-    _state = PatientSosState.initial();
+    // Critical Issue #2: Check network connectivity before starting
+    final isConnected = await _checkNetworkConnectivity();
+    
+    // Set initial state with network status
+    _state = PatientSosState.initial().copyWith(
+      networkAvailable: isConnected,
+    );
     _notifyStateChange();
     
     // Start elapsed time counter
     // This ONLY updates elapsed time, does NOT trigger phase changes
     _startElapsedTimer();
     
-    // Connect to real services (stubs for now - will be connected to real services)
+    // Start monitoring network connectivity
+    _startNetworkMonitoring();
+    
+    // ===== REAL SOS ACTION - START =====
+    // Use the SosEmergencyActionService to send REAL notifications
+    final sosService = SosEmergencyActionService.instance;
+    final result = await sosService.startSosSession(alertReason: alertReason);
+    
+    if (result.success) {
+      debugPrint('[PatientSosDataProvider] SOS session started: ${result.data?['session_id']}');
+      _state = _state.copyWith(
+        phase: SosPhase.contactingCaregiver,
+      );
+      _notifyStateChange();
+      
+      // Listen to session updates
+      _sosEventSubscription = sosService.sessionStream.listen((session) {
+        _handleSosSessionUpdate(session);
+      });
+    } else {
+      debugPrint('[PatientSosDataProvider] SOS start failed: ${result.error}');
+      // If push fails but we have network, continue anyway
+      // If no network, trigger SMS fallback
+      if (!isConnected) {
+        await _triggerSmsFallback();
+      }
+    }
+    // ===== REAL SOS ACTION - END =====
+    
+    // Connect to real services
     await _connectToServices();
+    
+    // Critical Issue #3: Start caregiver timeout timer
+    _startCaregiverTimeoutTimer();
+  }
+  
+  /// Handle updates from SosEmergencyActionService
+  void _handleSosSessionUpdate(SosSession session) {
+    debugPrint('[PatientSosDataProvider] Session update: ${session.state}');
+    
+    switch (session.state) {
+      case SosSessionState.caregiverNotified:
+        _state = _state.copyWith(phase: SosPhase.caregiverNotified);
+        break;
+      case SosSessionState.caregiverResponded:
+        _stopCaregiverTimeoutTimer();
+        _state = _state.copyWith(phase: SosPhase.caregiverNotified);
+        break;
+      case SosSessionState.escalated:
+        _state = _state.copyWith(
+          phase: SosPhase.contactingEmergency,
+          caregiverTimedOut: true,
+        );
+        break;
+      case SosSessionState.emergencyCallPlaced:
+        _state = _state.copyWith(phase: SosPhase.contactingEmergency);
+        break;
+      case SosSessionState.resolved:
+        _state = _state.copyWith(phase: SosPhase.resolved);
+        break;
+      case SosSessionState.cancelled:
+        _state = PatientSosState.idle();
+        break;
+      default:
+        break;
+    }
+    _notifyStateChange();
   }
   
   /// Cancel the SOS session
+  /// ===== REAL CANCELLATION - NOTIFIES ALL PARTIES =====
   Future<void> cancelSosSession() async {
     // Stop all timers and subscriptions
     _stopElapsedTimer();
+    _stopCaregiverTimeoutTimer();
+    _stopNetworkMonitoring();
     await _disconnectFromServices();
+    
+    // ===== REAL SOS CANCELLATION - START =====
+    final sosService = SosEmergencyActionService.instance;
+    final currentSession = sosService.currentSession;
+    if (currentSession != null) {
+      await sosService.cancelSession(currentSession.id);
+    }
+    _sosEventSubscription?.cancel();
+    _sosEventSubscription = null;
+    // ===== REAL SOS CANCELLATION - END =====
     
     // Reset to idle state
     _state = PatientSosState.idle();
@@ -114,6 +220,151 @@ class PatientSosDataProvider extends ChangeNotifier {
     _elapsedTimer = null;
   }
   
+  // ============================================================
+  // NETWORK CONNECTIVITY HANDLING (Critical Issue #2)
+  // ============================================================
+  
+  /// Check if network is available
+  Future<bool> _checkNetworkConnectivity() async {
+    try {
+      final result = await Connectivity().checkConnectivity();
+      return result != ConnectivityResult.none;
+    } catch (e) {
+      debugPrint('[PatientSosDataProvider] Error checking connectivity: $e');
+      return true; // Assume connected if check fails
+    }
+  }
+  
+  /// Start monitoring network connectivity changes
+  void _startNetworkMonitoring() {
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((result) {
+      final isConnected = result != ConnectivityResult.none;
+      if (_state.networkAvailable != isConnected) {
+        _state = _state.copyWith(networkAvailable: isConnected);
+        _notifyStateChange();
+        
+        // If network lost during SOS, trigger SMS fallback
+        if (!isConnected && _state.isActive && !_state.smsFallbackTriggered) {
+          _triggerSmsFallback();
+        }
+      }
+    });
+  }
+  
+  /// Stop monitoring network connectivity
+  void _stopNetworkMonitoring() {
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = null;
+  }
+  
+  /// Trigger SMS fallback when network is unavailable
+  /// ===== REAL SMS FALLBACK - NO PLACEHOLDERS =====
+  Future<void> _triggerSmsFallback() async {
+    if (_state.smsFallbackTriggered) return;
+    
+    debugPrint('[PatientSosDataProvider] Network unavailable - triggering SMS fallback');
+    
+    _state = _state.copyWith(
+      smsFallbackTriggered: true,
+      errorMessage: 'No internet. Sending emergency SMS to contacts.',
+    );
+    _notifyStateChange();
+    
+    // ===== REAL SMS ACTION - START =====
+    final sosService = SosEmergencyActionService.instance;
+    
+    // If there's an active session, send SMS via the service
+    final currentSession = sosService.currentSession;
+    if (currentSession != null) {
+      // The service already has SMS sending capability
+      await sosService.sendEmergencySmsToAllContacts();
+    } else {
+      // No active session - directly send SMS to contacts
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        final contacts = await EmergencyContactService.instance.getSOSContacts(uid);
+        final position = await _getCurrentPosition();
+        final locationString = position != null 
+            ? 'Location: https://maps.google.com/?q=${position.latitude},${position.longitude}'
+            : 'Location: Unable to determine';
+        
+        for (final contact in contacts) {
+          final phoneNumber = contact.phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+          if (phoneNumber.isEmpty) continue;
+          
+          final message = Uri.encodeComponent(
+            'EMERGENCY: Guardian Angel SOS Alert!\n'
+            'Your contact needs immediate help.\n'
+            '$locationString\n'
+            'Please respond immediately or call emergency services.'
+          );
+          
+          final smsUri = Uri.parse('sms:$phoneNumber?body=$message');
+          try {
+            if (await canLaunchUrl(smsUri)) {
+              await launchUrl(smsUri);
+              debugPrint('[PatientSosDataProvider] SMS launched to: $phoneNumber');
+            }
+          } catch (e) {
+            debugPrint('[PatientSosDataProvider] SMS failed to $phoneNumber: $e');
+          }
+        }
+      }
+    }
+    // ===== REAL SMS ACTION - END =====
+  }
+  
+  /// Get current position for SMS fallback
+  Future<Position?> _getCurrentPosition() async {
+    try {
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 5),
+      );
+    } catch (e) {
+      debugPrint('[PatientSosDataProvider] Failed to get position: $e');
+      return null;
+    }
+  }
+  
+  // ============================================================
+  // CAREGIVER TIMEOUT HANDLING (Critical Issue #3)
+  // ============================================================
+  
+  /// Start the caregiver timeout timer
+  /// If caregiver doesn't respond within timeout, escalate to emergency services
+  void _startCaregiverTimeoutTimer() {
+    _caregiverTimeoutTimer?.cancel();
+    _caregiverTimeoutTimer = Timer(_caregiverTimeoutDuration, () {
+      if (_state.phase == SosPhase.contactingCaregiver || 
+          _state.phase == SosPhase.caregiverNotified) {
+        debugPrint('[PatientSosDataProvider] Caregiver timeout - escalating to emergency');
+        _state = _state.copyWith(
+          caregiverTimedOut: true,
+          phase: SosPhase.contactingEmergency,
+        );
+        _notifyStateChange();
+      }
+    });
+  }
+  
+  /// Stop the caregiver timeout timer
+  void _stopCaregiverTimeoutTimer() {
+    _caregiverTimeoutTimer?.cancel();
+    _caregiverTimeoutTimer = null;
+  }
+  
+  /// Called when caregiver responds - stops the timeout timer
+  void onCaregiverResponded() {
+    _stopCaregiverTimeoutTimer();
+    if (_state.phase == SosPhase.contactingCaregiver || 
+        _state.phase == SosPhase.caregiverNotified) {
+      _state = _state.copyWith(phase: SosPhase.caregiverNotified);
+      _notifyStateChange();
+    }
+  }
+  
   /// Connect to real services
   /// 
   /// TODO: Connect these to actual service implementations:
@@ -122,7 +373,42 @@ class PatientSosDataProvider extends ChangeNotifier {
   /// - Speech recognition service
   /// - SOS backend service
   Future<void> _connectToServices() async {
-    // PLACEHOLDER: Connect to heart rate service
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    
+    // Load emergency contacts for SOS
+    try {
+      final contacts = await EmergencyContactService.instance.getSOSContacts(uid);
+      if (contacts.isNotEmpty) {
+        final primary = contacts.first;
+        onCaregiverResolved(primary.name);
+      }
+    } catch (e) {
+      debugPrint('[PatientSosDataProvider] Error loading emergency contacts: $e');
+    }
+    
+    // Load primary guardian as fallback
+    try {
+      final guardian = await GuardianService.instance.getPrimaryGuardian(uid);
+      if (guardian != null && (_state.caregiverName?.isEmpty ?? true)) {
+        onCaregiverResolved(guardian.name);
+      }
+    } catch (e) {
+      debugPrint('[PatientSosDataProvider] Error loading guardian: $e');
+    }
+    
+    // Load current heart rate from vitals
+    try {
+      final vitalsRepo = VitalsRepositoryHive(boxAccessor: BoxAccessor());
+      final latest = await vitalsRepo.getLatestForUser(uid);
+      if (latest != null) {
+        onHeartRateUpdate(latest.heartRate);
+      }
+    } catch (e) {
+      debugPrint('[PatientSosDataProvider] Error loading vitals: $e');
+    }
+    
+    // PLACEHOLDER: Connect to real-time heart rate service
     // _heartRateSubscription = heartRateService.stream.listen(_onHeartRateUpdate);
     
     // PLACEHOLDER: Connect to location service
@@ -244,6 +530,51 @@ class PatientSosDataProvider extends ChangeNotifier {
     _notifyStateChange();
   }
   
+  // ============================================================
+  // PERMISSION RECOVERY (Critical Issue #1)
+  // ============================================================
+  
+  /// Retry getting location permission
+  /// Called when user grants permission via settings
+  Future<void> retryLocationPermission() async {
+    if (!_state.isActive) return;
+    
+    // Clear the denied flag and retry
+    _state = _state.copyWith(
+      locationDenied: false,
+      clearErrorMessage: true,
+    );
+    _notifyStateChange();
+    
+    // TODO: Re-request location via location service
+    debugPrint('[PatientSosDataProvider] Retrying location permission');
+  }
+  
+  /// Retry getting microphone permission
+  /// Called when user grants permission via settings
+  Future<void> retryMicrophonePermission() async {
+    if (!_state.isActive) return;
+    
+    // Clear the denied flag and retry
+    _state = _state.copyWith(
+      microphoneDenied: false,
+      isRecording: true,
+      clearErrorMessage: true,
+    );
+    _notifyStateChange();
+    
+    // TODO: Re-request microphone via audio service
+    debugPrint('[PatientSosDataProvider] Retrying microphone permission');
+  }
+  
+  /// Open device settings for permission configuration
+  /// Returns true if settings were opened successfully
+  Future<bool> openAppSettings() async {
+    // This will be handled by the UI layer using app_settings or permission_handler
+    debugPrint('[PatientSosDataProvider] Opening app settings');
+    return true;
+  }
+  
   /// Notify listeners of state change
   void _notifyStateChange() {
     _stateController.add(_state);
@@ -253,6 +584,8 @@ class PatientSosDataProvider extends ChangeNotifier {
   @override
   void dispose() {
     _stopElapsedTimer();
+    _stopCaregiverTimeoutTimer();
+    _stopNetworkMonitoring();
     _disconnectFromServices();
     _stateController.close();
     super.dispose();

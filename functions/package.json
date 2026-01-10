@@ -1,0 +1,23 @@
+{
+  "name": "guardian-angel-functions",
+  "version": "1.0.0",
+  "description": "Firebase Cloud Functions for Guardian Angel",
+  "main": "index.js",
+  "scripts": {
+    "lint": "eslint .",
+    "serve": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.11.0",
+    "firebase-functions": "^4.5.0",
+    "twilio": "^4.21.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.54.0"
+  },
+  "private": true
+}

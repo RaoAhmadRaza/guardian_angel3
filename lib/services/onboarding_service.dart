@@ -4,6 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 class OnboardingService {
   static const String _onboardingCompletedKey = 'onboarding_completed';
   static const String _onboardingVersionKey = 'onboarding_version';
+  // Issue #23: Track current step for resume capability
+  static const String _onboardingCurrentStepKey = 'onboarding_current_step';
+  static const String _onboardingDataKey = 'onboarding_partial_data';
   static const int _currentOnboardingVersion = 1; // Increment this to force re-onboarding
   
   // ═══════════════════════════════════════════════════════════════════════
@@ -88,5 +91,90 @@ class OnboardingService {
   /// Force show onboarding (for development/testing)
   Future<void> forceShowOnboarding() async {
     await resetOnboarding();
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // Issue #23: ONBOARDING RESUME SUPPORT
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  /// Save current onboarding step for resume capability
+  Future<bool> saveCurrentStep(int step) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return await prefs.setInt(_onboardingCurrentStepKey, step);
+    } catch (e) {
+      print('Error saving onboarding step: $e');
+      return false;
+    }
+  }
+  
+  /// Get the last saved onboarding step
+  Future<int> getLastStep() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getInt(_onboardingCurrentStepKey) ?? 0;
+    } catch (e) {
+      print('Error getting onboarding step: $e');
+      return 0;
+    }
+  }
+  
+  /// Save partial onboarding data for resume
+  Future<bool> savePartialData(Map<String, dynamic> data) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Convert map to JSON-like string for storage
+      final entries = data.entries.map((e) => '${e.key}:${e.value}').join('||');
+      return await prefs.setString(_onboardingDataKey, entries);
+    } catch (e) {
+      print('Error saving onboarding data: $e');
+      return false;
+    }
+  }
+  
+  /// Get saved partial onboarding data
+  Future<Map<String, String>> getPartialData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final dataStr = prefs.getString(_onboardingDataKey);
+      if (dataStr == null || dataStr.isEmpty) return {};
+      
+      final Map<String, String> result = {};
+      final entries = dataStr.split('||');
+      for (final entry in entries) {
+        final parts = entry.split(':');
+        if (parts.length >= 2) {
+          result[parts[0]] = parts.sublist(1).join(':');
+        }
+      }
+      return result;
+    } catch (e) {
+      print('Error getting onboarding data: $e');
+      return {};
+    }
+  }
+  
+  /// Check if there's an incomplete onboarding session
+  Future<bool> hasIncompleteSession() async {
+    try {
+      final completed = await hasCompletedOnboarding();
+      if (completed) return false;
+      
+      final lastStep = await getLastStep();
+      return lastStep > 0;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// Clear resume data after successful completion
+  Future<void> clearResumeData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_onboardingCurrentStepKey);
+      await prefs.remove(_onboardingDataKey);
+    } catch (e) {
+      print('Error clearing resume data: $e');
+    }
   }
 }

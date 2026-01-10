@@ -25,12 +25,14 @@ class VitalsData {
   final int systolicBP;
   final int diastolicBP;
   final int heartRate;
+  final int? oxygenPercent;
   final DateTime? lastUpdated;
 
   const VitalsData({
     required this.systolicBP,
     required this.diastolicBP,
     required this.heartRate,
+    this.oxygenPercent,
     this.lastUpdated,
   });
 
@@ -39,10 +41,14 @@ class VitalsData {
     systolicBP: 0,
     diastolicBP: 0,
     heartRate: 0,
+    oxygenPercent: null,
   );
 
   /// Check if vitals data is available
   bool get hasData => systolicBP > 0 && diastolicBP > 0 && heartRate > 0;
+
+  /// Check if oxygen saturation data is available
+  bool get hasOxygenData => oxygenPercent != null && oxygenPercent! > 0;
 
   /// Display string for blood pressure
   String get bloodPressureDisplay => hasData 
@@ -53,6 +59,11 @@ class VitalsData {
   String get heartRateDisplay => hasData 
       ? '$heartRate / min' 
       : '— / min';
+
+  /// Display string for oxygen saturation (SpO2)
+  String get oxygenSaturationDisplay => hasOxygenData 
+      ? '$oxygenPercent%' 
+      : '— %';
 }
 
 /// Doctor information
