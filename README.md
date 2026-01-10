@@ -438,7 +438,9 @@ flutter test --coverage
 
 ## 👥 Contributors
 
-- **Muhammad Afzal** - Project Lead & Developer
+- **Muhammad Ahmad Raza** - Project Lead & Developer
+- **Usama Naeem Butt** - Brains Behind the Models
+- **Abdullah Azhar** - QA
 
 ---
 
